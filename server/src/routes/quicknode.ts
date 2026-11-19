@@ -17,8 +17,10 @@ export function broadcastStreamEvent(evt: StreamEvent) {
   }
 }
 
-// Boot the dual-mode Arc RPC fallback indexer alongside QuickNode webhooks
-startArcRpcIndexer(broadcastStreamEvent)
+// Boot the dual-mode Arc RPC fallback indexer alongside QuickNode webhooks (long-lived Node runtime only)
+if (!process.env.VERCEL) {
+  startArcRpcIndexer(broadcastStreamEvent)
+}
 
 function verifyQuickNodeSignature(rawBody: string, headerSig: string | undefined, secret: string): boolean {
   if (!headerSig) return false

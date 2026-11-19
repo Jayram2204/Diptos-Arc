@@ -72,7 +72,7 @@ interface EscrowStoreShape {
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const DATA_DIR = path.resolve(__dirname, '../data')
+const DATA_DIR = process.env.VERCEL ? '/tmp/diptos-data' : path.resolve(__dirname, '../data')
 const ESCROWS_FILE = path.join(DATA_DIR, 'escrows.json')
 const EVENTS_FILE = path.join(DATA_DIR, 'events.json')
 const RISK_HISTORY_FILE = path.join(DATA_DIR, 'risk-history.json')
