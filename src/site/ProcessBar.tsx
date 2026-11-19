@@ -1,35 +1,107 @@
-const STEPS = [
+import { Reveal } from '@/components/ui'
+
+const MARQUEE_ITEMS = [
+  'ARC NATIVE USDC',
+  'GEMINI PREDICTION MARKETS',
+  'GROK AI AUDITOR',
+  'QUICKNODE STREAMS',
+  'ELEVENLABS VOICE',
+  '@DIPTOS/SDK',
+]
+
+const LIFECYCLE_STEPS = [
   {
-    index: '01 / ORIGINATE',
-    body: 'Create a shareable diptos.xyz/pay/:id link or call diptos.createEscrowLink() from an AI agent.',
+    num: '01',
+    title: 'ORIGINATE',
+    tag: 'LINK & SCOPE',
+    body: 'Compose a programmable escrow link with scope, SLA window, and live Gemini-calibrated TECD decay rate.',
   },
   {
-    index: '02 / LOCK USDC',
-    body: 'Payer locks native USDC on Arc Testnet (5042002) with canonical keccak256 anti-double-spend protection.',
+    num: '02',
+    title: 'LOCK ON ARC',
+    tag: 'NATIVE USDC',
+    body: 'Buyer locks native USDC atomically into DiptosEscrow.sol. Canonical keccak256 hashes block double-spend.',
   },
   {
-    index: '03 / AI & MACRO AUDIT',
-    body: 'Gemini Prediction Markets calibrates real-time risk λ; Grok AI audits submitted deliverables.',
+    num: '03',
+    title: 'AI & MACRO AUDIT',
+    tag: 'GROK EIP-712',
+    body: 'Grok ingests live GitHub PR diffs or URLs, audits scope compliance, and signs a nonce-bound EIP-712 release.',
   },
   {
-    index: '04 / ATOMIC SETTLEMENT',
-    body: 'On-time delivery pays 99.5% instantly; late delivery triggers automatic TECD rebate math.',
+    num: '04',
+    title: 'TECD SETTLEMENT',
+    tag: 'ATOMIC DVP',
+    body: 'On-time delivery settles 99.5% immediately. Late delivery rebates the buyer mathematically in one transaction.',
   },
-] as const
+]
 
 export function ProcessBar() {
   return (
-    <section id="how-it-works" className="border-y border-white/[0.08] bg-surface/50">
-      <div className="mx-auto max-w-[1280px] px-4 sm:px-6">
-        <div className="grid divide-y divide-white/[0.08] md:grid-cols-2 md:divide-y-0 lg:grid-cols-4 lg:divide-x">
-          {STEPS.map((step) => (
-            <div key={step.index} className="py-7 lg:px-6 lg:first:pl-0 lg:last:pr-0">
-              <p className="font-mono text-[11px] font-semibold tracking-[0.12em] text-gold">{step.index}</p>
-              <p className="mt-2.5 text-[13px] leading-relaxed text-secondary">{step.body}</p>
-            </div>
+    <div className="border-t border-paper/10">
+      {/* Kinetic Continuous Marquee Strip */}
+      <div className="overflow-hidden border-b border-paper/10 bg-black py-4">
+        <div className="flex w-max animate-marquee items-center gap-10 whitespace-nowrap">
+          {[...MARQUEE_ITEMS, ...MARQUEE_ITEMS, ...MARQUEE_ITEMS, ...MARQUEE_ITEMS].map((item, idx) => (
+            <span
+              key={`${item}-${idx}`}
+              className="inline-flex items-center gap-10 font-mono text-[11.5px] font-medium uppercase tracking-[0.16em] text-paper/75"
+            >
+              <span>{item}</span>
+              <span className="size-1.5 rounded-full bg-lime" />
+            </span>
           ))}
         </div>
       </div>
-    </section>
+
+      {/* Full-Bleed Warm Paper (#F4F2EC) Editorial Contrast Section */}
+      <section className="bg-paper py-28 text-ink lg:py-36">
+        <div className="mx-auto max-w-[1380px] px-6 lg:px-10">
+          <div className="flex flex-col justify-between gap-8 border-b border-ink/15 pb-12 lg:flex-row lg:items-end">
+            <Reveal className="max-w-2xl">
+              <p className="font-mono text-[11.5px] font-medium uppercase tracking-[0.14em] text-ink/60">
+                PROTOCOL LIFECYCLE // 01 → 04
+              </p>
+              <h2 className="rwa-display mt-4 text-[clamp(2.2rem,4.2vw,3.8rem)] uppercase text-ink">
+                FROM ESCROW LINK TO ATOMIC FINALITY.
+              </h2>
+            </Reveal>
+            <Reveal delayMs={100} className="max-w-md">
+              <p className="text-[15.5px] leading-relaxed text-ink/70">
+                Every stage executes deterministically between Arc Testnet smart contracts, xAI Grok EIP-712
+                attestations, and real-time Gemini risk calibration.
+              </p>
+            </Reveal>
+          </div>
+
+          <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {LIFECYCLE_STEPS.map((step, i) => (
+              <Reveal key={step.num} delayMs={i * 90}>
+                <article className="flex h-full flex-col justify-between rounded-2xl border border-ink/12 bg-white/55 p-7 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1">
+                  <div>
+                    <div className="flex items-center justify-between border-b border-ink/10 pb-4">
+                      <span className="font-mono text-[13px] font-semibold tracking-[0.12em] text-ink">
+                        {step.num}
+                      </span>
+                      <span className="rounded-full border border-ink/15 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink/65">
+                        {step.tag}
+                      </span>
+                    </div>
+                    <h3 className="rwa-display mt-6 text-[22px] uppercase text-ink">{step.title}</h3>
+                    <p className="mt-3 text-[14px] leading-relaxed text-ink/75">{step.body}</p>
+                  </div>
+                  <div className="mt-8 h-1 w-full overflow-hidden rounded-full bg-ink/10">
+                    <div
+                      className="h-full bg-ink"
+                      style={{ width: `${(i + 1) * 25}%` }}
+                    />
+                  </div>
+                </article>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
   )
 }

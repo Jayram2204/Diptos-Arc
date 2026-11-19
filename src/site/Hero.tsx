@@ -1,23 +1,26 @@
 import { type FormEvent, useState } from 'react'
 import { ArrowRight, Bot, User } from 'lucide-react'
-import { Button, Field, inputCls } from '@/components/ui'
-import { useEscrows, useGeminiRisk } from '@/lib/hooks'
+import { Button, Field, inputCls, Reveal } from '@/components/ui'
+import { useArcPulse, useGeminiRisk, useProtocolRead } from '@/lib/hooks'
 import { navigate } from '@/lib/route'
 import { diptos, type EscrowMode } from '@/lib/sdk'
 
 const DEADLINE_PRESETS = [
-  { label: '2 Mins (Live Judge Test)', hours: '0.0334' },
-  { label: '24 Hours', hours: '24' },
-  { label: '7 Days', hours: '168' },
+  { label: '2 MIN LIVE TEST', hours: 0.034 },
+  { label: '24H', hours: 24 },
+  { label: '7D', hours: 168 },
 ] as const
 
 export function Hero() {
-  const { escrows } = useEscrows(8000)
   const { data: gemini } = useGeminiRisk()
+  const pulse = useArcPulse(4000)
+  const feeBps = useProtocolRead<bigint>('DiptosEscrow', 'protocolFeeBps', [], 60_000)
+  const settledCount = useProtocolRead<bigint>('DiptosRegistry', 'totalSettledMilestones', [], 10_000)
+
   const [title, setTitle] = useState('')
   const [scope, setScope] = useState('')
-  const [amountUsdc, setAmountUsdc] = useState('0.05')
-  const [deadlineHours, setDeadlineHours] = useState('24')
+  const [amountUsdc, setAmountUsdc] = useState('2500')
+  const [deadlineHours, setDeadlineHours] = useState<number>(24)
   const [mode, setMode] = useState<EscrowMode>('human')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -29,22 +32,17 @@ export function Hero() {
     const cleanTitle = title.trim()
     const cleanScope = scope.trim()
     const amt = Number(amountUsdc)
-    const hours = Number(deadlineHours)
 
     if (cleanTitle.length < 2) {
       setError('Enter a deliverable title (at least 2 characters).')
       return
     }
     if (cleanScope.length < 4) {
-      setError('Specify acceptance criteria / scope for Grok verification.')
+      setError('Specify acceptance criteria for Grok AI verification.')
       return
     }
     if (!Number.isFinite(amt) || amt <= 0) {
       setError('Enter a valid positive USDC amount.')
-      return
-    }
-    if (!Number.isFinite(hours) || hours < 0.03 || hours > 720) {
-      setError('Deadline must be between 2 minutes and 720 hours.')
       return
     }
 
@@ -54,7 +52,7 @@ export function Hero() {
         title: cleanTitle,
         scope: cleanScope,
         amountUsdc: amt,
-        deadlineHours: hours,
+        deadlineHours: Math.max(1, Math.round(deadlineHours)),
         mode,
         tecdLambda: gemini?.recommendedLambda,
       })
@@ -67,183 +65,200 @@ export function Hero() {
   }
 
   return (
-    <section id="top" className="mx-auto max-w-[1280px] px-4 pb-16 pt-12 sm:px-6 md:pb-24 md:pt-16">
-      <div className="grid items-start gap-10 lg:grid-cols-12 lg:gap-12">
-        {/* Left 7 Columns: Value Proposition & Live On-Chain KPI Strip */}
-        <div className="lg:col-span-7 lg:pt-4">
-          <p className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] bg-surface px-3 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-gold">
-            ARC TESTNET (CHAIN ID 5042002) • NATIVE USDC SETTLEMENT
-          </p>
+    <section
+      id="top"
+      className="relative overflow-hidden bg-black pb-24 pt-16 lg:pb-36 lg:pt-24"
+    >
+      {/* Subtle single deep-navy architectural horizon glow */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[540px] bg-[radial-gradient(60%_70%_at_75%_10%,rgba(2,6,100,0.42),transparent_70%)]"
+      />
 
-          <h1 className="mt-6 text-[36px] font-bold leading-[1.08] tracking-[-0.03em] text-primary sm:text-[50px]">
-            Programmable Escrow Links for Modern Work &amp; AI Agents.
-          </h1>
+      <div className="relative mx-auto grid max-w-[1380px] items-start gap-14 px-6 lg:grid-cols-12 lg:gap-12 lg:px-10">
+        {/* Left 62% (7 cols): Oversized Archivo Editorial Statement */}
+        <div className="lg:col-span-7 lg:pt-2">
+          <Reveal>
+            <p className="rwa-hud inline-flex items-center gap-2.5 text-lime">
+              <span className="size-1.5 rounded-full bg-lime" />
+              ARC TESTNET (5042002) // NATIVE USDC SETTLEMENT
+            </p>
+          </Reveal>
 
-          <p className="mt-5 max-w-[600px] text-[16px] leading-[1.6] text-secondary">
-            Replace 15% platform fees and 60-day chargebacks with atomic USDC escrow on Arc. Verified by Grok AI,
-            risk-priced by Gemini Prediction Markets, and protected by Time-Entropic Collateral Decay.
-          </p>
+          <Reveal delayMs={80}>
+            <h1 className="rwa-display mt-7 text-[clamp(2.9rem,5.7vw,5.4rem)] uppercase text-paper">
+              PROGRAMMABLE ESCROW.
+              <br />
+              <span className="text-paper/85">ATOMIC USDC SETTLEMENT.</span>
+            </h1>
+          </Reveal>
 
-          {/* 3-Column Live On-Chain KPI Strip */}
-          <div className="mt-10 grid grid-cols-1 divide-y divide-white/[0.08] border-y border-white/[0.08] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-            <div className="py-5 sm:pr-6">
-              <p className="font-mono text-[28px] font-semibold tracking-[-0.02em] text-primary">
-                {escrows.length.toLocaleString('en-US')}
-              </p>
-              <p className="mt-1 text-[12px] text-secondary">Live On-Chain Escrows (Arc)</p>
+          <Reveal delayMs={160}>
+            <p className="mt-7 max-w-[580px] text-[17px] leading-[1.6] text-paper/70">
+              Replace 15% middleman fees and 60-day chargebacks with non-custodial Arc escrow links. Verified by Grok
+              AI, risk-calibrated by Gemini Prediction Markets, and protected by Time-Entropic Collateral Decay.
+            </p>
+          </Reveal>
+
+          <Reveal delayMs={220}>
+            <div className="mt-10 flex flex-wrap items-center gap-3.5">
+              <Button
+                onClick={() => document.getElementById('composer')?.scrollIntoView({ behavior: 'smooth' })}
+              >
+                LAUNCH ESCROW LINK <ArrowRight className="size-4" />
+              </Button>
+              <a
+                href="#escrows"
+                className="inline-flex h-12 items-center gap-2 rounded-full border border-paper/20 px-7 font-mono text-[11.5px] font-medium uppercase tracking-[0.14em] text-paper transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:border-lime hover:text-lime"
+              >
+                EXPLORE LIVE DEALS
+              </a>
             </div>
-            <div className="py-5 sm:px-6">
-              <p className="font-mono text-[28px] font-semibold tracking-[-0.02em] text-emerald">&lt; 1.0s</p>
-              <p className="mt-1 text-[12px] text-secondary">Arc Deterministic Finality</p>
+          </Reveal>
+
+          {/* 3-Column IBM Plex Mono Telemetry Strip */}
+          <Reveal delayMs={280}>
+            <div className="mt-14 grid grid-cols-1 divide-y divide-paper/10 border-y border-paper/10 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+              <div className="py-6 sm:pr-6">
+                <p className="rwa-hud text-secondary">01 / PROTOCOL FEE</p>
+                <p className="mt-2 font-mono text-[26px] font-semibold tabular-nums text-paper">
+                  {feeBps.status === 'ok' ? `${(Number(feeBps.value) / 100).toFixed(2)}%` : '0.50%'}
+                </p>
+                <p className="mt-1 font-mono text-[10.5px] uppercase tracking-[0.08em] text-secondary">
+                  FLAT FEE · 99.5% PAYEE
+                </p>
+              </div>
+              <div className="py-6 sm:px-6">
+                <p className="rwa-hud text-secondary">02 / ARC FINALITY</p>
+                <p className="mt-2 font-mono text-[26px] font-semibold tabular-nums text-lime">
+                  {pulse.latency !== undefined ? `${pulse.latency}ms` : '< 1.0s'}
+                </p>
+                <p className="mt-1 font-mono text-[10.5px] uppercase tracking-[0.08em] text-secondary">
+                  {pulse.blockNumber ? `LIVE BLOCK #${pulse.blockNumber.toString()}` : 'DETERMINISTIC ARC RPC'}
+                </p>
+              </div>
+              <div className="py-6 sm:pl-6">
+                <p className="rwa-hud text-secondary">03 / CHARGEBACKS</p>
+                <p className="mt-2 font-mono text-[26px] font-semibold tabular-nums text-emerald">
+                  0%
+                </p>
+                <p className="mt-1 font-mono text-[10.5px] uppercase tracking-[0.08em] text-secondary">
+                  {settledCount.status === 'ok'
+                    ? `${settledCount.value.toString()} SETTLED ON-CHAIN`
+                    : 'ATOMIC EIP-712 DVP'}
+                </p>
+              </div>
             </div>
-            <div className="py-5 sm:pl-6">
-              <p className="font-mono text-[28px] font-semibold tracking-[-0.02em] text-primary">0.5%</p>
-              <p className="mt-1 text-[12px] text-secondary">Flat Protocol Fee (vs. 15% Upwork)</p>
-            </div>
-          </div>
+          </Reveal>
         </div>
 
-        {/* Right 5 Columns: Embedded 1-Click Escrow Link Generator Card */}
-        <div className="lg:col-span-5">
-          <div className="rounded-[10px] border border-white/[0.1] bg-surface p-6">
-            <div className="flex items-center justify-between gap-3 border-b border-white/[0.08] pb-4">
-              <div>
-                <h2 className="text-[18px] font-semibold text-primary">Create Instant Escrow Link</h2>
-                <p className="mt-0.5 text-[12px] text-secondary">
-                  Stateless intent via <span className="font-mono text-primary/90">@diptos/sdk</span> •{' '}
-                  {gemini ? `λ=${gemini.recommendedLambda.toFixed(2)}` : 'live risk'}
-                </p>
+        {/* Right 38% (5 cols): Spacious Escrow Link Composer Card */}
+        <div id="composer" className="lg:col-span-5">
+          <Reveal delayMs={180}>
+            <form onSubmit={handleSubmit} className="rwa-depth-card rounded-2xl p-7">
+              <div className="flex items-start justify-between gap-3 border-b border-paper/10 pb-5">
+                <div>
+                  <p className="rwa-hud text-lime">LIVE COMPOSER</p>
+                  <h2 className="mt-1.5 text-[22px] text-paper">Create Escrow Link</h2>
+                </div>
+                <span className="rounded-full border border-paper/15 bg-black/60 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-secondary">
+                  λ {gemini ? gemini.recommendedLambda.toFixed(2) : '0.35'}
+                </span>
               </div>
-              <span className="rounded-md border border-emerald/25 bg-emerald/10 px-2 py-0.5 font-mono text-[10px] font-medium text-emerald">
-                0.5% FEE
-              </span>
-            </div>
 
-            <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-              <div>
-                <span className="block text-[12px] font-medium text-primary/90">Execution Mode</span>
-                <div
-                  className="mt-1.5 grid grid-cols-2 rounded-lg border border-white/[0.08] bg-canvas p-1"
-                  role="radiogroup"
-                  aria-label="Execution mode"
-                >
+              <div className="mt-6 space-y-5">
+                {/* Pill Mode Toggles */}
+                <div className="grid grid-cols-2 gap-2 rounded-full border border-paper/12 bg-black/70 p-1">
                   <button
                     type="button"
-                    role="radio"
-                    aria-checked={mode === 'human'}
                     onClick={() => setMode('human')}
-                    className={`flex h-9 items-center justify-center gap-1.5 rounded-md text-[12px] font-medium transition-colors ${
-                      mode === 'human'
-                        ? 'bg-elevated text-primary ring-1 ring-white/[0.12]'
-                        : 'text-secondary hover:text-primary'
+                    className={`flex h-9 items-center justify-center gap-1.5 rounded-full font-mono text-[10.5px] font-medium uppercase tracking-[0.12em] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                      mode === 'human' ? 'bg-lime text-ink' : 'text-secondary hover:text-paper'
                     }`}
                   >
-                    <User className="size-3.5 text-gold" />
-                    Human Freelancer
+                    <User className="size-3.5" /> HUMAN FREELANCER
                   </button>
                   <button
                     type="button"
-                    role="radio"
-                    aria-checked={mode === 'agent'}
                     onClick={() => setMode('agent')}
-                    className={`flex h-9 items-center justify-center gap-1.5 rounded-md text-[12px] font-medium transition-colors ${
-                      mode === 'agent'
-                        ? 'bg-elevated text-primary ring-1 ring-white/[0.12]'
-                        : 'text-secondary hover:text-primary'
+                    className={`flex h-9 items-center justify-center gap-1.5 rounded-full font-mono text-[10.5px] font-medium uppercase tracking-[0.12em] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                      mode === 'agent' ? 'bg-lime text-ink' : 'text-secondary hover:text-paper'
                     }`}
                   >
-                    <Bot className="size-3.5 text-emerald" />
-                    AI Agent API
+                    <Bot className="size-3.5" /> AI AGENT API
                   </button>
                 </div>
-              </div>
 
-              <Field label="Deliverable Title">
-                <input
-                  id="create-escrow-title"
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder={
-                    mode === 'agent'
-                      ? 'Autonomous Solidity TECD Fuzzing Audit'
-                      : 'Next.js Checkout Integration & Unit Tests'
-                  }
-                  className={inputCls}
-                  required
-                />
-              </Field>
+                <Field label="Deliverable Title" hint="diptos.xyz/pay/:id">
+                  <input
+                    type="text"
+                    required
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder={
+                      mode === 'agent' ? 'Autonomous PR Security Audit' : 'Design System & Arc Checkout UI'
+                    }
+                    className={inputCls}
+                  />
+                </Field>
 
-              <Field label="Acceptance Criteria / Scope" hint="Audited by Grok AI">
-                <textarea
-                  rows={2}
-                  value={scope}
-                  onChange={(e) => setScope(e.target.value)}
-                  placeholder="Merged GitHub PR with passing CI checks, zero regressions, and live preview URL."
-                  className="w-full resize-none rounded-lg border border-white/[0.08] bg-elevated px-3 py-2.5 text-[13px] text-primary outline-none transition-colors placeholder:text-secondary/45 focus:border-gold/60"
-                  required
-                />
-              </Field>
+                <Field label="Acceptance Scope" hint="Grok Oracle Criteria">
+                  <textarea
+                    rows={2}
+                    required
+                    value={scope}
+                    onChange={(e) => setScope(e.target.value)}
+                    placeholder="Merged GitHub PR passing Foundry fuzz tests with zero TypeScript errors."
+                    className="w-full rounded-xl border border-paper/15 bg-black/60 px-3.5 py-2.5 font-mono text-[12.5px] text-paper outline-none transition-colors duration-300 placeholder:text-paper/30 focus:border-lime"
+                  />
+                </Field>
 
-              {/* Quick Deadline Presets */}
-              <div>
-                <span className="block text-[12px] font-medium text-primary/90">SLA Deadline Preset</span>
-                <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-                  {DEADLINE_PRESETS.map((p) => (
-                    <button
-                      key={p.label}
-                      type="button"
-                      onClick={() => setDeadlineHours(p.hours)}
-                      className={`h-8 rounded-md border px-2 font-mono text-[10.5px] transition-colors ${
-                        deadlineHours === p.hours
-                          ? 'border-gold/60 bg-gold/15 text-gold'
-                          : 'border-white/[0.08] bg-elevated text-secondary hover:text-primary'
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Amount (USDC)" hint="Native 18-dec">
+                <Field label="Escrow Amount (Native USDC)" hint="Arc 5042002">
                   <input
                     type="number"
-                    min="0.001"
                     step="any"
+                    min="0.01"
+                    required
                     value={amountUsdc}
                     onChange={(e) => setAmountUsdc(e.target.value)}
-                    className={`${inputCls} font-mono`}
-                    required
+                    className={inputCls}
                   />
                 </Field>
-                <Field label="Deadline (Hours)" hint="TECD SLA">
-                  <input
-                    type="number"
-                    min="0.03"
-                    max="720"
-                    step="any"
-                    value={deadlineHours}
-                    onChange={(e) => setDeadlineHours(e.target.value)}
-                    className={`${inputCls} font-mono`}
-                    required
-                  />
-                </Field>
+
+                <div>
+                  <span className="block font-mono text-[11px] uppercase tracking-[0.1em] text-paper/90">
+                    SLA Deadline Window
+                  </span>
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    {DEADLINE_PRESETS.map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => setDeadlineHours(preset.hours)}
+                        className={`h-9 rounded-full border font-mono text-[10px] font-medium uppercase tracking-[0.1em] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                          deadlineHours === preset.hours
+                            ? 'border-lime bg-lime/15 text-lime'
+                            : 'border-paper/15 bg-black/60 text-secondary hover:border-paper/35 hover:text-paper'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {error && (
+                  <p className="rounded-xl border border-crimson/35 bg-crimson/10 px-3.5 py-2.5 font-mono text-[11.5px] text-crimson">
+                    {error}
+                  </p>
+                )}
+
+                <Button type="submit" loading={submitting} className="w-full">
+                  GENERATE ESCROW LINK <ArrowRight className="size-4" />
+                </Button>
               </div>
-
-              {error && (
-                <p className="rounded-lg border border-crimson/35 bg-crimson/10 px-3 py-2 text-[12px] text-crimson">
-                  {error}
-                </p>
-              )}
-
-              <Button type="submit" variant="primary" loading={submitting} className="h-11 w-full text-[13px] font-bold">
-                <span>Generate Live Escrow Link</span>
-                <ArrowRight className="size-4" />
-              </Button>
             </form>
-          </div>
+          </Reveal>
         </div>
       </div>
     </section>

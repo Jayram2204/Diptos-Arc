@@ -1,125 +1,55 @@
-import { type ReactNode, useMemo, useState } from 'react'
-import { Play, RotateCcw } from 'lucide-react'
-import { Button, Eyebrow } from '@/components/ui'
-import { DIPTOS_ESCROW_ABI, DIPTOS_REGISTRY_ABI } from '@/config/abis'
+import { useState } from 'react'
+import { Play } from 'lucide-react'
+import { type Address, formatEther, formatGwei } from 'viem'
+import { Button, CopyButton, Eyebrow, Reveal } from '@/components/ui'
+import { ABIS } from '@/config/abis'
 import { ESCROW_CONTRACT_ADDRESS, REGISTRY_CONTRACT_ADDRESS } from '@/config/protocol'
 import { fmtAmount, shortHex } from '@/lib/chain'
 import { useGeminiRisk } from '@/lib/hooks'
 import { diptos } from '@/lib/sdk'
 
-type Line = { kind: 'call' | 'ok' | 'emit' | 'err'; text: ReactNode }
+const SAMPLE_PAYER = '0x1111111111111111111111111111111111111111' as Address
+const SAMPLE_PAYEE = '0x2222222222222222222222222222222222222222' as Address
 
-const SAMPLE_PAYER = '0x5A0b54D5dc17e0AadC383d2db43B0a0D3E029c4c' as const
-const SAMPLE_PAYEE = '0x742d35Cc6634C0532925a3b844Bc454e4438f44e' as const
+type OutputLine = { kind: 'call' | 'ok' | 'info'; text: string }
 
-const KIND_STYLE: Record<Line['kind'], string> = {
-  call: 'text-secondary',
-  ok: 'text-emerald',
-  emit: 'text-gold',
-  err: 'text-crimson',
-}
+export function Architecture() {
+  const { data: gemini } = useGeminiRisk()
+  const liveLambda = gemini?.recommendedLambda ?? 0.35
 
-const KIND_GLYPH: Record<Line['kind'], string> = {
-  call: '→',
-  ok: '✓',
-  emit: '←',
-  err: '✕',
-}
+  // Layer 01 state
+  const [l1Amount, setL1Amount] = useState('2500')
+  const [l1Hash, setL1Hash] = useState<string | null>(null)
+  const [l1Running, setL1Running] = useState(false)
+  const [l1Logs, setL1Logs] = useState<OutputLine[]>([])
 
-function SandboxCard({
-  layer,
-  title,
-  fnName,
-  contract,
-  controls,
-  lines,
-  running,
-  onClear,
-  onRun,
-  runLabel = 'Run Dry-Run',
-}: {
-  layer: string
-  title: string
-  fnName: string
-  contract: string
-  controls?: ReactNode
-  lines: Line[]
-  running: boolean
-  onClear: () => void
-  onRun: () => void
-  runLabel?: string
-}) {
-  return (
-    <article className="flex flex-col rounded-[10px] border border-white/[0.08] bg-surface">
-      <div className="border-b border-white/[0.08] px-5 py-4">
-        <div className="flex items-center justify-between gap-2">
-          <span className="font-mono text-[11px] font-semibold tracking-[0.12em] text-gold">{layer}</span>
-          <span className="font-mono text-[11px] text-secondary">{contract}</span>
-        </div>
-        <h3 className="mt-2.5 text-[17px] font-semibold text-primary">{title}</h3>
-        <p className="mt-1 font-mono text-[12px] text-secondary">{fnName}</p>
-      </div>
+  // Layer 02 state
+  const [l2Amount, setL2Amount] = useState('1500')
+  const [l2Running, setL2Running] = useState(false)
+  const [l2Logs, setL2Logs] = useState<OutputLine[]>([])
 
-      {controls && <div className="border-b border-white/[0.08] px-5 py-3.5">{controls}</div>}
+  // Layer 03 state
+  const [l3Delay, setL3Delay] = useState(12)
+  const [l3Running, setL3Running] = useState(false)
+  const [l3Logs, setL3Logs] = useState<OutputLine[]>([])
 
-      <div className="flex flex-1 flex-col px-5 py-4">
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-secondary">
-            Arc eth_call / SDK Trace
-          </span>
-          {lines.length > 0 && !running && (
-            <button
-              type="button"
-              onClick={onClear}
-              className="inline-flex items-center gap-1 font-mono text-[11px] text-secondary hover:text-primary"
-            >
-              <RotateCcw className="size-3" /> Clear
-            </button>
-          )}
-        </div>
-
-        <ol className="mt-3 min-h-[168px] flex-1 space-y-1.5 font-mono text-[11.5px] leading-relaxed">
-          {lines.length === 0 && (
-            <li className="text-secondary/50">Click "{runLabel}" to execute live Arc RPC dry-run.</li>
-          )}
-          {lines.map((l, i) => (
-            <li key={i} className={`flex animate-fade-up gap-2 ${KIND_STYLE[l.kind]}`}>
-              <span className="w-3 shrink-0 text-center">{KIND_GLYPH[l.kind]}</span>
-              <span className="min-w-0 break-all">{l.text}</span>
-            </li>
-          ))}
-        </ol>
-
-        <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/[0.08] pt-3.5">
-          <span className="font-mono text-[10px] text-secondary">Arc Testnet • 5042002</span>
-          <Button size="sm" variant="secondary" onClick={onRun} loading={running}>
-            {!running && <Play className="size-3 text-gold" />}
-            {runLabel}
-          </Button>
-        </div>
-      </div>
-    </article>
-  )
-}
-
-function LayerOneHash() {
-  const [amount, setAmount] = useState('2500')
-  const [lines, setLines] = useState<Line[]>([])
-  const [running, setRunning] = useState(false)
-  const deadline = useMemo(() => 1798761600n, [])
-
-  const run = async () => {
-    setRunning(true)
+  const runLayer1 = async () => {
+    setL1Running(true)
+    const deadline = Math.floor(Date.now() / 1000) + 86400
     const computed = diptos.computeEscrowHash({
       payer: SAMPLE_PAYER,
       payee: SAMPLE_PAYEE,
-      amountUsdc: amount || '0',
+      amountUsdc: Number(l1Amount) > 0 ? Number(l1Amount) : 100,
       deadline,
-      salt: 'esc_arc_canonical_v2',
+      salt: `diptos:arc:${Date.now()}`,
     })
+    setL1Hash(computed.canonicalHash)
 
-    const next: Line[] = [
-      { kind: 'call', text: `DiptosRegistry.computeCanonicalHash(${shortHex(computed.escrowIdBytes32, 8, 6)}, ${amount} USDC)` },
+    const lines: OutputLine[] = [
+      {
+        kind: 'call',
+        text: `DiptosRegistry.computeCanonicalHash(${shortHex(computed.escrowIdBytes32, 8, 6)}, ${l1Amount} USDC)`,
+      },
       { kind: 'ok', text: `keccak256 → ${shortHex(computed.canonicalHash, 14, 10)}` },
     ]
 
@@ -128,236 +58,253 @@ function LayerOneHash() {
       const [onChainHash, exists] = await Promise.all([
         client.readContract({
           address: REGISTRY_CONTRACT_ADDRESS,
-          abi: DIPTOS_REGISTRY_ABI,
+          abi: ABIS.DiptosRegistry,
           functionName: 'computeCanonicalHash',
           args: [computed.escrowIdBytes32, SAMPLE_PAYER, SAMPLE_PAYEE, computed.amountWei, computed.deadlineUnix],
         }),
         client.readContract({
           address: REGISTRY_CONTRACT_ADDRESS,
-          abi: DIPTOS_REGISTRY_ABI,
+          abi: ABIS.DiptosRegistry,
           functionName: 'canonicalHashes',
           args: [computed.canonicalHash],
         }),
       ])
-      next.push({ kind: 'ok', text: `Arc eth_call match → ${shortHex(onChainHash as string, 14, 10)}` })
-      next.push(
-        exists
-          ? { kind: 'err', text: 'canonicalHashes[hash] == true → Double-spend blocked!' }
-          : { kind: 'emit', text: 'canonicalHashes[hash] == false → Unique & ready to lock' },
-      )
+      lines.push({
+        kind: 'ok',
+        text: `Arc eth_call verified → match=${String(onChainHash) === computed.canonicalHash}, doubleSpend=${String(exists)}`,
+      })
     } catch {
-      next.push({ kind: 'ok', text: 'ABI-encoded locally via @diptos/sdk (byte-identical to DiptosRegistry.sol)' })
-      next.push({ kind: 'emit', text: 'Ready for DiptosRegistry.recordCommitment on Arc Testnet' })
+      lines.push({
+        kind: 'info',
+        text: `ABI-encoded commitment ready for DiptosRegistry.sol (${shortHex(REGISTRY_CONTRACT_ADDRESS)})`,
+      })
     }
-
-    setLines(next)
-    setRunning(false)
+    setL1Logs(lines)
+    setL1Running(false)
   }
 
-  return (
-    <SandboxCard
-      layer="LAYER 01"
-      title="Anti-Double-Spend Escrow Hash"
-      fnName="DiptosRegistry.computeCanonicalHash(escrowId, payer, payee, amount, deadline)"
-      contract="DiptosRegistry.sol"
-      lines={lines}
-      running={running}
-      onClear={() => setLines([])}
-      onRun={() => void run()}
-      runLabel="Verify Hash on Arc"
-      controls={
-        <label className="flex items-center justify-between gap-3 text-[12px] text-secondary">
-          <span>Escrow Principal</span>
-          <span className="flex items-center gap-1.5">
-            <input
-              value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
-              inputMode="decimal"
-              aria-label="Escrow principal in USDC"
-              className="h-8 w-28 rounded-md border border-white/[0.08] bg-elevated px-2.5 text-right font-mono text-[12px] text-primary outline-none focus:border-gold/60"
-            />
-            <span className="font-mono text-[11px] text-secondary">USDC</span>
-          </span>
-        </label>
-      }
-    />
-  )
-}
-
-function LayerTwoDvP() {
-  const [amount, setAmount] = useState('2500')
-  const [lines, setLines] = useState<Line[]>([])
-  const [running, setRunning] = useState(false)
-
-  const run = async () => {
-    setRunning(true)
-    const num = Number(amount) || 0
+  const runLayer2 = async () => {
+    setL2Running(true)
+    const amt = Math.max(1, Number(l2Amount) || 1500)
+    const deadlineUnix = Math.floor(Date.now() / 1000) + 86400
     const tx = diptos.buildCreateEscrowTx({
-      escrowId: 'esc_arc_dvp_preview',
+      escrowId: `esc_arc_dvp_${Date.now()}`,
       payee: SAMPLE_PAYEE,
-      amountUsdc: num || 1,
-      deadlineUnix: Math.floor(Date.now() / 1000) + 86400,
-      lambdaBps: 2500,
+      amountUsdc: amt,
+      deadlineUnix,
+      lambdaBps: Math.round(liveLambda * 10_000),
       isAgentMode: true,
     })
 
-    const next: Line[] = [
-      { kind: 'call', text: `buildCreateEscrowTx → ${shortHex(tx.data, 14, 6)} (${tx.value} wei)` },
+    const lines: OutputLine[] = [
+      { kind: 'call', text: `DiptosEscrow.createEscrowLink(${amt} USDC, λ=${liveLambda.toFixed(2)}, agent=true)` },
+      { kind: 'ok', text: `calldata (${(tx.data.length - 2) / 2} bytes) → ${shortHex(tx.data, 16, 8)}` },
     ]
 
     try {
       const client = diptos.getPublicClient()
-      const [feeBps, signer] = await Promise.all([
-        client.readContract({
-          address: ESCROW_CONTRACT_ADDRESS,
-          abi: DIPTOS_ESCROW_ABI,
-          functionName: 'PROTOCOL_FEE_BPS',
-        }),
-        client.readContract({
-          address: ESCROW_CONTRACT_ADDRESS,
-          abi: DIPTOS_ESCROW_ABI,
-          functionName: 'oracleSigner',
-        }),
-      ])
-      const bps = Number(feeBps)
-      const fee = (num * bps) / 10_000
-      next.push({ kind: 'ok', text: `Arc eth_call oracleSigner → ${shortHex(signer as string, 10, 6)}` })
-      next.push({ kind: 'ok', text: `Atomic Leg A · Payee receives ${fmtAmount(num - fee)} USDC` })
-      next.push({ kind: 'emit', text: `Atomic Leg B · Protocol fee ${fmtAmount(fee)} USDC (${bps} bps)` })
-    } catch {
-      const res = diptos.calculateTECD({
-        principalUsdc: num,
-        lambda: 0.25,
-        delaySeconds: 0,
-        totalDurationSeconds: 86400,
-      })
-      next.push({ kind: 'ok', text: 'EIP-712 ReleaseMilestone(escrowId, milestoneIndex, deliverableHash, nonce, 5042002)' })
-      next.push({ kind: 'ok', text: `Atomic Leg A · Payee receives ${fmtAmount(res.payeePayoutUsdc)} USDC (99.5%)` })
-      next.push({ kind: 'emit', text: `Atomic Leg B · Protocol fee ${fmtAmount(res.protocolFeeUsdc)} USDC (0.5%)` })
-    }
-
-    setLines(next)
-    setRunning(false)
-  }
-
-  return (
-    <SandboxCard
-      layer="LAYER 02"
-      title="Atomic Deliverable-vs-Payment"
-      fnName="DiptosEscrow.releaseWithOracle(escrowId, idx, deliverableHash, nonce, sig)"
-      contract="DiptosEscrow.sol"
-      lines={lines}
-      running={running}
-      onClear={() => setLines([])}
-      onRun={() => void run()}
-      runLabel="Dry-Run DvP"
-      controls={
-        <div className="flex items-center justify-between gap-3 text-[12px] text-secondary">
-          <span>Settlement Value</span>
-          <span className="flex items-center gap-1.5">
-            <input
-              value={amount}
-              onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ''))}
-              inputMode="decimal"
-              aria-label="Settlement value in USDC"
-              className="h-8 w-28 rounded-md border border-white/[0.08] bg-elevated px-2.5 text-right font-mono text-[12px] text-primary outline-none focus:border-gold/60"
-            />
-            <span className="font-mono text-[11px] text-secondary">USDC</span>
-          </span>
-        </div>
-      }
-    />
-  )
-}
-
-function LayerThreeTECD({ liveLambda }: { liveLambda: number }) {
-  const [delayHours, setDelayHours] = useState('12')
-  const [lines, setLines] = useState<Line[]>([])
-  const [running, setRunning] = useState(false)
-
-  const run = async () => {
-    setRunning(true)
-    const hrs = Math.max(0, Number(delayHours) || 0)
-    const preview = await diptos.previewTECDOnChain({
-      principalUsdc: 2500,
-      slaWindowSeconds: 24 * 3600,
-      delaySeconds: hrs * 3600,
-      lambda: liveLambda,
-    })
-
-    setLines([
-      { kind: 'call', text: `DiptosEscrow.previewTECDPayout(2500 USDC, dt=${hrs}h, λ=${liveLambda.toFixed(2)})` },
-      {
+      const gasPrice = await client.getGasPrice()
+      const estGas = 148_000n
+      const estFeeUsdc = Number(formatEther(estGas * gasPrice)).toFixed(6)
+      lines.push({
         kind: 'ok',
-        text:
-          preview.source === 'arc-eth-call'
-            ? 'Source: Live Solidity WAD eth_call on Arc Testnet'
-            : 'Source: @diptos/sdk WAD-equivalent math',
-      },
-      { kind: 'ok', text: `Payee Instant Payout → ${fmtAmount(preview.payeePayoutUsdc)} USDC` },
+        text: `Arc live gasPrice=${Number(formatGwei(gasPrice)).toFixed(4)} gwei · est settlement fee ≈ ${estFeeUsdc} USDC`,
+      })
+    } catch {
+      lines.push({ kind: 'info', text: '99.50% payee payout · 0.50% flat fee · 0% chargeback risk' })
+    }
+    setL2Logs(lines)
+    setL2Running(false)
+  }
+
+  const runLayer3 = async () => {
+    setL3Running(true)
+    const lines: OutputLine[] = [
       {
-        kind: preview.buyerRebateUsdc > 0 ? 'err' : 'ok',
-        text: `Automatic Buyer Rebate → ${fmtAmount(preview.buyerRebateUsdc)} USDC`,
+        kind: 'call',
+        text: `DiptosEscrow.previewTECDPayout(2500 USDC, delay=+${l3Delay}h, λ=${liveLambda.toFixed(2)})`,
       },
-      { kind: 'emit', text: `TECD Decay = ${preview.decayPercent.toFixed(2)}% • Fee = ${fmtAmount(preview.protocolFeeUsdc)} USDC` },
-    ])
-    setRunning(false)
+    ]
+    try {
+      const preview = await diptos.previewTECDOnChain({
+        principalUsdc: 2500,
+        slaWindowSeconds: 24 * 3600,
+        delaySeconds: l3Delay * 3600,
+        lambda: liveLambda,
+      })
+      lines.push({
+        kind: 'ok',
+        text: `eth_call [${preview.source}] → Payee $${fmtAmount(preview.payeePayoutUsdc)} · Rebate $${fmtAmount(preview.buyerRebateUsdc)} (-${preview.decayPercent.toFixed(1)}%)`,
+      })
+    } catch {
+      const local = diptos.calculateTECD({
+        principalUsdc: 2500,
+        lambda: liveLambda,
+        delaySeconds: l3Delay * 3600,
+        totalDurationSeconds: 24 * 3600,
+      })
+      lines.push({
+        kind: 'ok',
+        text: `WAD fixed-point → Payee $${fmtAmount(local.payeePayoutUsdc)} · Rebate $${fmtAmount(local.buyerRebateUsdc)} (-${local.decayPercent.toFixed(1)}%)`,
+      })
+    }
+    setL3Logs(lines)
+    setL3Running(false)
   }
 
   return (
-    <SandboxCard
-      layer="LAYER 03"
-      title="TECD Latency Penalty Curve"
-      fnName="DiptosEscrow.previewTECDPayout(amount, deadline, evalTs, lambdaBps)"
-      contract="DiptosEscrow.sol"
-      lines={lines}
-      running={running}
-      onClear={() => setLines([])}
-      onRun={() => void run()}
-      runLabel="Call previewTECD"
-      controls={
-        <label className="flex items-center justify-between gap-3 text-[12px] text-secondary">
-          <span>Simulated Delay (dt)</span>
-          <span className="flex items-center gap-1.5">
-            <input
-              value={delayHours}
-              onChange={(e) => setDelayHours(e.target.value.replace(/[^\d.]/g, ''))}
-              inputMode="decimal"
-              aria-label="Simulated delay in hours"
-              className="h-8 w-24 rounded-md border border-white/[0.08] bg-elevated px-2.5 text-right font-mono text-[12px] text-primary outline-none focus:border-gold/60"
-            />
-            <span className="font-mono text-[11px] text-secondary">hours</span>
-          </span>
-        </label>
-      }
-    />
-  )
-}
+    <section id="architecture" className="border-t border-paper/10 bg-black py-28 lg:py-36">
+      <div className="mx-auto max-w-[1380px] px-6 lg:px-10">
+        <Reveal className="max-w-2xl">
+          <Eyebrow>02 // PROTOCOL STACK</Eyebrow>
+          <h2 className="rwa-display mt-4 text-[clamp(2rem,4vw,3.4rem)] uppercase text-paper">
+            THREE DETERMINISTIC LAYERS ON ARC.
+          </h2>
+          <p className="mt-4 text-[16px] leading-relaxed text-secondary">
+            Inspect and execute real <code className="font-mono text-paper">eth_call</code> and{' '}
+            <code className="font-mono text-paper">keccak256</code> simulations directly against our Arc Testnet
+            (5042002) protocol contracts.
+          </p>
+        </Reveal>
 
-export function Architecture() {
-  const { data: gemini } = useGeminiRisk()
-  const liveLambda = gemini?.recommendedLambda ?? 0.35
+        <div className="mt-14 space-y-6">
+          {/* LAYER 01 */}
+          <Reveal>
+            <div className="grid min-h-[260px] gap-8 rounded-2xl border border-paper/10 bg-surface p-8 lg:grid-cols-12 lg:items-center lg:p-10">
+              <div className="lg:col-span-6">
+                <p className="rwa-hud text-lime">LAYER 01 // ANTI-DOUBLE-SPEND COMMITMENT</p>
+                <h3 className="rwa-display mt-3 text-[26px] uppercase text-paper">DiptosRegistry.sol</h3>
+                <p className="mt-3 text-[15px] leading-relaxed text-secondary">
+                  Binds every escrow ID, payer, payee, principal, and deadline into a canonical{' '}
+                  <code className="font-mono text-paper">keccak256</code> commitment. Any attempt to double-spend or
+                  re-originate an escrow reverts atomically with{' '}
+                  <code className="font-mono text-paper">CommitmentAlreadyExists()</code>.
+                </p>
+              </div>
+              <div className="space-y-4 lg:col-span-6">
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="number"
+                    min={1}
+                    value={l1Amount}
+                    onChange={(e) => setL1Amount(e.target.value)}
+                    aria-label="Layer 1 USDC Amount"
+                    className="h-11 w-36 rounded-full border border-paper/15 bg-black px-4 font-mono text-[13px] text-paper outline-none focus:border-lime"
+                  />
+                  <Button size="sm" loading={l1Running} onClick={() => void runLayer1()}>
+                    <Play className="size-3.5" /> SIMULATE COMMITMENT
+                  </Button>
+                  {l1Hash && <CopyButton value={l1Hash} label="Copy canonical hash" />}
+                </div>
+                <div className="min-h-[84px] rounded-xl border border-paper/10 bg-black/80 p-4 font-mono text-[11.5px] leading-relaxed">
+                  {l1Logs.length === 0 ? (
+                    <span className="text-secondary">
+                      // Ready: DiptosRegistry.computeCanonicalHash(escrowId, payer, payee, amount, deadline)
+                    </span>
+                  ) : (
+                    l1Logs.map((line, i) => (
+                      <p key={i} className={line.kind === 'ok' ? 'text-lime' : 'text-paper/80'}>
+                        {line.kind === 'call' ? '→ ' : '✓ '}
+                        {line.text}
+                      </p>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </Reveal>
 
-  return (
-    <section id="architecture" className="mx-auto max-w-[1280px] border-t border-white/[0.08] px-4 py-20 sm:px-6">
-      <div className="max-w-2xl">
-        <Eyebrow>Live Cryptographic Sandbox</Eyebrow>
-        <h2 className="mt-3 text-[28px] font-semibold text-primary sm:text-[34px]">
-          Three protocol layers. Verified directly against Arc.
-        </h2>
-        <p className="mt-3 text-[14px] text-secondary">
-          Execute live <span className="font-mono text-primary">viem</span>{' '}
-          <span className="font-mono text-primary">eth_call</span> dry-runs and{' '}
-          <span className="font-mono text-primary">@diptos/sdk</span> checks against{' '}
-          <span className="font-mono text-primary">DiptosEscrow.sol</span> &amp;{' '}
-          <span className="font-mono text-primary">DiptosRegistry.sol</span>.
-        </p>
-      </div>
+          {/* LAYER 02 */}
+          <Reveal delayMs={90}>
+            <div className="grid min-h-[260px] gap-8 rounded-2xl border border-paper/10 bg-surface p-8 lg:grid-cols-12 lg:items-center lg:p-10">
+              <div className="lg:col-span-6">
+                <p className="rwa-hud text-lime">LAYER 02 // ATOMIC USDC DVP ESCROW</p>
+                <h3 className="rwa-display mt-3 text-[26px] uppercase text-paper">DiptosEscrow.sol</h3>
+                <p className="mt-3 text-[15px] leading-relaxed text-secondary">
+                  Locks native Arc USDC (<code className="font-mono text-paper">msg.value</code>) across single-shot or
+                  multi-milestone schedules. Grok AI signs a chain-bound, nonce-protected EIP-712 release digest
+                  verified via <code className="font-mono text-paper">ecrecover</code>.
+                </p>
+              </div>
+              <div className="space-y-4 lg:col-span-6">
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="number"
+                    min={1}
+                    value={l2Amount}
+                    onChange={(e) => setL2Amount(e.target.value)}
+                    aria-label="Layer 2 USDC Amount"
+                    className="h-11 w-36 rounded-full border border-paper/15 bg-black px-4 font-mono text-[13px] text-paper outline-none focus:border-lime"
+                  />
+                  <Button size="sm" loading={l2Running} onClick={() => void runLayer2()}>
+                    <Play className="size-3.5" /> ENCODE &amp; ESTIMATE GAS
+                  </Button>
+                </div>
+                <div className="min-h-[84px] rounded-xl border border-paper/10 bg-black/80 p-4 font-mono text-[11.5px] leading-relaxed">
+                  {l2Logs.length === 0 ? (
+                    <span className="text-secondary">
+                      // Ready: DiptosEscrow.createEscrowLink + live Arc eth_gasPrice ({shortHex(ESCROW_CONTRACT_ADDRESS)})
+                    </span>
+                  ) : (
+                    l2Logs.map((line, i) => (
+                      <p key={i} className={line.kind === 'ok' ? 'text-emerald' : 'text-paper/80'}>
+                        {line.kind === 'call' ? '→ ' : '✓ '}
+                        {line.text}
+                      </p>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </Reveal>
 
-      <div className="mt-10 grid gap-5 lg:grid-cols-3">
-        <LayerOneHash />
-        <LayerTwoDvP />
-        <LayerThreeTECD liveLambda={liveLambda} />
+          {/* LAYER 03 */}
+          <Reveal delayMs={180}>
+            <div className="grid min-h-[260px] gap-8 rounded-2xl border border-paper/10 bg-surface p-8 lg:grid-cols-12 lg:items-center lg:p-10">
+              <div className="lg:col-span-6">
+                <p className="rwa-hud text-lime">LAYER 03 // TIME-ENTROPIC COLLATERAL DECAY</p>
+                <h3 className="rwa-display mt-3 text-[26px] uppercase text-paper">previewTECDPayout()</h3>
+                <p className="mt-3 text-[15px] leading-relaxed text-secondary">
+                  Executes <code className="font-mono text-paper">V₀ · exp(−λ · (Δt/T)^1.5)</code> in Solidity 18-decimal
+                  WAD math. Zero wei dust lost or created—verified across 256 Foundry fuzz runs.
+                </p>
+              </div>
+              <div className="space-y-4 lg:col-span-6">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex flex-1 items-center gap-3">
+                    <input
+                      type="range"
+                      min={0}
+                      max={48}
+                      value={l3Delay}
+                      onChange={(e) => setL3Delay(Number(e.target.value))}
+                      aria-label="Simulated delay hours"
+                      className="w-full cursor-pointer"
+                    />
+                    <span className="w-14 shrink-0 font-mono text-[12px] text-lime">+{l3Delay}h</span>
+                  </div>
+                  <Button size="sm" loading={l3Running} onClick={() => void runLayer3()}>
+                    <Play className="size-3.5" /> CALL ON ARC
+                  </Button>
+                </div>
+                <div className="min-h-[84px] rounded-xl border border-paper/10 bg-black/80 p-4 font-mono text-[11.5px] leading-relaxed">
+                  {l3Logs.length === 0 ? (
+                    <span className="text-secondary">
+                      // Ready: DiptosEscrow.previewTECDPayout(2500e18, deadline, simulatedTs, {Math.round(liveLambda * 10_000)})
+                    </span>
+                  ) : (
+                    l3Logs.map((line, i) => (
+                      <p key={i} className={line.kind === 'ok' ? 'text-lime' : 'text-paper/80'}>
+                        {line.kind === 'call' ? '→ ' : '✓ '}
+                        {line.text}
+                      </p>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </Reveal>
+        </div>
       </div>
     </section>
   )

@@ -1,43 +1,46 @@
-import { useState } from 'react'
-import { Code2, Menu, Plus, X } from 'lucide-react'
-import { Wordmark } from '@/components/Logo'
+import { useEffect, useState } from 'react'
+import { ArrowUpRight, Menu, Plus, X } from 'lucide-react'
 import { PulseDot } from '@/components/ui'
-import { useArcPulse } from '@/lib/hooks'
 import { navigate } from '@/lib/route'
 import { SdkModal } from './SdkModal'
 
 const NAV_LINKS = [
-  { id: 'how-it-works', label: 'How It Works' },
-  { id: 'architecture', label: 'Live Sandbox' },
-  { id: 'tecd-risk', label: 'TECD & Risk' },
-  { id: 'registry', label: 'Arc Contracts' },
-] as const
+  { num: '01', label: 'ESCROW', href: '#escrows' },
+  { num: '02', label: 'ARCHITECTURE', href: '#architecture' },
+  { num: '03', label: 'TECD RISK', href: '#tecd-risk' },
+  { num: '04', label: 'CONTRACTS', href: '#registry' },
+]
 
 export function Header() {
-  const pulse = useArcPulse(6000)
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const [sdkOpen, setSdkOpen] = useState(false)
 
-  const focusCreator = () => {
-    setMenuOpen(false)
-    navigate('/')
-    requestAnimationFrame(() => {
-      const el = document.getElementById('create-escrow-title')
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        ;(el as HTMLInputElement).focus()
-      } else {
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-      }
-    })
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  const scrollToComposer = () => {
+    setMobileOpen(false)
+    const el = document.getElementById('composer')
+    if (el) el.scrollIntoView({ behavior: 'smooth' })
   }
 
   return (
     <>
-      <header className="sticky top-0 z-50 h-16 border-b border-white/[0.08] bg-[#090A0D]/90 backdrop-blur-md">
-        <div className="mx-auto flex h-full max-w-[1280px] items-center justify-between gap-4 px-4 sm:px-6">
-          {/* Left: Logo + Verified Arc Testnet Badge */}
-          <div className="flex items-center gap-3">
+      <header
+        className={`sticky top-0 z-50 h-[76px] border-b transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          scrolled
+            ? 'border-paper/10 bg-black/88 backdrop-blur-xl'
+            : 'border-paper/[0.06] bg-black/40 backdrop-blur-sm'
+        }`}
+      >
+        <div className="mx-auto flex h-full max-w-[1380px] items-center justify-between gap-6 px-6 lg:px-10">
+          {/* Left: Expanded Archivo Wordmark + Acid Lime Dot + Arc HUD tag */}
+          <div className="flex items-center gap-4">
             <a
               href="/"
               onClick={(e) => {
@@ -45,95 +48,86 @@ export function Header() {
                 navigate('/')
                 window.scrollTo({ top: 0, behavior: 'smooth' })
               }}
-              aria-label="Diptos home"
+              className="rwa-display inline-flex items-baseline text-[21px] tracking-[-0.04em] text-paper"
             >
-              <Wordmark />
+              DIPTOS<span className="ml-0.5 inline-block size-2 rounded-full bg-lime" />
             </a>
-            <span
-              className="hidden items-center gap-2 rounded-md border border-white/[0.08] bg-surface px-2.5 py-1 font-mono text-[11px] text-primary sm:inline-flex"
-              title={
-                pulse.blockNumber !== undefined
-                  ? `Arc Testnet live block #${pulse.blockNumber.toLocaleString('en-US')}`
-                  : 'Arc Testnet (Chain ID 5042002)'
-              }
-            >
-              <PulseDot color={pulse.error && pulse.blockNumber === undefined ? 'bg-crimson' : 'bg-emerald'} />
-              <span>Arc Testnet • 5042002</span>
+            <span className="hidden items-center gap-2 rounded-full border border-paper/12 bg-surface px-3 py-1 font-mono text-[10.5px] uppercase tracking-[0.12em] text-secondary sm:inline-flex">
+              <PulseDot color="bg-lime" />
+              ARC TESTNET // 5042002
             </span>
           </div>
 
-          {/* Center: 4 Clean Anchor Links */}
+          {/* Center: Numbered Editorial Nav Links */}
           <nav className="hidden items-center gap-7 lg:flex" aria-label="Primary">
-            {NAV_LINKS.map((l) => (
+            {NAV_LINKS.map((item) => (
               <a
-                key={l.id}
-                href={`#${l.id}`}
-                className="text-[13px] font-medium text-secondary transition-colors hover:text-primary"
+                key={item.href}
+                href={item.href}
+                className="group inline-flex items-center gap-1.5 font-mono text-[11.5px] uppercase tracking-[0.12em] text-secondary transition-colors duration-300 hover:text-paper"
               >
-                {l.label}
+                <span className="text-lime/80 transition-colors group-hover:text-lime">{item.num}</span>
+                <span>{item.label}</span>
               </a>
             ))}
           </nav>
 
-          {/* Right: SDK Docs + Create Escrow Link */}
+          {/* Right: Twin Pill CTAs */}
           <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={() => setSdkOpen(true)}
-              className="hidden h-9 items-center gap-1.5 rounded-lg border border-white/[0.1] bg-transparent px-3.5 text-[13px] font-medium text-primary transition-colors hover:border-white/[0.22] sm:inline-flex"
+              className="hidden h-10 items-center gap-1.5 rounded-full border border-paper/25 px-5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-paper transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:border-lime hover:text-lime sm:inline-flex"
             >
-              <Code2 className="size-3.5 text-secondary" />
-              SDK Docs
+              SDK LAB <ArrowUpRight className="size-3.5" />
             </button>
             <button
               type="button"
-              onClick={focusCreator}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-gold px-3.5 text-[13px] font-bold text-canvas transition-colors hover:bg-[#edb955]"
+              onClick={scrollToComposer}
+              className="inline-flex h-10 items-center gap-1.5 rounded-full bg-lime px-5 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-ink transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.03] hover:bg-[#d8ff4d]"
             >
-              <Plus className="size-3.5 stroke-[2.5]" />
-              <span>Create Escrow Link</span>
+              CREATE LINK <Plus className="size-3.5" />
             </button>
             <button
               type="button"
-              onClick={() => setMenuOpen((o) => !o)}
-              aria-label="Toggle navigation"
-              aria-expanded={menuOpen}
-              className="grid size-9 place-items-center rounded-lg border border-white/[0.08] text-primary lg:hidden"
+              onClick={() => setMobileOpen((o) => !o)}
+              aria-label="Toggle menu"
+              className="grid size-10 place-items-center rounded-full border border-paper/15 text-paper lg:hidden"
             >
-              {menuOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+              {mobileOpen ? <X className="size-4" /> : <Menu className="size-4" />}
             </button>
           </div>
         </div>
 
-        {menuOpen && (
-          <nav className="border-b border-white/[0.08] bg-[#090A0D]/95 px-4 pb-4 pt-2 backdrop-blur-md lg:hidden">
-            <ul className="grid gap-1">
-              {NAV_LINKS.map((l) => (
-                <li key={l.id}>
+        {mobileOpen && (
+          <div className="border-b border-paper/10 bg-black px-6 py-5 lg:hidden">
+            <ul className="space-y-3">
+              {NAV_LINKS.map((item) => (
+                <li key={item.href}>
                   <a
-                    href={`#${l.id}`}
-                    onClick={() => setMenuOpen(false)}
-                    className="block rounded-lg px-3 py-2 text-sm text-primary hover:bg-surface"
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-2 font-mono text-[12px] uppercase tracking-[0.12em] text-paper"
                   >
-                    {l.label}
+                    <span className="text-lime">{item.num}</span>
+                    {item.label}
                   </a>
                 </li>
               ))}
-              <li>
+              <li className="pt-2">
                 <button
                   type="button"
                   onClick={() => {
-                    setMenuOpen(false)
+                    setMobileOpen(false)
                     setSdkOpen(true)
                   }}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-secondary hover:bg-surface hover:text-primary"
+                  className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full border border-paper/25 font-mono text-[11px] uppercase tracking-[0.14em] text-paper"
                 >
-                  <Code2 className="size-4" />
-                  SDK Docs (@diptos/sdk)
+                  SDK LAB <ArrowUpRight className="size-3.5" />
                 </button>
               </li>
             </ul>
-          </nav>
+          </div>
         )}
       </header>
 

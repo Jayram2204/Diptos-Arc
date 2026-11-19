@@ -18,7 +18,7 @@ import {
   Volume2,
   Wallet,
 } from 'lucide-react'
-import { type Address, isAddress } from 'viem'
+import { type Address, type Hex, isAddress, keccak256, stringToHex } from 'viem'
 import { Wordmark } from '@/components/Logo'
 import { Button, CopyButton, Field, inputCls, PulseDot } from '@/components/ui'
 import { fetchVoiceBriefAudio } from '@/lib/api'
@@ -43,7 +43,6 @@ function formatCountdown(deadlineMs: number, nowMs: number) {
   }
 }
 
-/** Hydrates an unfunded stateless checkout intent from URL query parameters */
 function parseIntentFromUrl(escrowId: string): EscrowRecord | null {
   if (typeof window === 'undefined') return null
   const sp = new URLSearchParams(window.location.search)
@@ -63,16 +62,10 @@ function parseIntentFromUrl(escrowId: string): EscrowRecord | null {
   const now = Date.now()
   const deadlineMs = now + Math.round(hours * 3600 * 1000)
 
-  const bytes32Id =
+  const bytes32Id: Hex =
     escrowId.startsWith('0x') && escrowId.length === 66
-      ? (escrowId as `0x${string}`)
-      : diptos.computeEscrowHash({
-          payer: payee,
-          payee,
-          amountUsdc: amount,
-          deadline: Math.floor(deadlineMs / 1000),
-          salt: escrowId,
-        }).escrowIdBytes32
+      ? (escrowId as Hex)
+      : keccak256(stringToHex(`diptos:arc:5042002:${escrowId}`))
 
   return {
     id: escrowId,
@@ -97,7 +90,7 @@ function parseIntentFromUrl(escrowId: string): EscrowRecord | null {
 function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
   const { address, balanceUsdc, connecting, connect, disconnect, execute, txStage, error: walletError, clearError } =
     useWallet()
-  const { events, connected: feedConnected } = useProtocolEvents(4000)
+  const { events, connected: feedConnected } = useProtocolEvents(undefined, 4000)
 
   const [escrow, setEscrow] = useState<EscrowRecord | null>(null)
   const [grokReceipt, setGrokReceipt] = useState<GrokMilestoneReceipt | null>(null)
@@ -192,7 +185,13 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
 
     setAudioLoading(true)
     try {
-      const blob = await fetchVoiceBriefAudio(escrowId)
+      const blob = await fetchVoiceBriefAudio({
+        escrowId,
+        title: escrow?.title,
+        amountUsdc: escrow?.amountUsdc,
+        tecdLambda: escrow?.tecdLambda,
+        mode: escrow?.mode,
+      })
       const url = URL.createObjectURL(blob)
       audioUrlRef.current = url
       const audio = new Audio(url)
@@ -221,7 +220,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
       Math.floor(Date.now() / 1000) + Math.max(120, Math.round(escrow.deadlineHours * 3600)),
     )
 
-    const built = diptos.buildCreateEscrowTx({
+    const built = diptos.buildFundEscrowTx({
       escrowId: escrow.escrowIdBytes32,
       payee: escrow.payee,
       amountUsdc: escrow.amountUsdc,
@@ -259,7 +258,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
 
   const handleSettleOnArc = async () => {
     const audit = grokReceipt ?? escrow?.grokAudit
-    const sig = audit?.eip712Signature ?? audit?.signature
+    const sig = (audit?.eip712Signature ?? audit?.signature) as Hex | undefined
     if (!escrow || !audit || !sig) return
     clearError()
     setTxSuccess(null)
@@ -268,7 +267,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
       escrowId: escrow.escrowIdBytes32,
       milestoneIndex: audit.milestoneIndex ?? 0,
       deliverableHash: audit.deliverableHash,
-      expectedNonce: audit.nonce ?? escrow.nonce ?? 0,
+      nonce: audit.nonce ?? escrow.nonce ?? 0,
       grokSignature: sig,
     })
 
@@ -291,15 +290,11 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
     clearError()
     setTxSuccess(null)
 
-    const built = diptos.buildClaimTimeoutRefundTx({
-      escrowId: escrow.escrowIdBytes32,
-    })
-
     const rc = await execute({
       kind: 'Claim Timeout Refund',
       contract: 'DiptosEscrow',
-      functionName: built.functionName,
-      args: built.args,
+      functionName: 'claimTimeoutRefund',
+      args: [escrow.escrowIdBytes32],
     })
 
     if (rc && rc.status === 'success') {
@@ -321,7 +316,9 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
     try {
       const receipt = await diptos.verifyDeliverableWithGrok({
         escrowId: escrow.escrowIdBytes32,
+        title: escrow.title,
         scope: escrow.scope,
+        amountUsdc: escrow.amountUsdc,
         deliverableUrl: deliverableUrl.trim() || undefined,
         notes: deliverableNotes.trim() || undefined,
       })
@@ -405,7 +402,9 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
         ) : loadError || !escrow ? (
           <div className="mx-auto max-w-xl rounded-[10px] border border-white/[0.08] bg-surface p-8 text-center">
             <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-crimson">Escrow Not Found</p>
-            <h1 className="mt-2 text-2xl font-semibold text-primary">No on-chain escrow found for “{shortHex(escrowId, 12, 8)}”</h1>
+            <h1 className="mt-2 text-2xl font-semibold text-primary">
+              No on-chain escrow found for “{shortHex(escrowId, 12, 8)}”
+            </h1>
             <p className="mt-2 text-[13px] text-secondary">
               {loadError || 'This escrow ID has not been funded on Arc Testnet (5042002) yet.'}
             </p>
@@ -415,7 +414,6 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
           </div>
         ) : (
           <div className="grid items-start gap-6 lg:grid-cols-12">
-            {/* LEFT COLUMN (7 cols): Deal & On-Chain Settlement */}
             <section className="space-y-5 lg:col-span-7">
               <div className="rounded-[10px] border border-white/[0.08] bg-surface p-6">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] pb-4">
@@ -632,7 +630,6 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
               </div>
             </section>
 
-            {/* RIGHT COLUMN (5 cols): Grok AI Deliverable Verifier & QuickNode Audit Log */}
             <aside className="space-y-5 lg:col-span-5">
               <div className="rounded-[10px] border border-white/[0.08] bg-surface p-6">
                 <div className="flex items-center justify-between gap-2 border-b border-white/[0.08] pb-4">
@@ -765,7 +762,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-semibold text-gold">{evt.eventName}</span>
                           <span className="text-[10px] text-secondary">
-                            blk #{evt.blockNumber} · idx {evt.logIndex}
+                            blk #{evt.blockNumber} · idx {evt.logIndex ?? 0}
                           </span>
                         </div>
                         <p className="mt-1 text-primary/90">{evt.summary}</p>

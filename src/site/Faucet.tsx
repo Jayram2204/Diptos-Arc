@@ -1,85 +1,35 @@
-import { useState } from 'react'
-import { ArrowRight, ArrowUpRight, Droplets, Zap } from 'lucide-react'
-import { Button, Eyebrow } from '@/components/ui'
-import { LINKS } from '@/config/protocol'
-import { useGeminiRisk } from '@/lib/hooks'
-import { navigate } from '@/lib/route'
-import { diptos } from '@/lib/sdk'
+import { ArrowUpRight, Droplets } from 'lucide-react'
+import { Eyebrow, Reveal } from '@/components/ui'
+import { ARC_NETWORK, LINKS } from '@/config/protocol'
 
 export function Faucet() {
-  const { data: gemini } = useGeminiRisk()
-  const [creating, setCreating] = useState(false)
-
-  const handleQuickFund = async () => {
-    setCreating(true)
-    try {
-      const res = await diptos.createEscrowLink({
-        title: 'Quick Testnet Escrow Settlement (0.10 USDC)',
-        scope: 'Verify Arc Testnet native USDC funding, Grok AI audit, and atomic EIP-712 release.',
-        amountUsdc: 0.1,
-        deadlineHours: 24,
-        mode: 'human',
-        tecdLambda: gemini?.recommendedLambda,
-      })
-      navigate(res.checkoutPath)
-    } finally {
-      setCreating(false)
-    }
-  }
-
   return (
-    <section id="faucet" className="mx-auto max-w-[1280px] border-t border-white/[0.08] px-4 py-20 sm:px-6">
-      <div className="max-w-2xl">
-        <Eyebrow>Arc Testnet Faucet &amp; Sandbox Funding</Eyebrow>
-        <h2 className="mt-3 text-[28px] font-semibold text-primary sm:text-[34px]">
-          Claim native USDC and fund a live escrow in 60 seconds.
-        </h2>
-      </div>
-
-      <div className="mt-8 grid gap-5 md:grid-cols-2">
-        <div className="flex flex-col justify-between rounded-[10px] border border-white/[0.08] bg-surface p-6">
-          <div>
-            <span className="grid size-10 place-items-center rounded-lg border border-white/[0.08] bg-elevated text-emerald">
-              <Droplets className="size-4" />
-            </span>
-            <h3 className="mt-4 text-[17px] font-semibold text-primary">Circle Arc Testnet Faucet</h3>
-            <p className="mt-2 text-[13px] leading-relaxed text-secondary">
-              On Arc Testnet (<span className="font-mono text-primary">5042002</span>), native USDC powers both gas
-              and atomic escrow settlement. Claim testnet USDC directly from Circle.
-            </p>
+    <section id="faucet" className="border-t border-paper/10 bg-black py-24 lg:py-32">
+      <div className="mx-auto max-w-[1380px] px-6 lg:px-10">
+        <Reveal>
+          <div className="rwa-depth-card flex flex-col justify-between gap-8 rounded-2xl p-8 lg:flex-row lg:items-center lg:p-12">
+            <div className="max-w-2xl">
+              <Eyebrow>NATIVE USDC GAS &amp; SETTLEMENT</Eyebrow>
+              <h2 className="rwa-display mt-3 text-[clamp(1.8rem,3.2vw,2.8rem)] uppercase text-paper">
+                FUND YOUR ARC TESTNET WALLET IN ONE CLICK.
+              </h2>
+              <p className="mt-3 text-[15px] text-secondary">
+                On <span className="font-mono text-paper">{ARC_NETWORK.short}</span>, USDC is both the native gas token
+                and the escrow settlement currency. Claim free testnet USDC from Circle&apos;s faucet and settle live.
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-3">
+              <a
+                href={LINKS.circleFaucet}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-12 items-center gap-2 rounded-full bg-lime px-7 font-mono text-[11.5px] font-semibold uppercase tracking-[0.14em] text-ink transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.03] hover:bg-[#d8ff4d]"
+              >
+                <Droplets className="size-4" /> CIRCLE ARC FAUCET <ArrowUpRight className="size-4" />
+              </a>
+            </div>
           </div>
-          <a
-            href={LINKS.circleFaucet}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-6 inline-flex h-10 items-center gap-1.5 self-start rounded-lg border border-white/[0.1] bg-elevated px-4 text-[13px] font-medium text-primary transition-colors hover:border-gold/50 hover:text-gold"
-          >
-            Open Circle Faucet <ArrowUpRight className="size-4" />
-          </a>
-        </div>
-
-        <div className="flex flex-col justify-between rounded-[10px] border border-white/[0.08] bg-surface p-6">
-          <div>
-            <span className="grid size-10 place-items-center rounded-lg border border-white/[0.08] bg-elevated text-gold">
-              <Zap className="size-4" />
-            </span>
-            <h3 className="mt-4 text-[17px] font-semibold text-primary">1-Click Test Escrow Funding</h3>
-            <p className="mt-2 text-[13px] leading-relaxed text-secondary">
-              Spin up a live <span className="font-mono text-primary">0.10 USDC</span> checkout room via{' '}
-              <span className="font-mono text-primary">diptos.createEscrowLink()</span> to test wallet funding,
-              ElevenLabs audio briefs, and Grok AI verification end-to-end.
-            </p>
-          </div>
-          <Button
-            variant="primary"
-            loading={creating}
-            onClick={handleQuickFund}
-            className="mt-6 self-start font-bold"
-          >
-            <span>Launch &amp; Fund Test Escrow</span>
-            <ArrowRight className="size-4" />
-          </Button>
-        </div>
+        </Reveal>
       </div>
     </section>
   )

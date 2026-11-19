@@ -74,7 +74,7 @@ export function SdkModal({ open, onClose }: { open: boolean; onClose: () => void
           telemetry.status === 'fulfilled'
             ? {
                 chainId: telemetry.value.chainId,
-                rpcUrl: telemetry.value.rpcUrl,
+                rpcUrl: ARC_RPC_URL,
                 blockNumber: telemetry.value.blockNumber.toString(),
                 blockTimestamp: telemetry.value.blockTimestamp.toString(),
                 gasPriceWei: telemetry.value.gasPrice.toString(),
