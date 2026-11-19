@@ -2,22 +2,24 @@ import { useState } from 'react'
 import { ArrowRight, ArrowUpRight, Droplets, Zap } from 'lucide-react'
 import { Button, Eyebrow } from '@/components/ui'
 import { LINKS } from '@/config/protocol'
-import { createEscrow } from '@/lib/api'
+import { useGeminiRisk } from '@/lib/hooks'
 import { navigate } from '@/lib/route'
+import { diptos } from '@/lib/sdk'
 
 export function Faucet() {
+  const { data: gemini } = useGeminiRisk()
   const [creating, setCreating] = useState(false)
 
   const handleQuickFund = async () => {
     setCreating(true)
     try {
-      const res = await createEscrow({
+      const res = await diptos.createEscrowLink({
         title: 'Quick Testnet Escrow Settlement (0.10 USDC)',
-        scope: 'Verify Arc Testnet native USDC funding, Grok AI audit, and atomic release.',
+        scope: 'Verify Arc Testnet native USDC funding, Grok AI audit, and atomic EIP-712 release.',
         amountUsdc: 0.1,
         deadlineHours: 24,
         mode: 'human',
-        tecdLambda: 0.25,
+        tecdLambda: gemini?.recommendedLambda,
       })
       navigate(res.checkoutPath)
     } finally {
@@ -35,7 +37,6 @@ export function Faucet() {
       </div>
 
       <div className="mt-8 grid gap-5 md:grid-cols-2">
-        {/* Card 1: Circle Arc Testnet Faucet */}
         <div className="flex flex-col justify-between rounded-[10px] border border-white/[0.08] bg-surface p-6">
           <div>
             <span className="grid size-10 place-items-center rounded-lg border border-white/[0.08] bg-elevated text-emerald">
@@ -57,7 +58,6 @@ export function Faucet() {
           </a>
         </div>
 
-        {/* Card 2: 1-Click Test Escrow Funding */}
         <div className="flex flex-col justify-between rounded-[10px] border border-white/[0.08] bg-surface p-6">
           <div>
             <span className="grid size-10 place-items-center rounded-lg border border-white/[0.08] bg-elevated text-gold">
@@ -65,8 +65,9 @@ export function Faucet() {
             </span>
             <h3 className="mt-4 text-[17px] font-semibold text-primary">1-Click Test Escrow Funding</h3>
             <p className="mt-2 text-[13px] leading-relaxed text-secondary">
-              Spin up a pre-configured <span className="font-mono text-primary">0.10 USDC</span> checkout room to test
-              MetaMask / Coinbase Wallet funding, ElevenLabs audio briefs, and Grok AI verification end-to-end.
+              Spin up a live <span className="font-mono text-primary">0.10 USDC</span> checkout room via{' '}
+              <span className="font-mono text-primary">diptos.createEscrowLink()</span> to test wallet funding,
+              ElevenLabs audio briefs, and Grok AI verification end-to-end.
             </p>
           </div>
           <Button

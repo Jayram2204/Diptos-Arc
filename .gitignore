@@ -26,3 +26,5 @@ server/data/*.tmp
 
 # SDK build output
 packages/sdk/dist/
+.vercel
+.env*

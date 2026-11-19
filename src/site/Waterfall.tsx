@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { RefreshCw, TrendingUp } from 'lucide-react'
 import { Button, Eyebrow } from '@/components/ui'
-import { computeTECD, fmtAmount } from '@/lib/chain'
+import { fmtAmount } from '@/lib/chain'
 import { useGeminiRisk } from '@/lib/hooks'
+import { diptos, type OnChainTECDPreview } from '@/lib/sdk'
 
 export function Waterfall() {
   const { data: gemini, loading: geminiLoading, error: geminiError, refresh: refreshGemini } = useGeminiRisk()
@@ -10,30 +11,69 @@ export function Waterfall() {
   const [amountUsdc, setAmountUsdc] = useState(5000)
   const [slaWindowHours, setSlaWindowHours] = useState(24)
   const [delayHours, setDelayHours] = useState(12)
-  const [lambda, setLambda] = useState(0.35)
-  const [syncedFromGemini, setSyncedFromGemini] = useState(false)
+  const [manualLambda, setManualLambda] = useState<number | null>(null)
+
+  const effectiveLambda = manualLambda ?? gemini?.recommendedLambda ?? 0.35
+
+  const [result, setResult] = useState<OnChainTECDPreview>(() => {
+    const local = diptos.calculateTECD({
+      principalUsdc: 5000,
+      lambda: 0.35,
+      delaySeconds: 12 * 3600,
+      totalDurationSeconds: 24 * 3600,
+      gamma: 1.5,
+    })
+    return {
+      payeePayoutUsdc: local.payeePayoutUsdc,
+      buyerRebateUsdc: local.buyerRebateUsdc,
+      protocolFeeUsdc: local.protocolFeeUsdc,
+      decayPercent: local.decayPercent,
+      source: 'sdk-wad-fallback',
+    }
+  })
 
   useEffect(() => {
-    if (gemini && !syncedFromGemini) {
-      setLambda(gemini.recommendedLambda)
-      setSyncedFromGemini(true)
+    let alive = true
+    // Immediate responsive local calculation while Arc eth_call resolves
+    const immediate = diptos.calculateTECD({
+      principalUsdc: amountUsdc,
+      lambda: effectiveLambda,
+      delaySeconds: delayHours * 3600,
+      totalDurationSeconds: slaWindowHours * 3600,
+      gamma: 1.5,
+    })
+    setResult({
+      payeePayoutUsdc: immediate.payeePayoutUsdc,
+      buyerRebateUsdc: immediate.buyerRebateUsdc,
+      protocolFeeUsdc: immediate.protocolFeeUsdc,
+      decayPercent: immediate.decayPercent,
+      source: 'sdk-wad-fallback',
+    })
+
+    const timer = setTimeout(() => {
+      diptos
+        .previewTECDOnChain({
+          principalUsdc: amountUsdc,
+          slaWindowSeconds: slaWindowHours * 3600,
+          delaySeconds: delayHours * 3600,
+          lambda: effectiveLambda,
+        })
+        .then((onChain) => {
+          if (alive) setResult(onChain)
+        })
+        .catch(() => {
+          // Keep immediate exact calculation
+        })
+    }, 150)
+
+    return () => {
+      alive = false
+      clearTimeout(timer)
     }
-  }, [gemini, syncedFromGemini])
+  }, [amountUsdc, delayHours, slaWindowHours, effectiveLambda])
 
-  const result = useMemo(
-    () =>
-      computeTECD({
-        amountUsdc,
-        delayHours,
-        slaWindowHours,
-        lambda,
-        gamma: 1.5,
-      }),
-    [amountUsdc, delayHours, slaWindowHours, lambda],
-  )
-
-  const payeePct = amountUsdc > 0 ? Math.max(0, Math.min(100, (result.sellerPayout / amountUsdc) * 100)) : 0
-  const rebatePct = amountUsdc > 0 ? Math.max(0, Math.min(100, (result.buyerRebate / amountUsdc) * 100)) : 0
+  const payeePct = amountUsdc > 0 ? Math.max(0, Math.min(100, (result.payeePayoutUsdc / amountUsdc) * 100)) : 0
+  const rebatePct = amountUsdc > 0 ? Math.max(0, Math.min(100, (result.buyerRebateUsdc / amountUsdc) * 100)) : 0
   const feePct = Math.max(0, 100 - payeePct - rebatePct)
 
   return (
@@ -45,8 +85,9 @@ export function Waterfall() {
         </h2>
         <p className="mt-3 text-[14px] text-secondary">
           Late deliveries automatically rebate the buyer along{' '}
-          <span className="font-mono text-primary">V(t) = V₀ · e^(−λ(t/T)^γ)</span>. Macro uncertainty from live
-          Gemini Prediction Markets dynamically tunes the decay intensity <span className="font-mono text-gold">λ</span>.
+          <span className="font-mono text-primary">V(t) = V₀ · e^(−λ(Δt/T)^1.5)</span> via{' '}
+          <span className="font-mono text-primary">DiptosEscrow.previewTECDPayout()</span>. Live Gemini Prediction
+          Markets odds calibrate <span className="font-mono text-gold">λ</span>.
         </p>
       </div>
 
@@ -57,7 +98,9 @@ export function Waterfall() {
             <div>
               <h3 className="text-[17px] font-semibold text-primary">Interactive TECD Delay Simulator</h3>
               <p className="mt-0.5 font-mono text-[11px] text-secondary">
-                V(t) = V₀ · exp(−{lambda.toFixed(2)} · ({delayHours}/{slaWindowHours})^1.5)
+                {result.source === 'arc-eth-call'
+                  ? 'Verified via live DiptosEscrow.previewTECDPayout eth_call'
+                  : `V(t) = V₀ · exp(−${effectiveLambda.toFixed(3)} · (${delayHours}/${slaWindowHours})^1.5)`}
               </p>
             </div>
             <span
@@ -71,13 +114,12 @@ export function Waterfall() {
             </span>
           </div>
 
-          {/* Controls */}
           <div className="mt-5 grid grid-cols-3 gap-3">
             <label className="block">
               <span className="text-[11px] text-secondary">Escrow (USDC)</span>
               <input
                 type="number"
-                min={10}
+                min={1}
                 value={amountUsdc}
                 onChange={(e) => setAmountUsdc(Math.max(1, Number(e.target.value) || 0))}
                 className="mt-1 h-9 w-full rounded-lg border border-white/[0.08] bg-elevated px-2.5 font-mono text-[13px] text-primary outline-none focus:border-gold/60"
@@ -95,20 +137,21 @@ export function Waterfall() {
               />
             </label>
             <label className="block">
-              <span className="text-[11px] text-secondary">Risk λ (Gemini)</span>
+              <span className="text-[11px] text-secondary">
+                Risk λ {manualLambda === null && gemini ? '(Live)' : '(Custom)'}
+              </span>
               <input
                 type="number"
                 step="0.01"
                 min={0.05}
                 max={2}
-                value={lambda}
-                onChange={(e) => setLambda(Math.max(0.05, Math.min(2, Number(e.target.value) || 0.05)))}
+                value={Number(effectiveLambda.toFixed(3))}
+                onChange={(e) => setManualLambda(Math.max(0.05, Math.min(2, Number(e.target.value) || 0.05)))}
                 className="mt-1 h-9 w-full rounded-lg border border-white/[0.08] bg-elevated px-2.5 font-mono text-[13px] text-gold outline-none focus:border-gold/60"
               />
             </label>
           </div>
 
-          {/* Delivery Delay Slider (0h to 72h) */}
           <div className="mt-6">
             <div className="flex items-baseline justify-between text-[12px]">
               <span className="font-medium text-primary">Delivery Delay Beyond Deadline</span>
@@ -132,23 +175,22 @@ export function Waterfall() {
             </div>
           </div>
 
-          {/* Animated Split Bar */}
           <div className="mt-6">
             <div className="flex h-3.5 w-full overflow-hidden rounded-md bg-elevated">
               <div
                 className="bg-emerald transition-[width] duration-300"
                 style={{ width: `${payeePct}%` }}
-                title={`Payee Instant Payout: ${fmtAmount(result.sellerPayout)} USDC`}
+                title={`Payee Instant Payout: ${fmtAmount(result.payeePayoutUsdc)} USDC`}
               />
               <div
                 className="bg-gold transition-[width] duration-300"
                 style={{ width: `${feePct}%` }}
-                title={`Protocol Fee (0.5%): ${fmtAmount(result.protocolFee)} USDC`}
+                title={`Protocol Fee (0.5%): ${fmtAmount(result.protocolFeeUsdc)} USDC`}
               />
               <div
                 className="bg-crimson transition-[width] duration-300"
                 style={{ width: `${rebatePct}%` }}
-                title={`Automatic Buyer Rebate: ${fmtAmount(result.buyerRebate)} USDC`}
+                title={`Automatic Buyer Rebate: ${fmtAmount(result.buyerRebateUsdc)} USDC`}
               />
             </div>
 
@@ -158,7 +200,7 @@ export function Waterfall() {
                   <span className="size-2 rounded-sm bg-emerald" /> Payee Instant Payout
                 </p>
                 <p className="mt-1 font-mono text-[17px] font-semibold text-emerald">
-                  {fmtAmount(result.sellerPayout)} <span className="text-[11px] text-secondary">USDC</span>
+                  {fmtAmount(result.payeePayoutUsdc)} <span className="text-[11px] text-secondary">USDC</span>
                 </p>
               </div>
               <div>
@@ -166,7 +208,7 @@ export function Waterfall() {
                   <span className="size-2 rounded-sm bg-crimson" /> Automatic Buyer Rebate
                 </p>
                 <p className="mt-1 font-mono text-[17px] font-semibold text-crimson">
-                  {fmtAmount(result.buyerRebate)} <span className="text-[11px] text-secondary">USDC</span>
+                  {fmtAmount(result.buyerRebateUsdc)} <span className="text-[11px] text-secondary">USDC</span>
                 </p>
               </div>
               <div>
@@ -174,7 +216,7 @@ export function Waterfall() {
                   <span className="size-2 rounded-sm bg-gold" /> Protocol Fee (0.5%)
                 </p>
                 <p className="mt-1 font-mono text-[17px] font-semibold text-primary">
-                  {fmtAmount(result.protocolFee)} <span className="text-[11px] text-secondary">USDC</span>
+                  {fmtAmount(result.protocolFeeUsdc)} <span className="text-[11px] text-secondary">USDC</span>
                 </p>
               </div>
             </div>
@@ -190,7 +232,7 @@ export function Waterfall() {
                   <TrendingUp className="size-4 text-gold" />
                   <h3 className="text-[17px] font-semibold text-primary">Gemini Risk Oracle</h3>
                 </div>
-                <p className="mt-0.5 font-mono text-[11px] text-secondary">GET /api/risk/gemini • Live Feed</p>
+                <p className="mt-0.5 font-mono text-[11px] text-secondary">diptos.getLiveGeminiRisk() • Live Feed</p>
               </div>
               <Button size="sm" variant="ghost" loading={geminiLoading} onClick={() => void refreshGemini()}>
                 {!geminiLoading && <RefreshCw className="size-3.5" />}
@@ -225,14 +267,14 @@ export function Waterfall() {
                   ))}
                   {gemini.contracts.length === 0 && (
                     <li className="py-3 font-mono text-[12px] text-secondary">
-                      No active prediction market contracts returned in current window.
+                      No active Gemini prediction market contracts returned in current window.
                     </li>
                   )}
                 </ul>
               </>
             ) : geminiError ? (
               <div className="mt-5 rounded-lg border border-crimson/30 bg-crimson/10 p-4 text-[12px] text-crimson">
-                Live Gemini Prediction Markets feed unavailable ({geminiError}). Manual λ calibration remains active.
+                Live Gemini Prediction Markets feed unavailable ({geminiError}).
               </div>
             ) : (
               <div className="mt-5 space-y-2.5">
@@ -248,8 +290,8 @@ export function Waterfall() {
               <span className="font-mono text-[10px] text-secondary">
                 Updated {new Date(gemini.fetchedAt).toLocaleTimeString()}
               </span>
-              <Button size="sm" variant="secondary" onClick={() => setLambda(gemini.recommendedLambda)}>
-                Apply λ = {gemini.recommendedLambda.toFixed(2)}
+              <Button size="sm" variant="secondary" onClick={() => setManualLambda(null)}>
+                Sync Live λ = {gemini.recommendedLambda.toFixed(3)}
               </Button>
             </div>
           )}

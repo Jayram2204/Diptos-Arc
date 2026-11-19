@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect } from 'react'
 import { Gateway } from '@/site/Gateway'
 import { useAppRoute } from '@/lib/route'
 
-const Terminal = lazy(() => import('@/app/Terminal').then((m) => ({ default: m.Terminal })))
+const PayCheckout = lazy(() => import('@/app/PayCheckout').then((m) => ({ default: m.PayCheckout })))
 
 /**
  * `/`         → Diptos Institutional Gateway (rwa.inc / launch.rwa.inc architecture)
@@ -14,15 +14,15 @@ export default function App() {
   useEffect(() => {
     document.title =
       route.view === 'pay' && route.escrowId
-        ? `Escrow ${route.escrowId} — Diptos on Arc`
-        : 'Diptos — Programmable Escrow Links on Arc'
+        ? `Escrow ${route.escrowId.slice(0, 12)} — Diptos on Arc`
+        : 'Diptos — Programmable Escrow & AI Settlement on Arc'
     window.scrollTo({ top: 0 })
   }, [route.view, route.escrowId])
 
   if (route.view === 'pay' && route.escrowId) {
     return (
       <Suspense fallback={<div className="min-h-screen bg-canvas" />}>
-        <Terminal escrowId={route.escrowId} />
+        <PayCheckout escrowId={route.escrowId} />
       </Suspense>
     )
   }

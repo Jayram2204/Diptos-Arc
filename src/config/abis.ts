@@ -2,6 +2,10 @@ import { parseAbi } from 'viem'
 import type { ContractKey } from './protocol'
 
 export const DIPTOS_ESCROW_ABI = parseAbi([
+  'function protocolFeeBps() view returns (uint256)',
+  'function getEscrowCount() view returns (uint256)',
+  'function getEscrowsPaginated(uint256 offset, uint256 limit) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash)[])',
+  'function getEscrowView(bytes32 escrowId) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash))',
   'function createEscrowLink(bytes32 escrowId, address payee, uint256 deadline, uint256 lambdaBps, bool isAgentMode) payable',
   'function createMultiMilestoneEscrow(bytes32 escrowId, address payee, uint256[] amounts, uint256[] deadlines, uint256 lambdaBps, bool isAgentMode) payable',
   'function fundTestEscrow(bytes32 escrowId, address payee, uint256 deadline, uint256 lambdaBps, bool isAgentMode) payable',
@@ -9,8 +13,8 @@ export const DIPTOS_ESCROW_ABI = parseAbi([
   'function claimTimeoutRefund(bytes32 escrowId)',
   'function mutualCancel(bytes32 escrowId)',
   'function faucetMint()',
+  'function previewTECDPayout(uint256 amount, uint256 deadline, uint256 simulatedTimestamp, uint256 lambdaBps) view returns (uint256 payeePayout, uint256 payerRebate, uint256 protocolFee, uint256 decayBps)',
   'function previewTECD(bytes32 escrowId, uint256 atTimestamp) view returns (uint256 payeePayout, uint256 payerRebate, uint256 protocolFee, uint256 decayBps)',
-  'function previewMilestoneTECD(bytes32 escrowId, uint256 milestoneIndex, uint256 atTimestamp) view returns (uint256 payeePayout, uint256 payerRebate, uint256 protocolFee, uint256 decayBps)',
   'function oracleSigner() view returns (address)',
   'function PROTOCOL_FEE_BPS() view returns (uint256)',
   'event EscrowCreated(bytes32 indexed escrowId, address indexed payer, address indexed payee, uint256 amount, uint256 deadline, uint256 lambdaBps, uint256 milestoneCount, bool isAgentMode)',

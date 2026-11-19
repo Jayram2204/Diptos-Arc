@@ -1,13 +1,22 @@
 import { type FormEvent, useState } from 'react'
 import { ArrowRight, Bot, User } from 'lucide-react'
 import { Button, Field, inputCls } from '@/components/ui'
-import { createEscrow, type EscrowMode } from '@/lib/api'
+import { useEscrows, useGeminiRisk } from '@/lib/hooks'
 import { navigate } from '@/lib/route'
+import { diptos, type EscrowMode } from '@/lib/sdk'
+
+const DEADLINE_PRESETS = [
+  { label: '2 Mins (Live Judge Test)', hours: '0.0334' },
+  { label: '24 Hours', hours: '24' },
+  { label: '7 Days', hours: '168' },
+] as const
 
 export function Hero() {
+  const { escrows } = useEscrows(8000)
+  const { data: gemini } = useGeminiRisk()
   const [title, setTitle] = useState('')
   const [scope, setScope] = useState('')
-  const [amountUsdc, setAmountUsdc] = useState('2500')
+  const [amountUsdc, setAmountUsdc] = useState('0.05')
   const [deadlineHours, setDeadlineHours] = useState('24')
   const [mode, setMode] = useState<EscrowMode>('human')
   const [submitting, setSubmitting] = useState(false)
@@ -34,19 +43,20 @@ export function Hero() {
       setError('Enter a valid positive USDC amount.')
       return
     }
-    if (!Number.isFinite(hours) || hours < 1 || hours > 720) {
-      setError('Deadline must be between 1 and 720 hours.')
+    if (!Number.isFinite(hours) || hours < 0.03 || hours > 720) {
+      setError('Deadline must be between 2 minutes and 720 hours.')
       return
     }
 
     setSubmitting(true)
     try {
-      const res = await createEscrow({
+      const res = await diptos.createEscrowLink({
         title: cleanTitle,
         scope: cleanScope,
         amountUsdc: amt,
         deadlineHours: hours,
         mode,
+        tecdLambda: gemini?.recommendedLambda,
       })
       navigate(res.checkoutPath)
     } catch (err) {
@@ -59,7 +69,7 @@ export function Hero() {
   return (
     <section id="top" className="mx-auto max-w-[1280px] px-4 pb-16 pt-12 sm:px-6 md:pb-24 md:pt-16">
       <div className="grid items-start gap-10 lg:grid-cols-12 lg:gap-12">
-        {/* Left 7 Columns: Value Proposition & Trust Strip */}
+        {/* Left 7 Columns: Value Proposition & Live On-Chain KPI Strip */}
         <div className="lg:col-span-7 lg:pt-4">
           <p className="inline-flex items-center gap-2 rounded-md border border-white/[0.08] bg-surface px-3 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-gold">
             ARC TESTNET (CHAIN ID 5042002) • NATIVE USDC SETTLEMENT
@@ -74,19 +84,21 @@ export function Hero() {
             risk-priced by Gemini Prediction Markets, and protected by Time-Entropic Collateral Decay.
           </p>
 
-          {/* 3-Column KPI Strip with 1px vertical hairline dividers */}
+          {/* 3-Column Live On-Chain KPI Strip */}
           <div className="mt-10 grid grid-cols-1 divide-y divide-white/[0.08] border-y border-white/[0.08] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             <div className="py-5 sm:pr-6">
-              <p className="font-mono text-[28px] font-semibold tracking-[-0.02em] text-primary">0.5%</p>
-              <p className="mt-1 text-[12px] text-secondary">Flat Protocol Fee (vs. 15% Upwork)</p>
+              <p className="font-mono text-[28px] font-semibold tracking-[-0.02em] text-primary">
+                {escrows.length.toLocaleString('en-US')}
+              </p>
+              <p className="mt-1 text-[12px] text-secondary">Live On-Chain Escrows (Arc)</p>
             </div>
             <div className="py-5 sm:px-6">
               <p className="font-mono text-[28px] font-semibold tracking-[-0.02em] text-emerald">&lt; 1.0s</p>
               <p className="mt-1 text-[12px] text-secondary">Arc Deterministic Finality</p>
             </div>
             <div className="py-5 sm:pl-6">
-              <p className="font-mono text-[28px] font-semibold tracking-[-0.02em] text-primary">0%</p>
-              <p className="mt-1 text-[12px] text-secondary">Chargeback &amp; Double-Spend Risk</p>
+              <p className="font-mono text-[28px] font-semibold tracking-[-0.02em] text-primary">0.5%</p>
+              <p className="mt-1 text-[12px] text-secondary">Flat Protocol Fee (vs. 15% Upwork)</p>
             </div>
           </div>
         </div>
@@ -98,7 +110,8 @@ export function Hero() {
               <div>
                 <h2 className="text-[18px] font-semibold text-primary">Create Instant Escrow Link</h2>
                 <p className="mt-0.5 text-[12px] text-secondary">
-                  Originates a live <span className="font-mono text-primary/90">diptos.xyz/pay/:id</span> room
+                  Stateless intent via <span className="font-mono text-primary/90">@diptos/sdk</span> •{' '}
+                  {gemini ? `λ=${gemini.recommendedLambda.toFixed(2)}` : 'live risk'}
                 </p>
               </div>
               <span className="rounded-md border border-emerald/25 bg-emerald/10 px-2 py-0.5 font-mono text-[10px] font-medium text-emerald">
@@ -107,7 +120,6 @@ export function Hero() {
             </div>
 
             <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-              {/* Segmented Toggle: Human Freelancer vs AI Agent API */}
               <div>
                 <span className="block text-[12px] font-medium text-primary/90">Execution Mode</span>
                 <div
@@ -164,7 +176,7 @@ export function Hero() {
 
               <Field label="Acceptance Criteria / Scope" hint="Audited by Grok AI">
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={scope}
                   onChange={(e) => setScope(e.target.value)}
                   placeholder="Merged GitHub PR with passing CI checks, zero regressions, and live preview URL."
@@ -173,11 +185,32 @@ export function Hero() {
                 />
               </Field>
 
+              {/* Quick Deadline Presets */}
+              <div>
+                <span className="block text-[12px] font-medium text-primary/90">SLA Deadline Preset</span>
+                <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+                  {DEADLINE_PRESETS.map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => setDeadlineHours(p.hours)}
+                      className={`h-8 rounded-md border px-2 font-mono text-[10.5px] transition-colors ${
+                        deadlineHours === p.hours
+                          ? 'border-gold/60 bg-gold/15 text-gold'
+                          : 'border-white/[0.08] bg-elevated text-secondary hover:text-primary'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Amount (USDC)" hint="Native Arc">
+                <Field label="Amount (USDC)" hint="Native 18-dec">
                   <input
                     type="number"
-                    min="0.01"
+                    min="0.001"
                     step="any"
                     value={amountUsdc}
                     onChange={(e) => setAmountUsdc(e.target.value)}
@@ -188,9 +221,9 @@ export function Hero() {
                 <Field label="Deadline (Hours)" hint="TECD SLA">
                   <input
                     type="number"
-                    min="1"
+                    min="0.03"
                     max="720"
-                    step="1"
+                    step="any"
                     value={deadlineHours}
                     onChange={(e) => setDeadlineHours(e.target.value)}
                     className={`${inputCls} font-mono`}

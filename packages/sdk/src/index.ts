@@ -3,20 +3,30 @@ import {
   type Chain,
   createPublicClient,
   defineChain,
+  encodeAbiParameters,
+  encodeFunctionData,
+  fallback,
+  formatEther,
+  formatGwei,
   type Hex,
   http,
   keccak256,
   parseAbi,
+  parseEther,
+  type PublicClient,
   stringToHex,
   type WalletClient,
 } from 'viem'
+
+export const ARC_RPC_PRIMARY = 'https://rpc.testnet.arc.io'
+export const ARC_RPC_FALLBACK = 'https://rpc.solidrpc.io/public/evm/5042002'
 
 export const ARC_TESTNET: Chain = defineChain({
   id: 5042002,
   name: 'Arc Testnet',
   nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
   rpcUrls: {
-    default: { http: ['https://rpc.testnet.arc.io'] },
+    default: { http: [ARC_RPC_PRIMARY, ARC_RPC_FALLBACK] },
   },
   blockExplorers: {
     default: { name: 'Arc Explorer', url: 'https://explorer.testnet.arc.io' },
@@ -24,54 +34,80 @@ export const ARC_TESTNET: Chain = defineChain({
   testnet: true,
 })
 
+/** Arc Testnet dual-decimal rule: native USDC (18 dec) <-> ERC-20 USDC (6 dec). */
+export const NATIVE_TO_ERC20_SCALE = 10n ** 12n
+export const nativeUsdcTo6Decimals = (nativeWei: bigint): bigint => nativeWei / NATIVE_TO_ERC20_SCALE
+export const usdc6ToNativeWei = (usdc6: bigint): bigint => usdc6 * NATIVE_TO_ERC20_SCALE
+
 export const DIPTOS_ESCROW_ABI = parseAbi([
+  'function protocolFeeBps() view returns (uint256)',
+  'function getEscrowCount() view returns (uint256)',
+  'function getEscrowsPaginated(uint256 offset, uint256 limit) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash)[])',
+  'function getEscrowView(bytes32 escrowId) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash))',
   'function createEscrowLink(bytes32 escrowId, address payee, uint256 deadline, uint256 lambdaBps, bool isAgentMode) payable',
   'function createMultiMilestoneEscrow(bytes32 escrowId, address payee, uint256[] amounts, uint256[] deadlines, uint256 lambdaBps, bool isAgentMode) payable',
   'function releaseWithOracle(bytes32 escrowId, uint256 milestoneIndex, bytes32 deliverableHash, uint256 expectedNonce, bytes grokSignature)',
   'function claimTimeoutRefund(bytes32 escrowId)',
   'function mutualCancel(bytes32 escrowId)',
-  'function previewTECD(bytes32 escrowId, uint256 atTimestamp) view returns (uint256 payeePayout, uint256 payerRebate, uint256 protocolFee, uint256 decayBps)',
+  'function previewTECDPayout(uint256 amount, uint256 deadline, uint256 simulatedTimestamp, uint256 lambdaBps) view returns (uint256 payeePayout, uint256 payerRebate, uint256 protocolFee, uint256 decayBps)',
 ])
 
 export const DIPTOS_REGISTRY_ABI = parseAbi([
+  'function totalEscrows() view returns (uint256)',
+  'function totalSettledMilestones() view returns (uint256)',
   'function getCounterpartyStats(address payee) view returns ((uint256 completedOnTime, uint256 completedLate, uint256 totalVolumeSettled, uint256 totalLatencySeconds, uint256 averageLatencySeconds))',
 ])
 
-export interface DiptosClientConfig {
-  apiBaseUrl?: string
-  rpcUrl?: string
-  escrowContract?: Address
-  registryContract?: Address
+export type EscrowMode = 'human' | 'agent'
+export type EscrowStatus = 'created' | 'funded' | 'verified' | 'settled' | 'refunded'
+
+export interface GrokAuditRecord {
+  approved: boolean
+  confidence: number
+  summary: string
+  auditReasoning?: string
+  grokModel?: string
+  milestoneIndex?: number
+  nonce?: number
+  deliverableUrl?: string
+  deliverableHash: Hex
+  evidenceHash?: Hex
+  evidenceSummary?: string
+  eip712Signature?: Hex
+  signature?: string
+  oracleSigner?: string
+  auditedAt: string
 }
 
-export interface CreateEscrowParams {
+export interface EscrowRecord {
+  id: string
+  escrowIdBytes32: Hex
   title: string
   scope: string
   amountUsdc: number
-  deadlineHours?: number
-  mode?: 'human' | 'agent'
-  payee?: Address
-  tecdLambda?: number
+  deadline: string
+  deadlineUnix: number
+  deadlineHours: number
+  mode: EscrowMode
+  payer?: string
+  payee: string
+  nonce?: number
+  txHash?: string
+  settleTxHash?: string
+  tecdLambda: number
+  tecdLambdaBps: number
+  status: EscrowStatus
+  grokAudit?: GrokAuditRecord
+  createdAt: string
+  onChain?: boolean
 }
 
-export interface EscrowLinkResult {
-  escrow: {
-    id: string
-    escrowIdBytes32: Hex
-    title: string
-    scope: string
-    amountUsdc: number
-    deadline: string
-    deadlineUnix: number
-    deadlineHours: number
-    mode: 'human' | 'agent'
-    payee: Address
-    tecdLambda: number
-    tecdLambdaBps: number
-    status: string
-  }
-  checkoutPath: string
-  shareUrl: string
+export interface GeminiContractSnapshot {
+  instrumentSymbol: string
+  title: string
+  yesProbability: number
+  noProbability: number
+  status: string
 }
 
 export interface GeminiRiskResult {
@@ -80,13 +116,88 @@ export interface GeminiRiskResult {
   volatilityIndex: number
   recommendedLambda: number
   recommendedLambdaBps: number
-  contracts: {
-    instrumentSymbol: string
-    title: string
-    yesProbability: number
-    noProbability: number
-    status: string
-  }[]
+  contracts: GeminiContractSnapshot[]
+}
+
+export interface ArcTelemetryResult {
+  chainId: 5042002
+  rpcUrl: string
+  blockNumber: bigint
+  timestamp: bigint
+  blockTimestamp: bigint
+  baseFeePerGas: bigint | null
+  gasPrice: bigint
+  baseFeeGwei: string
+  latencyMs: number
+}
+
+export interface OnChainTECDPreview {
+  payeePayoutUsdc: number
+  buyerRebateUsdc: number
+  protocolFeeUsdc: number
+  decayPercent: number
+  source: 'arc-eth-call' | 'sdk-wad-fallback'
+}
+
+export interface ProtocolEvent {
+  id: string
+  source: 'quicknode' | 'arc-rpc'
+  eventName:
+    | 'EscrowCreated'
+    | 'MilestoneSettled'
+    | 'EscrowSettled'
+    | 'TECDPenaltyApplied'
+    | 'TimeoutRefunded'
+    | 'ArcBlock'
+  chainId: 5042002
+  blockNumber: number
+  logIndex?: number
+  txHash?: string
+  escrowId?: string
+  summary: string
+  receivedAt: string
+}
+
+export interface BytecodeVerificationResult {
+  address: Address
+  hasCode: boolean
+  byteLength: number
+}
+
+export interface OracleStatusResult {
+  chainId: 5042002
+  network: string
+  rpcUrl: string
+  oracleSigner: Address | null
+  eip712Domain: {
+    name: string
+    version: string
+    chainId: number
+    verifyingContract: Address | null
+  }
+  latestArcBlock: number | null
+  rpcError: string | null
+  totalAttestationsSigned: number
+}
+
+export interface CalculateTECDResult {
+  retentionRatio: number
+  decayPercent: number
+  payeePayout: number
+  payeePayoutUsdc: number
+  sellerPayout: number
+  buyerRebate: number
+  buyerRebateUsdc: number
+  protocolFee: number
+  protocolFeeUsdc: number
+}
+
+export interface BuiltTxPayload {
+  to: Address
+  functionName: string
+  args: readonly unknown[]
+  data: Hex
+  value?: bigint
 }
 
 export interface CounterpartyReputation {
@@ -96,6 +207,27 @@ export interface CounterpartyReputation {
   totalVolumeSettled: bigint
   totalLatencySeconds: bigint
   averageLatencySeconds: bigint
+}
+
+export interface DiptosClientConfig {
+  apiBaseUrl?: string
+  rpcUrl?: string
+  fallbackRpcUrl?: string
+  chainId?: number
+  escrowContract?: Address
+  escrowAddress?: Address
+  registryContract?: Address
+  registryAddress?: Address
+}
+
+export interface CreateEscrowParams {
+  title: string
+  scope: string
+  amountUsdc: number
+  deadlineHours?: number
+  mode?: EscrowMode
+  payee?: Address
+  tecdLambda?: number
 }
 
 export interface PrepareAgentEscrowParams {
@@ -124,24 +256,13 @@ export interface VerifyMilestoneParams {
   milestoneIndex?: number
   deliverableUrl?: string
   deliverableNotes?: string
+  notes?: string
+  title?: string
+  scope?: string
+  amountUsdc?: number
 }
 
-export interface GrokMilestoneReceipt {
-  approved: boolean
-  confidence: number
-  summary: string
-  auditReasoning: string
-  grokModel: string
-  milestoneIndex: number
-  nonce: number
-  deliverableHash: Hex
-  evidenceHash: Hex
-  evidenceSummary: string
-  eip712Signature?: Hex
-  signature?: Hex
-  oracleSigner?: Address
-  auditedAt: string
-}
+export interface GrokMilestoneReceipt extends GrokAuditRecord {}
 
 export interface SettleOnArcParams {
   escrowId: string
@@ -172,33 +293,308 @@ export class DiptosClient {
   private readonly registryContract?: Address
 
   constructor(config: DiptosClientConfig = {}) {
-    this.apiBaseUrl = (config.apiBaseUrl ?? 'https://diptos.xyz').replace(/\/$/, '')
-    this.rpcUrl = config.rpcUrl ?? 'https://rpc.testnet.arc.io'
-    this.escrowContract = config.escrowContract
-    this.registryContract = config.registryContract
+    this.apiBaseUrl = (config.apiBaseUrl ?? '').replace(/\/$/, '')
+    this.rpcUrl = config.rpcUrl ?? ARC_RPC_PRIMARY
+    this.escrowContract = config.escrowContract ?? config.escrowAddress
+    this.registryContract = config.registryContract ?? config.registryAddress
   }
 
-  private getPublicClient() {
+  public getPublicClient(): PublicClient {
     return createPublicClient({
       chain: ARC_TESTNET,
-      transport: http(this.rpcUrl),
-    })
+      transport: fallback([http(this.rpcUrl), http(ARC_RPC_FALLBACK)]),
+    }) as PublicClient
   }
 
-  async createEscrowLink(params: CreateEscrowParams): Promise<EscrowLinkResult> {
+  computeEscrowHash(params: {
+    payer: Address
+    payee: Address
+    amountUsdc: number | string
+    deadline: number | bigint
+    salt?: Hex | string
+  }): { escrowIdBytes32: Hex; canonicalHash: Hex; amountWei: bigint; deadlineUnix: bigint } {
+    const escrowIdBytes32: Hex =
+      params.salt && typeof params.salt === 'string' && params.salt.startsWith('0x') && params.salt.length === 66
+        ? (params.salt as Hex)
+        : keccak256(stringToHex(String(params.salt ?? 'diptos:arc:5042002')))
+    const cleanAmt = Number(params.amountUsdc) > 0 ? String(params.amountUsdc) : '0'
+    const amountWei = parseEther(cleanAmt)
+    const deadlineUnix = BigInt(params.deadline)
+    const canonicalHash = keccak256(
+      encodeAbiParameters(
+        [
+          { type: 'bytes32' },
+          { type: 'address' },
+          { type: 'address' },
+          { type: 'uint256' },
+          { type: 'uint256' },
+        ],
+        [escrowIdBytes32, params.payer, params.payee, amountWei, deadlineUnix],
+      ),
+    )
+    return { escrowIdBytes32, canonicalHash, amountWei, deadlineUnix }
+  }
+
+  calculateTECD(params: {
+    principalUsdc: number
+    lambda: number
+    delaySeconds: number
+    totalDurationSeconds: number
+    gamma?: number
+  }): CalculateTECDResult {
+    const { principalUsdc, lambda, delaySeconds, totalDurationSeconds, gamma = 1.5 } = params
+    const feeRate = 0.005
+    if (delaySeconds <= 0) {
+      const protocolFee = principalUsdc * feeRate
+      const payeePayout = principalUsdc - protocolFee
+      return {
+        retentionRatio: 1,
+        decayPercent: 0,
+        payeePayout,
+        payeePayoutUsdc: payeePayout,
+        sellerPayout: payeePayout,
+        buyerRebate: 0,
+        buyerRebateUsdc: 0,
+        protocolFee,
+        protocolFeeUsdc: protocolFee,
+      }
+    }
+    const window = Math.max(3600, totalDurationSeconds)
+    const ratio = delaySeconds / window
+    const retentionRatio = Math.exp(-lambda * Math.pow(ratio, gamma))
+    const grossPayee = principalUsdc * retentionRatio
+    const protocolFee = grossPayee * feeRate
+    const payeePayout = grossPayee - protocolFee
+    const buyerRebate = principalUsdc - grossPayee
+    return {
+      retentionRatio,
+      decayPercent: (1 - retentionRatio) * 100,
+      payeePayout,
+      payeePayoutUsdc: payeePayout,
+      sellerPayout: payeePayout,
+      buyerRebate,
+      buyerRebateUsdc: buyerRebate,
+      protocolFee,
+      protocolFeeUsdc: protocolFee,
+    }
+  }
+
+  buildFundEscrowTx(params: {
+    escrowId: string
+    payee: string
+    amountUsdc: number
+    deadlineUnix: number
+    lambdaBps: number
+    isAgentMode: boolean
+  }): BuiltTxPayload {
+    const to = this.escrowContract ?? '0x0000000000000000000000000000000000000000'
+    const args = [
+      toEscrowBytes32(params.escrowId),
+      params.payee as Address,
+      BigInt(params.deadlineUnix),
+      BigInt(params.lambdaBps),
+      params.isAgentMode,
+    ] as const
+    const data = encodeFunctionData({
+      abi: DIPTOS_ESCROW_ABI,
+      functionName: 'createEscrowLink',
+      args,
+    })
+    return {
+      to,
+      functionName: 'createEscrowLink',
+      args,
+      data,
+      value: parseEther(String(params.amountUsdc)),
+    }
+  }
+
+  buildCreateEscrowTx(params: {
+    escrowId: string
+    payee: string
+    amountUsdc: number
+    deadlineUnix: number
+    lambdaBps: number
+    isAgentMode: boolean
+  }): BuiltTxPayload {
+    return this.buildFundEscrowTx(params)
+  }
+
+  buildReleaseWithOracleTx(params: {
+    escrowId: string
+    milestoneIndex?: number
+    deliverableHash: Hex
+    nonce?: number
+    expectedNonce?: number
+    grokSignature: string
+  }): BuiltTxPayload {
+    const to = this.escrowContract ?? '0x0000000000000000000000000000000000000000'
+    const args = [
+      toEscrowBytes32(params.escrowId),
+      BigInt(params.milestoneIndex ?? 0),
+      params.deliverableHash,
+      BigInt(params.expectedNonce ?? params.nonce ?? 0),
+      params.grokSignature as Hex,
+    ] as const
+    const data = encodeFunctionData({
+      abi: DIPTOS_ESCROW_ABI,
+      functionName: 'releaseWithOracle',
+      args,
+    })
+    return {
+      to,
+      functionName: 'releaseWithOracle',
+      args,
+      data,
+    }
+  }
+
+  buildClaimTimeoutRefundTx(params: { escrowId: string }): BuiltTxPayload {
+    const to = this.escrowContract ?? '0x0000000000000000000000000000000000000000'
+    const args = [toEscrowBytes32(params.escrowId)] as const
+    const data = encodeFunctionData({
+      abi: DIPTOS_ESCROW_ABI,
+      functionName: 'claimTimeoutRefund',
+      args,
+    })
+    return {
+      to,
+      functionName: 'claimTimeoutRefund',
+      args,
+      data,
+    }
+  }
+
+  async getArcTelemetry(): Promise<ArcTelemetryResult> {
+    const t0 = performance.now()
+    const client = this.getPublicClient()
+    const [block, gasPrice] = await Promise.all([
+      client.getBlock({ blockTag: 'latest' }),
+      client.getGasPrice().catch(() => 0n),
+    ])
+    const baseFee = block.baseFeePerGas ?? gasPrice
+    return {
+      chainId: 5042002,
+      rpcUrl: this.rpcUrl,
+      blockNumber: block.number ?? 0n,
+      timestamp: block.timestamp,
+      blockTimestamp: block.timestamp,
+      baseFeePerGas: block.baseFeePerGas ?? null,
+      gasPrice,
+      baseFeeGwei: Number(formatGwei(baseFee)).toFixed(4),
+      latencyMs: Math.round(performance.now() - t0),
+    }
+  }
+
+  async verifyContractBytecode(address: Address): Promise<BytecodeVerificationResult> {
+    const code = await this.getPublicClient().getCode({ address })
+    const byteLength = code && code !== '0x' ? (code.length - 2) / 2 : 0
+    return { address, hasCode: byteLength > 0, byteLength }
+  }
+
+  async getOracleStatus(): Promise<OracleStatusResult> {
+    const res = await fetch(`${this.apiBaseUrl}/api/oracle/status`)
+    if (!res.ok) throw new Error(`getOracleStatus failed (${res.status})`)
+    return (await res.json()) as OracleStatusResult
+  }
+
+  async listEscrows(offset = 0, limit = 25): Promise<EscrowRecord[]> {
+    const res = await fetch(`${this.apiBaseUrl}/api/escrows?offset=${offset}&limit=${limit}`)
+    if (!res.ok) throw new Error(`listEscrows failed (${res.status}): ${await res.text()}`)
+    const data = (await res.json()) as { escrows?: EscrowRecord[] }
+    return data.escrows ?? []
+  }
+
+  async getEvents(limit = 25): Promise<{ events: ProtocolEvent[]; latestBlock: number }> {
+    const res = await fetch(`${this.apiBaseUrl}/api/events?limit=${limit}`)
+    if (!res.ok) throw new Error(`getEvents failed (${res.status}): ${await res.text()}`)
+    return (await res.json()) as { events: ProtocolEvent[]; latestBlock: number }
+  }
+
+  async getEscrow(escrowId: string): Promise<EscrowRecord> {
+    const res = await fetch(`${this.apiBaseUrl}/api/escrows/${encodeURIComponent(escrowId)}`)
+    if (!res.ok) throw new Error(`getEscrow failed (${res.status}): ${await res.text()}`)
+    const data = (await res.json()) as { escrow: EscrowRecord }
+    return data.escrow
+  }
+
+  async createEscrowLink(params: CreateEscrowParams) {
     const res = await fetch(`${this.apiBaseUrl}/api/escrows`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
     })
     if (!res.ok) throw new Error(`createEscrowLink failed (${res.status}): ${await res.text()}`)
-    return (await res.json()) as EscrowLinkResult
+    return res.json()
   }
 
   async getLiveGeminiRisk(): Promise<GeminiRiskResult> {
     const res = await fetch(`${this.apiBaseUrl}/api/risk/gemini`)
     if (!res.ok) throw new Error(`getLiveGeminiRisk failed (${res.status}): ${await res.text()}`)
     return (await res.json()) as GeminiRiskResult
+  }
+
+  async previewTECDOnChain(params: {
+    principalUsdc: number
+    slaWindowSeconds: number
+    delaySeconds: number
+    lambda: number
+    escrowContract?: Address
+  }): Promise<OnChainTECDPreview> {
+    const target = params.escrowContract ?? this.escrowContract
+    if (!target) {
+      const local = this.calculateTECD({
+        principalUsdc: params.principalUsdc,
+        lambda: params.lambda,
+        delaySeconds: params.delaySeconds,
+        totalDurationSeconds: params.slaWindowSeconds,
+      })
+      return {
+        payeePayoutUsdc: local.payeePayoutUsdc,
+        buyerRebateUsdc: local.buyerRebateUsdc,
+        protocolFeeUsdc: local.protocolFeeUsdc,
+        decayPercent: local.decayPercent,
+        source: 'sdk-wad-fallback',
+      }
+    }
+    const nowSec = BigInt(Math.floor(Date.now() / 1000))
+    const deadlineUnix = nowSec + BigInt(Math.max(3600, Math.floor(params.slaWindowSeconds)))
+    const simulatedTimestamp = deadlineUnix + BigInt(Math.max(0, Math.floor(params.delaySeconds)))
+    const lambdaBps = BigInt(Math.round(params.lambda * 10_000))
+    const amountWei = parseEther(String(params.principalUsdc))
+
+    const [payeePayout, payerRebate, protocolFee, decayBps] = (await this.getPublicClient().readContract({
+      address: target,
+      abi: DIPTOS_ESCROW_ABI,
+      functionName: 'previewTECDPayout',
+      args: [amountWei, deadlineUnix, simulatedTimestamp, lambdaBps],
+    })) as readonly [bigint, bigint, bigint, bigint]
+
+    return {
+      payeePayoutUsdc: Number(formatEther(payeePayout)),
+      buyerRebateUsdc: Number(formatEther(payerRebate)),
+      protocolFeeUsdc: Number(formatEther(protocolFee)),
+      decayPercent: Number(decayBps) / 100,
+      source: 'arc-eth-call',
+    }
+  }
+
+  async previewTECDPayoutOnChain(params: {
+    amountWei: bigint
+    deadlineUnix: bigint
+    simulatedTimestamp: bigint
+    lambdaBps: bigint
+    escrowContract?: Address
+  }) {
+    const target = params.escrowContract ?? this.escrowContract
+    if (!target) throw new Error('escrowContract address is required')
+    const [payeePayout, payerRebate, protocolFee, decayBps] = (await this.getPublicClient().readContract({
+      address: target,
+      abi: DIPTOS_ESCROW_ABI,
+      functionName: 'previewTECDPayout',
+      args: [params.amountWei, params.deadlineUnix, params.simulatedTimestamp, params.lambdaBps],
+    })) as readonly [bigint, bigint, bigint, bigint]
+    return { payeePayout, payerRebate, protocolFee, decayBps }
   }
 
   async getCounterpartyReputation(
@@ -242,7 +638,10 @@ export class DiptosClient {
     const res = await fetch(`${this.apiBaseUrl}/api/verify/grok`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
+      body: JSON.stringify({
+        ...params,
+        deliverableNotes: params.deliverableNotes ?? params.notes,
+      }),
     })
     if (!res.ok) {
       throw new Error(`verifyAndSignMilestone failed (${res.status}): ${await res.text()}`)
@@ -250,7 +649,6 @@ export class DiptosClient {
     return (await res.json()) as GrokMilestoneReceipt
   }
 
-  /** Alias for backward compatibility */
   async verifyDeliverableWithGrok(params: VerifyMilestoneParams): Promise<GrokMilestoneReceipt> {
     return this.verifyAndSignMilestone(params)
   }

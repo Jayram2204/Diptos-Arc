@@ -4,11 +4,13 @@ import { formatUnits } from 'viem'
 import { Eyebrow, PulseDot } from '@/components/ui'
 import { ARC_RPC_URL } from '@/config/protocol'
 import { explorerUrl, shortHex } from '@/lib/chain'
-import { useArcPulse, useQuickNodeStream } from '@/lib/hooks'
+import { useArcPulse, useEscrows, useOracleStatus, useProtocolEvents } from '@/lib/hooks'
 
 export function Telemetry() {
   const pulse = useArcPulse(4000)
-  const { events, connected } = useQuickNodeStream()
+  const { escrows } = useEscrows(8000)
+  const { data: oracle } = useOracleStatus(15_000)
+  const { events, connected } = useProtocolEvents(4000)
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -33,10 +35,12 @@ export function Telemetry() {
           >
             #{pulse.blockNumber.toLocaleString('en-US')}
           </a>
+        ) : oracle?.latestArcBlock ? (
+          `#${oracle.latestArcBlock.toLocaleString('en-US')}`
         ) : (
           'Syncing…'
         ),
-      sub: 'eth_getBlockByNumber • 5042002',
+      sub: 'diptos.getArcTelemetry() • 5042002',
     },
     {
       label: 'Finality Age',
@@ -46,12 +50,33 @@ export function Telemetry() {
     {
       label: 'Base Gas (USDC)',
       value: baseGasUsdc,
-      sub: 'Native USDC gas token',
+      sub: 'Native 18-dec USDC gas token',
     },
     {
-      label: 'RPC Latency',
+      label: 'RPC Round-Trip',
       value: pulse.latency !== undefined ? `${pulse.latency} ms` : 'Syncing…',
       sub: ARC_RPC_URL.replace('https://', ''),
+    },
+    {
+      label: 'Active Escrows',
+      value: escrows.length.toLocaleString('en-US'),
+      sub: 'On-chain via getEscrowsPaginated()',
+    },
+    {
+      label: 'Verified Oracle Signer',
+      value: oracle?.oracleSigner ? (
+        <a
+          href={explorerUrl('address', oracle.oracleSigner)}
+          target="_blank"
+          rel="noreferrer"
+          className="text-emerald hover:underline"
+        >
+          {shortHex(oracle.oracleSigner, 8, 6)}
+        </a>
+      ) : (
+        <span className="text-secondary">Awaiting signer key</span>
+      ),
+      sub: oracle ? `EIP-712 v2 • ${oracle.totalAttestationsSigned} signed` : 'GET /api/oracle/status',
     },
   ]
 
@@ -61,7 +86,7 @@ export function Telemetry() {
         <div>
           <Eyebrow>Live Arc Telemetry &amp; QuickNode Streams</Eyebrow>
           <h2 className="mt-3 text-[28px] font-semibold text-primary sm:text-[34px]">
-            Direct JSON-RPC &amp; real-time event ingestion.
+            Direct JSON-RPC &amp; block-ordered event ingestion.
           </h2>
         </div>
         <span className="inline-flex h-8 items-center gap-2 self-start rounded-md border border-white/[0.08] bg-surface px-3 font-mono text-[11px] text-primary sm:self-auto">
@@ -70,8 +95,8 @@ export function Telemetry() {
         </span>
       </div>
 
-      {/* 4 Equal-Width Tabular Metric Cells */}
-      <div className="mt-8 grid gap-px overflow-hidden rounded-[10px] border border-white/[0.08] bg-white/[0.08] sm:grid-cols-2 lg:grid-cols-4">
+      {/* 6 Dynamic Tabular Metric Cells */}
+      <div className="mt-8 grid gap-px overflow-hidden rounded-[10px] border border-white/[0.08] bg-white/[0.08] sm:grid-cols-2 lg:grid-cols-3">
         {cells.map((c) => (
           <div key={c.label} className="bg-surface p-5">
             <p className="text-[12px] text-secondary">{c.label}</p>
@@ -81,19 +106,19 @@ export function Telemetry() {
         ))}
       </div>
 
-      {/* QuickNode Streams SSE Activity Ticker */}
+      {/* QuickNode Streams + Arc Logs Stateless Feed */}
       <div className="mt-5 rounded-[10px] border border-white/[0.08] bg-surface">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] px-5 py-3">
           <div className="flex items-center gap-2.5">
             <Radio className="size-4 text-gold" />
             <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-primary">
-              QuickNode Streams SSE Activity Ticker
+              QuickNode Streams &amp; Arc Event Feed
             </span>
-            <span className="font-mono text-[11px] text-secondary">/api/events/stream</span>
+            <span className="font-mono text-[11px] text-secondary">GET /api/events • ordered by blockNumber</span>
           </div>
           <span className="inline-flex items-center gap-2 font-mono text-[11px] text-secondary">
             <span className={`size-1.5 rounded-full ${connected ? 'bg-emerald' : 'bg-gold'}`} />
-            {connected ? 'SSE Stream Connected' : 'Connecting SSE…'}
+            {connected ? 'Live Feed Active' : 'Polling…'}
           </span>
         </div>
 
@@ -102,20 +127,22 @@ export function Telemetry() {
             <div className="flex items-center gap-2.5 py-3 font-mono text-[12px] text-secondary">
               <Activity className="size-3.5 text-emerald" />
               <span>
-                Listening for verified QuickNode webhook events (<span className="text-primary">EscrowCreated</span>,{' '}
-                <span className="text-primary">EscrowSettled</span>,{' '}
-                <span className="text-primary">TECDPenaltyApplied</span>) on Chain ID 5042002…
+                Monitoring verified QuickNode webhooks &amp; Arc Testnet logs (
+                <span className="text-primary">EscrowCreated</span>,{' '}
+                <span className="text-primary">MilestoneSettled</span>,{' '}
+                <span className="text-primary">TECDPenaltyApplied</span>,{' '}
+                <span className="text-primary">TimeoutRefunded</span>)…
               </span>
             </div>
           ) : (
-            events.slice(0, 5).map((evt) => (
+            events.slice(0, 6).map((evt) => (
               <div key={evt.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5 font-mono text-[12px]">
                 <div className="flex items-center gap-2.5">
                   <span
                     className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                      evt.eventName === 'TECDPenaltyApplied'
+                      evt.eventName === 'TECDPenaltyApplied' || evt.eventName === 'TimeoutRefunded'
                         ? 'bg-crimson/15 text-crimson'
-                        : evt.eventName === 'EscrowSettled'
+                        : evt.eventName === 'MilestoneSettled' || evt.eventName === 'EscrowSettled'
                           ? 'bg-emerald/15 text-emerald'
                           : 'bg-gold/15 text-gold'
                     }`}
@@ -125,6 +152,9 @@ export function Telemetry() {
                   <span className="text-primary">{evt.summary}</span>
                 </div>
                 <div className="flex items-center gap-3 text-[11px] text-secondary">
+                  <span className="text-[10px] uppercase text-secondary/70">
+                    blk #{evt.blockNumber} · idx {evt.logIndex}
+                  </span>
                   {evt.txHash && (
                     <a
                       href={explorerUrl('tx', evt.txHash)}
@@ -135,7 +165,6 @@ export function Telemetry() {
                       {shortHex(evt.txHash, 8, 6)}
                     </a>
                   )}
-                  <span>{new Date(evt.receivedAt).toLocaleTimeString()}</span>
                 </div>
               </div>
             ))

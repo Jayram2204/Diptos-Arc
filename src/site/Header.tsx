@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Code2, Menu, Plus, X } from 'lucide-react'
 import { Wordmark } from '@/components/Logo'
-import { CopyButton, PulseDot } from '@/components/ui'
-import { ARC_NETWORK } from '@/config/protocol'
+import { PulseDot } from '@/components/ui'
 import { useArcPulse } from '@/lib/hooks'
 import { navigate } from '@/lib/route'
+import { SdkModal } from './SdkModal'
 
 const NAV_LINKS = [
   { id: 'how-it-works', label: 'How It Works' },
@@ -13,47 +13,10 @@ const NAV_LINKS = [
   { id: 'registry', label: 'Arc Contracts' },
 ] as const
 
-const SDK_SNIPPET = `import { createDiptosClient } from '@diptos/sdk'
-
-const diptos = createDiptosClient({
-  apiBaseUrl: 'https://diptos.xyz',
-  escrowContract: '${ARC_NETWORK.chainId === 5042002 ? '0x742d35Cc6634C0532925a3b844Bc454e4438f44e' : ''}',
-})
-
-const risk = await diptos.getLiveGeminiRisk()
-const { escrow, shareUrl } = await diptos.createEscrowLink({
-  title: 'Audit Solidity TECD math',
-  scope: 'Submit PR passing forge test with zero reverts',
-  amountUsdc: 250,
-  deadlineHours: 24,
-  mode: 'agent',
-  tecdLambda: risk.recommendedLambda,
-})
-
-const audit = await diptos.verifyDeliverableWithGrok({
-  escrowId: escrow.id,
-  deliverableUrl: 'https://github.com/org/repo/pull/12',
-})
-if (audit.approved) {
-  await diptos.settleEscrowOnArc({
-    escrowId: escrow.id,
-    grokSignature: audit.signature,
-    deliverableHash: audit.deliverableHash,
-    walletClient,
-  })
-}`
-
 export function Header() {
   const pulse = useArcPulse(6000)
   const [menuOpen, setMenuOpen] = useState(false)
   const [sdkOpen, setSdkOpen] = useState(false)
-
-  useEffect(() => {
-    if (!sdkOpen) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setSdkOpen(false)
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [sdkOpen])
 
   const focusCreator = () => {
     setMenuOpen(false)
@@ -94,7 +57,7 @@ export function Header() {
                   : 'Arc Testnet (Chain ID 5042002)'
               }
             >
-              <PulseDot color="bg-emerald" />
+              <PulseDot color={pulse.error && pulse.blockNumber === undefined ? 'bg-crimson' : 'bg-emerald'} />
               <span>Arc Testnet • 5042002</span>
             </span>
           </div>
@@ -174,50 +137,7 @@ export function Header() {
         )}
       </header>
 
-      {sdkOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="sdk-modal-title"
-          className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4 backdrop-blur-sm"
-          onClick={() => setSdkOpen(false)}
-        >
-          <div
-            className="w-full max-w-2xl rounded-[10px] border border-white/[0.12] bg-surface p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-white/[0.08] pb-4">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-gold">@diptos/sdk • TypeScript</p>
-                <h2 id="sdk-modal-title" className="mt-1 text-xl font-semibold text-primary">
-                  Autonomous AI Agent Payment Guardrails
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSdkOpen(false)}
-                aria-label="Close SDK Docs"
-                className="grid size-8 place-items-center rounded-lg border border-white/[0.08] text-secondary hover:text-primary"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-            <p className="mt-4 text-[13px] text-secondary">
-              Programmatically originate Arc Testnet (`5042002`) escrows, calibrate TECD decay with Gemini Prediction
-              Markets, verify deliverables via Grok AI, and execute atomic settlement in 10 lines.
-            </p>
-            <div className="mt-4 overflow-hidden rounded-lg border border-white/[0.08] bg-canvas">
-              <div className="flex items-center justify-between border-b border-white/[0.08] px-3.5 py-2">
-                <span className="font-mono text-[11px] text-secondary">agent-guardrail.ts</span>
-                <CopyButton value={SDK_SNIPPET} label="Copy SDK snippet" />
-              </div>
-              <pre className="max-h-[360px] overflow-auto p-4 font-mono text-[11.5px] leading-relaxed text-primary">
-                <code>{SDK_SNIPPET}</code>
-              </pre>
-            </div>
-          </div>
-        </div>
-      )}
+      <SdkModal open={sdkOpen} onClose={() => setSdkOpen(false)} />
     </>
   )
 }

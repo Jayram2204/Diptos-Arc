@@ -1,17 +1,16 @@
 import { Hono } from 'hono'
-import { keccak256, parseAbi, stringToHex } from 'viem'
+import { formatEther, type Hex, keccak256, parseAbi, stringToHex, zeroAddress } from 'viem'
 import {
   arcPublicClient,
   getEscrowContractAddress,
   signMilestoneReleaseEIP712,
 } from '../lib/oracleSigner.js'
-import { getEscrowById, updateEscrow } from '../store.js'
 
 export const verifyGrokRoute = new Hono()
 
 const XAI_API_URL = 'https://api.x.ai/v1/chat/completions'
-const ESCROW_NONCE_ABI = parseAbi([
-  'function escrows(bytes32) view returns (address payer, address payee, uint256 totalFunded, uint256 fundedAt, uint256 lambdaBps, uint256 gracePeriod, uint256 nonce, bool isAgentMode, bytes32 canonicalHash)',
+const ESCROW_VIEW_ABI = parseAbi([
+  'function getEscrowView(bytes32 escrowId) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash))',
 ])
 
 interface EvidenceBundle {
@@ -20,9 +19,15 @@ interface EvidenceBundle {
   rawEvidence: Record<string, unknown>
 }
 
+function toEscrowBytes32(rawId: string): Hex {
+  const trimmed = rawId.trim()
+  if (/^0x[0-9a-fA-F]{64}$/.test(trimmed)) return trimmed as Hex
+  return keccak256(stringToHex(`diptos:arc:5042002:${trimmed}`))
+}
+
 async function ingestDeepEvidence(deliverableUrl?: string): Promise<EvidenceBundle> {
   if (!deliverableUrl) {
-    return { kind: 'notes-only', summary: 'No external URL submitted; auditing deliverable notes.', rawEvidence: {} }
+    return { kind: 'notes-only', summary: 'Auditing submitted deliverable notes.', rawEvidence: {} }
   }
 
   try {
@@ -35,7 +40,6 @@ async function ingestDeepEvidence(deliverableUrl?: string): Promise<EvidenceBund
     if (url.hostname === 'github.com') {
       const parts = url.pathname.split('/').filter(Boolean)
 
-      // GitHub PR: github.com/owner/repo/pull/123
       if (parts.length >= 4 && parts[2] === 'pull') {
         const base = `https://api.github.com/repos/${parts[0]}/${parts[1]}/pulls/${parts[3]}`
         const [prRes, filesRes, commitsRes] = await Promise.all([
@@ -81,7 +85,6 @@ async function ingestDeepEvidence(deliverableUrl?: string): Promise<EvidenceBund
         }
       }
 
-      // GitHub Repo: github.com/owner/repo
       if (parts.length >= 2) {
         const base = `https://api.github.com/repos/${parts[0]}/${parts[1]}`
         const [repoRes, commitsRes] = await Promise.all([
@@ -113,7 +116,6 @@ async function ingestDeepEvidence(deliverableUrl?: string): Promise<EvidenceBund
       }
     }
 
-    // Live web deployment URL probe
     const pageRes = await fetch(deliverableUrl, {
       headers: { 'User-Agent': 'Diptos-Grok-Oracle/2.0' },
       signal: AbortSignal.timeout(7000),
@@ -145,29 +147,13 @@ async function ingestDeepEvidence(deliverableUrl?: string): Promise<EvidenceBund
   }
 }
 
-async function resolveOnChainNonce(escrowIdBytes32: `0x${string}`, fallbackNonce: number): Promise<number> {
-  const escrowAddr = getEscrowContractAddress()
-  if (!escrowAddr) return fallbackNonce
-  try {
-    const row = (await arcPublicClient.readContract({
-      address: escrowAddr,
-      abi: ESCROW_NONCE_ABI,
-      functionName: 'escrows',
-      args: [escrowIdBytes32],
-    })) as readonly [string, string, bigint, bigint, bigint, bigint, bigint, boolean, `0x${string}`]
-    return Number(row[6])
-  } catch {
-    return fallbackNonce
-  }
-}
-
 verifyGrokRoute.post('/', async (c) => {
   const apiKey = process.env.XAI_API_KEY?.trim()
   if (!apiKey) {
     return c.json(
       {
         error: 'XAI_API_KEY is not configured on the server.',
-        hint: 'Set XAI_API_KEY in .env to enable real Grok deliverable audits.',
+        hint: 'Set XAI_API_KEY in Vercel Environment Variables to enable live Grok deliverable audits.',
       },
       503,
     )
@@ -178,25 +164,52 @@ verifyGrokRoute.post('/', async (c) => {
     return c.json({ error: 'Invalid JSON payload' }, 400)
   }
 
-  const escrowId = typeof body.escrowId === 'string' ? body.escrowId.trim() : ''
+  const escrowIdRaw = typeof body.escrowId === 'string' ? body.escrowId.trim() : ''
   const milestoneIndex = Math.max(0, Math.floor(Number(body.milestoneIndex ?? 0)))
   const deliverableUrl = typeof body.deliverableUrl === 'string' ? body.deliverableUrl.trim() : ''
   const deliverableNotes = typeof body.deliverableNotes === 'string' ? body.deliverableNotes.trim() : ''
 
-  if (!escrowId) return c.json({ error: 'escrowId is required' }, 400)
+  if (!escrowIdRaw) return c.json({ error: 'escrowId is required' }, 400)
   if (!deliverableUrl && !deliverableNotes) {
     return c.json({ error: 'Provide deliverableUrl or deliverableNotes to audit' }, 400)
   }
 
-  const escrow = getEscrowById(escrowId)
-  if (!escrow) return c.json({ error: 'Escrow not found' }, 404)
+  const escrowIdBytes32 = toEscrowBytes32(escrowIdRaw)
+  let onChainAmountUsdc = Number(body.amountUsdc ?? 0)
+  let onChainNonce = Number(body.nonce ?? 0)
+  const title = typeof body.title === 'string' && body.title.trim() ? body.title.trim() : `Arc Escrow ${escrowIdBytes32.slice(0, 10)}`
+  const scope =
+    typeof body.scope === 'string' && body.scope.trim()
+      ? body.scope.trim()
+      : 'Deliverable must match the agreed programmable escrow specification.'
+
+  const escrowContract = getEscrowContractAddress()
+  if (escrowContract) {
+    try {
+      const view = (await arcPublicClient.readContract({
+        address: escrowContract,
+        abi: ESCROW_VIEW_ABI,
+        functionName: 'getEscrowView',
+        args: [escrowIdBytes32],
+      })) as {
+        payer: string
+        amount: bigint
+        nonce: bigint
+      }
+      if (view && view.payer !== zeroAddress) {
+        onChainAmountUsdc = Number(formatEther(view.amount))
+        onChainNonce = Number(view.nonce)
+      }
+    } catch {
+      // Proceed with intent parameters if escrow is pre-funding
+    }
+  }
 
   const evidence = await ingestDeepEvidence(deliverableUrl)
   const model = process.env.XAI_MODEL?.trim() || 'grok-3-mini'
 
   const canonicalEvidencePayload = JSON.stringify({
-    escrowId: escrow.id,
-    escrowIdBytes32: escrow.escrowIdBytes32,
+    escrowIdBytes32,
     milestoneIndex,
     deliverableUrl,
     deliverableNotes,
@@ -213,10 +226,11 @@ verifyGrokRoute.post('/', async (c) => {
   ].join(' ')
 
   const userPrompt = [
-    `Escrow Title: ${escrow.title}`,
+    `Escrow Title: ${title}`,
+    `Escrow ID: ${escrowIdBytes32}`,
     `Milestone Index: ${milestoneIndex}`,
-    `Agreed Scope: ${escrow.scope}`,
-    `Amount: ${escrow.amountUsdc} USDC`,
+    `Agreed Scope: ${scope}`,
+    `Amount: ${onChainAmountUsdc} USDC`,
     `Evidence Summary: ${evidence.summary}`,
     `Technical Evidence JSON: ${JSON.stringify(evidence.rawEvidence).slice(0, 2400)}`,
     deliverableNotes ? `Deliverable Notes: ${deliverableNotes}` : '',
@@ -264,16 +278,15 @@ verifyGrokRoute.post('/', async (c) => {
     const summary = String(parsed.summary ?? 'Audit completed by Grok Oracle.')
     const auditReasoning = String(parsed.reasoning ?? summary)
 
-    const nonce = await resolveOnChainNonce(escrow.escrowIdBytes32, escrow.nonce ?? 0)
-    let eip712Signature: `0x${string}` | undefined
+    let eip712Signature: Hex | undefined
     let oracleSigner: string | undefined
 
     if (approved) {
       const signed = await signMilestoneReleaseEIP712({
-        escrowId: escrow.escrowIdBytes32,
+        escrowId: escrowIdBytes32,
         milestoneIndex: BigInt(milestoneIndex),
         deliverableHash,
-        nonce: BigInt(nonce),
+        nonce: BigInt(onChainNonce),
       })
       if (signed) {
         eip712Signature = signed.signature
@@ -281,14 +294,14 @@ verifyGrokRoute.post('/', async (c) => {
       }
     }
 
-    const auditReceipt = {
+    return c.json({
       approved,
       confidence,
       summary,
       auditReasoning,
       grokModel: model,
       milestoneIndex,
-      nonce,
+      nonce: onChainNonce,
       deliverableUrl: deliverableUrl || undefined,
       deliverableHash,
       evidenceHash: deliverableHash,
@@ -297,15 +310,7 @@ verifyGrokRoute.post('/', async (c) => {
       signature: eip712Signature,
       oracleSigner,
       auditedAt: new Date().toISOString(),
-    }
-
-    updateEscrow(escrow.id, {
-      nonce,
-      status: approved && escrow.status !== 'settled' ? 'verified' : escrow.status,
-      grokAudit: auditReceipt,
     })
-
-    return c.json(auditReceipt)
   } catch (err) {
     return c.json(
       { error: 'Grok verification request failed', detail: (err as Error).message },

@@ -9,6 +9,8 @@ interface Vm {
     function sign(uint256, bytes32) external returns (uint8, bytes32, bytes32);
     function deal(address, uint256) external;
     function prank(address) external;
+    function startPrank(address) external;
+    function stopPrank() external;
     function warp(uint256) external;
     function expectRevert(bytes4) external;
 }
@@ -264,5 +266,48 @@ contract DiptosEscrowTest {
         vm.prank(judge);
         vm.expectRevert(DiptosEscrow.FaucetCooldown.selector);
         escrow.faucetMint();
+    }
+
+    function test_OnChainEnumerationAndPagination() public {
+        bytes32 id1 = keccak256("enum-1");
+        bytes32 id2 = keccak256("enum-2");
+        bytes32 id3 = keccak256("enum-3");
+
+        vm.startPrank(payer);
+        escrow.createEscrowLink{value: 1 ether}(id1, payee, block.timestamp + 24 hours, 3000, false);
+        escrow.createEscrowLink{value: 2 ether}(id2, payee, block.timestamp + 48 hours, 3500, true);
+        escrow.createEscrowLink{value: 3 ether}(id3, payee, block.timestamp + 72 hours, 4000, false);
+        vm.stopPrank();
+
+        assert(escrow.getEscrowCount() == 3);
+        assert(escrow.getUserEscrowIds(payer).length == 3);
+        assert(escrow.getUserEscrowIds(payee).length == 3);
+
+        // Newest-first pagination
+        DiptosEscrow.EscrowView[] memory page1 = escrow.getEscrowsPaginated(0, 2);
+        assert(page1.length == 2);
+        assert(page1[0].escrowId == id3);
+        assert(page1[0].amount == 3 ether);
+        assert(page1[1].escrowId == id2);
+
+        DiptosEscrow.EscrowView[] memory page2 = escrow.getEscrowsPaginated(2, 5);
+        assert(page2.length == 1);
+        assert(page2[0].escrowId == id1);
+    }
+
+    function test_PreviewTECDPayoutAndDualDecimals() public view {
+        assert(escrow.protocolFeeBps() == 50);
+        assert(escrow.toUsdc6(1.5 ether) == 1_500_000);
+        assert(escrow.fromUsdc6(2_500_000) == 2.5 ether);
+
+        uint256 deadline = block.timestamp + 24 hours;
+        (uint256 pOnTime, uint256 rOnTime, uint256 fOnTime, uint256 dOnTime) =
+            escrow.previewTECDPayout(10 ether, deadline, deadline, 3500);
+        assert(pOnTime == 9.95 ether && rOnTime == 0 && fOnTime == 0.05 ether && dOnTime == 0);
+
+        (uint256 pLate, uint256 rLate, uint256 fLate, uint256 dLate) =
+            escrow.previewTECDPayout(10 ether, deadline, deadline + 24 hours, 3500);
+        assert(pLate + rLate + fLate == 10 ether);
+        assert(rLate > 2 ether && dLate > 2000);
     }
 }

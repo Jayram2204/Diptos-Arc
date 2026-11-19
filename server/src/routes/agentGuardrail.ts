@@ -7,7 +7,6 @@ import {
   getEscrowContractAddress,
   getRegistryContractAddress,
 } from '../lib/oracleSigner.js'
-import { listRiskHistory } from '../store.js'
 import { fetchLiveGeminiRisk } from './riskGemini.js'
 
 export const agentGuardrailRoute = new Hono()
@@ -37,24 +36,10 @@ agentGuardrailRoute.post('/quote-and-verify', async (c) => {
   }
   if (!scope || scope.length < 4) return c.json({ error: 'Task scope is required' }, 400)
 
-  // 1. Live Gemini macro volatility -> baseline lambda
-  let macroLambda = 0.35
-  let volatilityIndex = 0.34
-  let riskSource: 'gemini-live' | 'gemini-cached' = 'gemini-live'
-  try {
-    const snap = await fetchLiveGeminiRisk()
-    macroLambda = snap.recommendedLambda
-    volatilityIndex = snap.volatilityIndex
-  } catch {
-    const last = listRiskHistory(1)[0]
-    if (last) {
-      macroLambda = last.recommendedLambda
-      volatilityIndex = last.volatilityIndex
-      riskSource = 'gemini-cached'
-    }
-  }
+  const snap = await fetchLiveGeminiRisk()
+  const macroLambda = snap.recommendedLambda
+  const volatilityIndex = snap.volatilityIndex
 
-  // 2. On-chain DiptosRegistry.getCounterpartyStats(payee) reputation check on Arc Testnet
   let completedOnTime = 0
   let completedLate = 0
   let totalVolumeSettledWei = '0'
@@ -80,7 +65,7 @@ agentGuardrailRoute.post('/quote-and-verify', async (c) => {
       totalVolumeSettledWei = stats.totalVolumeSettled.toString()
       averageLatencySeconds = Number(stats.averageLatencySeconds)
     } catch {
-      // Unindexed / fresh counterparty on Arc
+      // Fresh counterparty with zero prior settlements
     }
   }
 
@@ -90,12 +75,10 @@ agentGuardrailRoute.post('/quote-and-verify', async (c) => {
     Math.min(100, Math.max(10, onTimeRatio * 80 + Math.min(20, totalCompleted * 4))),
   )
 
-  // Blend Gemini macro lambda with counterparty reliability (lower trust => stricter TECD penalty)
-  const trustAdjustment = (100 - counterpartyTrustScore) / 250 // up to +0.36
+  const trustAdjustment = (100 - counterpartyTrustScore) / 250
   const calibratedLambda = Number(Math.min(1.5, Math.max(0.15, macroLambda + trustAdjustment)).toFixed(4))
   const recommendedLambdaBps = Math.round(calibratedLambda * 10_000)
 
-  // 3. Pre-encode createEscrowLink calldata ready to broadcast on Arc Testnet (5042002)
   const slug =
     typeof body.escrowId === 'string' && body.escrowId.trim()
       ? body.escrowId.trim()
@@ -120,7 +103,7 @@ agentGuardrailRoute.post('/quote-and-verify', async (c) => {
     deadlineUnix: Number(deadlineUnix),
     recommendedLambda: calibratedLambda,
     recommendedLambdaBps,
-    riskSource,
+    riskSource: 'gemini-live',
     volatilityIndex,
     counterpartyTrustScore,
     counterpartyStats: {

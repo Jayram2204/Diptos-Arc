@@ -1,47 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Address, Hex } from 'viem'
-import { type ContractKey } from '@/config/protocol'
+import type { Address } from 'viem'
+import type { ContractKey } from '@/config/protocol'
+import { readProtocol } from './chain'
 import {
+  type ArcTelemetryResult,
+  type BytecodeVerificationResult,
+  diptos,
   type EscrowRecord,
-  fetchEscrows,
-  fetchGeminiRisk,
-  type GeminiRiskSnapshot,
-  type StreamEvent,
-} from './api'
-import { publicClient, readProtocol } from './chain'
+  type GeminiRiskResult,
+  type OracleStatusResult,
+  type ProtocolEvent,
+} from './sdk'
 
 export type ReadState<T> =
   | { status: 'loading' }
   | { status: 'ok'; value: T }
   | { status: 'error'; error: string }
 
-/** Live chain pulse straight from the Arc Testnet (5042002) RPC. */
+/** Live Arc Testnet (5042002) telemetry via @diptos/sdk */
 export function useArcPulse(interval = 4000) {
   const [state, setState] = useState<{
-    blockNumber?: bigint
-    timestamp?: bigint
-    blockAgeSec?: number
-    baseFee?: bigint
-    latency?: number
+    telemetry?: ArcTelemetryResult
     error?: string
   }>({})
 
   useEffect(() => {
     let alive = true
-    const client = publicClient()
     const tick = async () => {
-      const t0 = performance.now()
       try {
-        const block = await client.getBlock({ blockTag: 'latest' })
+        const telemetry = await diptos.getArcTelemetry()
         if (!alive) return
-        const nowSec = Math.floor(Date.now() / 1000)
-        setState({
-          blockNumber: block.number ?? undefined,
-          timestamp: block.timestamp,
-          blockAgeSec: Math.max(0, nowSec - Number(block.timestamp)),
-          baseFee: block.baseFeePerGas ?? undefined,
-          latency: Math.round(performance.now() - t0),
-        })
+        setState({ telemetry })
       } catch (e) {
         if (alive) setState((s) => ({ ...s, error: (e as Error).message.split('\n')[0] }))
       }
@@ -54,8 +43,164 @@ export function useArcPulse(interval = 4000) {
     }
   }, [interval])
 
+  return {
+    blockNumber: state.telemetry?.blockNumber,
+    timestamp: state.telemetry?.blockTimestamp,
+    baseFee: state.telemetry?.baseFeePerGas ?? state.telemetry?.gasPrice,
+    gasPrice: state.telemetry?.gasPrice,
+    latency: state.telemetry?.latencyMs,
+    error: state.error,
+  }
+}
+
+/** Live contract bytecode verification via @diptos/sdk verifyContractBytecode(address) */
+export function useBytecode(address: Address) {
+  const [state, setState] = useState<ReadState<BytecodeVerificationResult>>({ status: 'loading' })
+
+  useEffect(() => {
+    let alive = true
+    setState({ status: 'loading' })
+    diptos
+      .verifyContractBytecode(address)
+      .then((res) => alive && setState({ status: 'ok', value: res }))
+      .catch((e: Error) => alive && setState({ status: 'error', error: e.message.split('\n')[0] }))
+    return () => {
+      alive = false
+    }
+  }, [address])
+
   return state
 }
+
+/** Live on-chain escrows list via @diptos/sdk listEscrows() (polls every 4s by default) */
+export function useEscrows(pollMs = 4000) {
+  const [escrows, setEscrows] = useState<EscrowRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    try {
+      const list = await diptos.listEscrows()
+      setEscrows(list)
+      setError(null)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    refresh()
+    const t = setInterval(refresh, pollMs)
+    return () => clearInterval(t)
+  }, [refresh, pollMs])
+
+  return { escrows, loading, error, refresh }
+}
+
+/** Live Gemini Prediction Markets risk oracle via @diptos/sdk getLiveGeminiRisk() */
+export function useGeminiRisk() {
+  const [data, setData] = useState<GeminiRiskResult | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    try {
+      const snap = await diptos.getLiveGeminiRisk()
+      setData(snap)
+      setError(null)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    refresh()
+  }, [refresh])
+
+  return { data, loading, error, refresh }
+}
+
+/** Live Grok EIP-712 Oracle status via @diptos/sdk getOracleStatus() */
+export function useOracleStatus(pollMs = 15_000) {
+  const [data, setData] = useState<OracleStatusResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    const load = async () => {
+      try {
+        const res = await diptos.getOracleStatus()
+        if (alive) {
+          setData(res)
+          setError(null)
+        }
+      } catch (e) {
+        if (alive) setError((e as Error).message)
+      }
+    }
+    load()
+    const t = setInterval(load, pollMs)
+    return () => {
+      alive = false
+      clearInterval(t)
+    }
+  }, [pollMs])
+
+  return { data, error }
+}
+
+/**
+ * Stateless QuickNode + Arc Testnet event feed (GET /api/events), ordered strictly by
+ * blockNumber desc + logIndex desc for Vercel serverless compatibility.
+ */
+export function useProtocolEvents(
+  onEventOrPollMs?: number | ((evt: ProtocolEvent) => void),
+  pollMsArg = 4000,
+) {
+  const pollMs = typeof onEventOrPollMs === 'number' ? onEventOrPollMs : pollMsArg
+  const onEvent = typeof onEventOrPollMs === 'function' ? onEventOrPollMs : undefined
+  const [events, setEvents] = useState<ProtocolEvent[]>([])
+  const [connected, setConnected] = useState(false)
+  const seenRef = useRef<Set<string>>(new Set())
+  const cbRef = useRef(onEvent)
+  cbRef.current = onEvent
+
+  useEffect(() => {
+    let alive = true
+    const poll = async () => {
+      try {
+        const res = await diptos.getEvents(25)
+        if (!alive) return
+        const next = res.events ?? []
+        for (const evt of next) {
+          if (!seenRef.current.has(evt.id)) {
+            seenRef.current.add(evt.id)
+            if (seenRef.current.size > next.length) cbRef.current?.(evt)
+          }
+        }
+        setEvents(next)
+        setConnected(true)
+      } catch {
+        if (alive) setConnected(false)
+      }
+    }
+    void poll()
+    const t = setInterval(() => void poll(), pollMs)
+    return () => {
+      alive = false
+      clearInterval(t)
+    }
+  }, [pollMs])
+
+  return { events, connected }
+}
+
+export const useQuickNodeStream = useProtocolEvents
 
 /** Poll a protocol view function on Arc Testnet. */
 export function useProtocolRead<T>(
@@ -83,8 +228,8 @@ export function useProtocolRead<T>(
       }
     }
     ref.current = run
-    run()
-    const t = setInterval(run, interval)
+    void run()
+    const t = setInterval(() => void run(), interval)
     return () => {
       alive = false
       clearInterval(t)
@@ -94,122 +239,6 @@ export function useProtocolRead<T>(
 
   const refresh = useCallback(() => ref.current(), [])
   return Object.assign({}, state, { refresh })
-}
-
-/** Bytecode presence check via live eth_getCode against Arc Testnet. */
-export function useBytecode(address: Address) {
-  const [state, setState] = useState<ReadState<number>>({ status: 'loading' })
-  useEffect(() => {
-    let alive = true
-    setState({ status: 'loading' })
-    publicClient()
-      .getCode({ address })
-      .then((code: Hex | undefined) => {
-        if (!alive) return
-        const bytes = code && code !== '0x' ? (code.length - 2) / 2 : 0
-        setState({ status: 'ok', value: bytes })
-      })
-      .catch((e: Error) => alive && setState({ status: 'error', error: e.message.split('\n')[0] }))
-    return () => {
-      alive = false
-    }
-  }, [address])
-  return state
-}
-
-/** Live escrows list from /api/escrows */
-export function useEscrows(pollMs = 15_000) {
-  const [escrows, setEscrows] = useState<EscrowRecord[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const refresh = useCallback(async () => {
-    try {
-      const list = await fetchEscrows()
-      setEscrows(list)
-      setError(null)
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    refresh()
-    const t = setInterval(refresh, pollMs)
-    return () => clearInterval(t)
-  }, [refresh, pollMs])
-
-  return { escrows, loading, error, refresh }
-}
-
-/** Live Gemini Prediction Markets risk oracle from /api/risk/gemini */
-export function useGeminiRisk() {
-  const [data, setData] = useState<GeminiRiskSnapshot | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    try {
-      const snap = await fetchGeminiRisk()
-      setData(snap)
-      setError(null)
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    refresh()
-  }, [refresh])
-
-  return { data, loading, error, refresh }
-}
-
-/** Live QuickNode Streams SSE subscription (/api/events/stream) */
-export function useQuickNodeStream() {
-  const [events, setEvents] = useState<StreamEvent[]>([])
-  const [connected, setConnected] = useState(false)
-
-  useEffect(() => {
-    let es: EventSource | null = null
-    try {
-      es = new EventSource('/api/events/stream')
-      es.onopen = () => setConnected(true)
-      es.onerror = () => setConnected(false)
-
-      es.addEventListener('snapshot', (e) => {
-        try {
-          const parsed = JSON.parse((e as MessageEvent).data) as { events?: StreamEvent[] }
-          if (Array.isArray(parsed.events)) setEvents(parsed.events)
-          setConnected(true)
-        } catch {
-          // ignore malformed event
-        }
-      })
-
-      es.addEventListener('quicknode', (e) => {
-        try {
-          const evt = JSON.parse((e as MessageEvent).data) as StreamEvent
-          setEvents((prev) => [evt, ...prev].slice(0, 30))
-          setConnected(true)
-        } catch {
-          // ignore malformed event
-        }
-      })
-    } catch {
-      setConnected(false)
-    }
-    return () => {
-      es?.close()
-    }
-  }, [])
-
-  return { events, connected }
 }
 
 export function useCopy() {

@@ -1,28 +1,50 @@
 import { Hono } from 'hono'
 import crypto from 'node:crypto'
-import { streamSSE } from 'hono/streaming'
-import { startArcRpcIndexer } from '../lib/arcIndexer.js'
-import { appendStreamEvent, listStreamEvents, type StreamEvent, updateEscrow } from '../store.js'
+import { parseAbiItem } from 'viem'
+import { arcPublicClient, getEscrowContractAddress } from '../lib/oracleSigner.js'
 
-type Subscriber = (evt: StreamEvent) => void
-const subscribers = new Set<Subscriber>()
-
-export function broadcastStreamEvent(evt: StreamEvent) {
-  for (const sub of subscribers) {
-    try {
-      sub(evt)
-    } catch {
-      // subscriber disconnected
-    }
-  }
+export interface StreamEvent {
+  id: string
+  source: 'quicknode' | 'arc-rpc'
+  eventName:
+    | 'EscrowCreated'
+    | 'MilestoneSettled'
+    | 'EscrowSettled'
+    | 'TECDPenaltyApplied'
+    | 'TimeoutRefunded'
+    | 'ArcBlock'
+  chainId: 5042002
+  blockNumber: number
+  logIndex: number
+  txHash?: string
+  escrowId?: string
+  summary: string
+  receivedAt: string
 }
 
-// Boot the dual-mode Arc RPC fallback indexer alongside QuickNode webhooks (long-lived Node runtime only)
-if (!process.env.VERCEL) {
-  startArcRpcIndexer(broadcastStreamEvent)
-}
+const ESCROW_LOG_EVENTS = [
+  parseAbiItem(
+    'event EscrowCreated(bytes32 indexed escrowId, address indexed payer, address indexed payee, uint256 amount, uint256 deadline, uint256 lambdaBps, uint256 milestoneCount, bool isAgentMode)',
+  ),
+  parseAbiItem(
+    'event MilestoneSettled(bytes32 indexed escrowId, uint256 indexed milestoneIndex, address indexed payee, uint256 payeePayout, uint256 payerRebate, uint256 protocolFee, bytes32 deliverableHash, uint256 nonceUsed)',
+  ),
+  parseAbiItem(
+    'event TECDPenaltyApplied(bytes32 indexed escrowId, uint256 indexed milestoneIndex, uint256 delaySeconds, uint256 decayBps, uint256 payerRebate, uint256 payeePayout)',
+  ),
+  parseAbiItem(
+    'event TimeoutRefunded(bytes32 indexed escrowId, address indexed payer, uint256 refundedAmount, uint256 milestonesRefunded)',
+  ),
+] as const
 
-function verifyQuickNodeSignature(rawBody: string, headerSig: string | undefined, secret: string): boolean {
+// Ephemeral in-memory ring buffer for QuickNode webhook pushes within the active runtime instance
+const webhookBuffer: StreamEvent[] = []
+
+function verifyQuickNodeSignature(
+  rawBody: string,
+  headerSig: string | undefined,
+  secret: string,
+): boolean {
   if (!headerSig) return false
   const cleanSig = headerSig.replace(/^sha256=/i, '').trim()
   const expected = crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex')
@@ -45,6 +67,7 @@ function normalizeQuickNodeEvents(payload: unknown): StreamEvent[] {
     if (!item || typeof item !== 'object') continue
     const row = item as Record<string, unknown>
     const blockNumber = Number(row.blockNumber ?? row.number ?? 0)
+    const logIndex = Number(row.logIndex ?? 0)
     const txHash =
       typeof row.transactionHash === 'string'
         ? row.transactionHash
@@ -62,31 +85,19 @@ function normalizeQuickNodeEvents(payload: unknown): StreamEvent[] {
         : 'ArcBlock'
     const escrowId = typeof row.escrowId === 'string' ? row.escrowId : undefined
 
-    const summary =
-      eventName === 'EscrowCreated'
-        ? `Escrow funded on Arc block #${blockNumber}`
-        : eventName === 'MilestoneSettled' || eventName === 'EscrowSettled'
-          ? `Atomic DvP milestone settled on Arc block #${blockNumber}`
-          : eventName === 'TECDPenaltyApplied'
-            ? `TECD latency decay & buyer rebate executed on block #${blockNumber}`
-            : eventName === 'TimeoutRefunded'
-              ? `Permissionless timeout refund reclaimed on block #${blockNumber}`
-              : `Arc Testnet block #${blockNumber} ingested via QuickNode Stream`
-
     out.push({
-      id: `qn_${crypto.randomBytes(6).toString('hex')}`,
+      id: `qn_${txHash ?? crypto.randomBytes(6).toString('hex')}_${logIndex}`,
       source: 'quicknode',
       eventName,
       chainId: 5042002,
       blockNumber: Number.isFinite(blockNumber) ? blockNumber : 0,
+      logIndex: Number.isFinite(logIndex) ? logIndex : 0,
       txHash,
-      logIndex: typeof row.logIndex === 'number' ? row.logIndex : undefined,
       escrowId,
-      summary,
+      summary: `${eventName} pushed via QuickNode Stream at Arc block #${blockNumber}`,
       receivedAt: now,
     })
   }
-
   return out
 }
 
@@ -111,60 +122,81 @@ quicknodeWebhookRoute.post('/', async (c) => {
   }
 
   const events = normalizeQuickNodeEvents(payload)
-  let ingested = 0
-
   for (const evt of events) {
-    const { added } = appendStreamEvent(evt)
-    if (!added) continue
-    ingested += 1
-    if (evt.escrowId) {
-      if (evt.eventName === 'EscrowCreated') {
-        updateEscrow(evt.escrowId, { status: 'funded', txHash: evt.txHash })
-      } else if (evt.eventName === 'MilestoneSettled' || evt.eventName === 'EscrowSettled') {
-        updateEscrow(evt.escrowId, { status: 'settled', settleTxHash: evt.txHash })
-      } else if (evt.eventName === 'TimeoutRefunded') {
-        updateEscrow(evt.escrowId, { status: 'refunded' })
-      }
-    }
-    broadcastStreamEvent(evt)
+    webhookBuffer.unshift(evt)
   }
+  if (webhookBuffer.length > 60) webhookBuffer.length = 60
 
-  return c.json({ ok: true, ingested })
+  return c.json({ ok: true, ingested: events.length })
 })
 
-export const eventsStreamRoute = new Hono()
+export const eventsRoute = new Hono()
 
-eventsStreamRoute.get('/', (c) => {
-  return streamSSE(c, async (stream) => {
-    const recent = listStreamEvents(30)
-    await stream.writeSSE({
-      event: 'snapshot',
-      data: JSON.stringify({ events: recent }),
-    })
+/**
+ * Stateless GET /api/events: queries live EscrowCreated, MilestoneSettled, TECDPenaltyApplied,
+ * and TimeoutRefunded logs from Arc Testnet ordered by blockNumber desc (not timestamp),
+ * merged with incoming QuickNode Streams webhook payloads.
+ */
+eventsRoute.get('/', async (c) => {
+  const limit = Math.min(50, Math.max(1, Number(c.req.query('limit') ?? 25)))
+  const escrowContract = getEscrowContractAddress()
+  const merged = new Map<string, StreamEvent>()
 
-    const onEvent: Subscriber = (evt) => {
-      void stream.writeSSE({
-        event: 'quicknode',
-        id: evt.id,
-        data: JSON.stringify(evt),
+  for (const evt of webhookBuffer) {
+    const key = evt.txHash ? `${evt.txHash}:${evt.logIndex}` : evt.id
+    merged.set(key, evt)
+  }
+
+  let latestBlock = 0
+  if (escrowContract) {
+    try {
+      const head = await arcPublicClient.getBlockNumber()
+      latestBlock = Number(head)
+      const fromBlock = head > 2500n ? head - 2500n : 0n
+      const logs = await arcPublicClient.getLogs({
+        address: escrowContract,
+        events: ESCROW_LOG_EVENTS,
+        fromBlock,
+        toBlock: head,
       })
+
+      for (const log of logs) {
+        const eventName = log.eventName as StreamEvent['eventName']
+        const args = (log.args ?? {}) as Record<string, unknown>
+        const blockNumber = Number(log.blockNumber ?? 0n)
+        const logIndex = typeof log.logIndex === 'number' ? log.logIndex : 0
+        const txHash = log.transactionHash ?? undefined
+        const escrowId = typeof args.escrowId === 'string' ? args.escrowId : undefined
+        const key = txHash ? `${txHash}:${logIndex}` : `arc_${blockNumber}_${logIndex}`
+
+        if (!merged.has(key)) {
+          merged.set(key, {
+            id: `arc_${blockNumber}_${logIndex}`,
+            source: 'arc-rpc',
+            eventName,
+            chainId: 5042002,
+            blockNumber,
+            logIndex,
+            txHash,
+            escrowId,
+            summary: `${eventName} confirmed on Arc Testnet block #${blockNumber}`,
+            receivedAt: new Date().toISOString(),
+          })
+        }
+      }
+    } catch {
+      // Return whatever QuickNode webhook events are available
     }
+  }
 
-    subscribers.add(onEvent)
+  // Strictly order by blockNumber descending, then logIndex descending (Arc sub-second blocks share timestamps)
+  const events = Array.from(merged.values())
+    .sort((a, b) => (b.blockNumber !== a.blockNumber ? b.blockNumber - a.blockNumber : b.logIndex - a.logIndex))
+    .slice(0, limit)
 
-    const keepAlive = setInterval(() => {
-      void stream.writeSSE({
-        event: 'ping',
-        data: JSON.stringify({ ts: Date.now() }),
-      })
-    }, 20_000)
-
-    await new Promise<void>((resolve) => {
-      c.req.raw.signal.addEventListener('abort', () => {
-        clearInterval(keepAlive)
-        subscribers.delete(onEvent)
-        resolve()
-      })
-    })
+  return c.json({
+    chainId: 5042002,
+    latestBlock,
+    events,
   })
 })

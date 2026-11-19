@@ -1,9 +1,8 @@
 import { Hono } from 'hono'
-import { appendRiskHistory, listRiskHistory } from '../store.js'
 
 export const riskGeminiRoute = new Hono()
 
-const GEMINI_EVENTS_URL = 'https://api.gemini.com/v1/prediction-markets/events?status=active&limit=10'
+const GEMINI_EVENTS_URL = 'https://api.gemini.com/v1/prediction-markets/events?status=active&limit=8'
 
 export interface GeminiContractSnapshot {
   instrumentSymbol: string
@@ -68,7 +67,12 @@ function extractContracts(payload: unknown): GeminiContractSnapshot[] {
 
       const prices = (row.prices ?? row.lastTradePrice ?? {}) as Record<string, unknown>
       const yesProb = parseProbability(
-        row.yesProbability ?? row.yesPrice ?? row.lastPrice ?? row.probability ?? prices.yes ?? prices.buyYes,
+        row.yesProbability ??
+          row.yesPrice ??
+          row.lastPrice ??
+          row.probability ??
+          prices.yes ??
+          prices.buyYes,
       )
       const noProb = parseProbability(row.noProbability ?? row.noPrice ?? prices.no ?? prices.buyNo)
       const resolvedYes = yesProb ?? (noProb !== null ? 1 - noProb : 0.5)
@@ -82,9 +86,9 @@ function extractContracts(payload: unknown): GeminiContractSnapshot[] {
         status: String(row.status ?? ev.status ?? 'active'),
       })
 
-      if (contracts.length >= 10) break
+      if (contracts.length >= 6) break
     }
-    if (contracts.length >= 10) break
+    if (contracts.length >= 6) break
   }
 
   return contracts
@@ -106,7 +110,6 @@ export async function fetchLiveGeminiRisk(): Promise<GeminiRiskSnapshot> {
   const json = await res.json()
   const contracts = extractContracts(json)
 
-  // Weighted binary-entropy uncertainty index across active contracts (higher weight on top-ranked events)
   let weightedSum = 0
   let weightTotal = 0
   contracts.forEach((c, idx) => {
@@ -119,19 +122,10 @@ export async function fetchLiveGeminiRisk(): Promise<GeminiRiskSnapshot> {
   const volatilityIndex = weightTotal > 0 ? Number((weightedSum / weightTotal).toFixed(4)) : 0.5
   const recommendedLambda = Number((0.18 + volatilityIndex * 0.5).toFixed(4))
   const recommendedLambdaBps = Math.round(recommendedLambda * 10_000)
-  const fetchedAt = new Date().toISOString()
-
-  appendRiskHistory({
-    fetchedAt,
-    volatilityIndex,
-    recommendedLambda,
-    recommendedLambdaBps,
-    contractCount: contracts.length,
-  })
 
   return {
     source: 'gemini-prediction-markets',
-    fetchedAt,
+    fetchedAt: new Date().toISOString(),
     volatilityIndex,
     recommendedLambda,
     recommendedLambdaBps,
@@ -152,9 +146,4 @@ riskGeminiRoute.get('/gemini', async (c) => {
       502,
     )
   }
-})
-
-riskGeminiRoute.get('/history', (c) => {
-  const limit = Math.min(100, Math.max(1, Number(c.req.query('limit') ?? 30)))
-  return c.json({ history: listRiskHistory(limit) })
 })

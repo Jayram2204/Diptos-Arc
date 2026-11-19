@@ -4,9 +4,10 @@ pragma solidity ^0.8.24;
 import {IDiptosRegistry} from "./DiptosRegistry.sol";
 
 /// @title DiptosEscrow
-/// @notice Multi-Milestone Programmable Escrow, EIP-712 Replay-Protected Grok Oracle Settlement,
-///         Fixed-Point WAD Time-Entropic Collateral Decay (TECD), Permissionless Timeout Recovery,
-///         and Ergodic Float Accounting on Arc Testnet (Chain ID 5042002, Native USDC).
+/// @notice Multi-Milestone Programmable Escrow, On-Chain Enumeration, EIP-712 Replay-Protected
+///         Grok Oracle Settlement, Fixed-Point WAD Time-Entropic Collateral Decay (TECD),
+///         Permissionless Timeout Recovery, and Ergodic Float Accounting on Arc Testnet (5042002).
+///         Arc Dual-Decimal Rule: Native USDC (msg.value / balance) = 18 decimals; ERC-20 USDC = 6 decimals.
 contract DiptosEscrow {
     enum MilestoneStatus {
         PENDING,
@@ -27,6 +28,7 @@ contract DiptosEscrow {
         address payer;
         address payee;
         uint256 totalFunded;
+        uint256 createdAt;
         uint256 fundedAt;
         uint256 lambdaBps;
         uint256 gracePeriod;
@@ -35,14 +37,29 @@ contract DiptosEscrow {
         bytes32 canonicalHash;
     }
 
+    struct EscrowView {
+        bytes32 escrowId;
+        address payer;
+        address payee;
+        uint256 amount;
+        uint256 deadline;
+        uint256 createdAt;
+        uint256 fundedAt;
+        uint256 lambdaBps;
+        uint256 nonce;
+        bool isAgentMode;
+        MilestoneStatus status;
+        bytes32 deliverableHash;
+    }
+
     uint256 public constant PROTOCOL_FEE_BPS = 50; // 0.50% flat fee
     uint256 public constant BPS_DENOMINATOR = 10_000;
     uint256 public constant WAD = 1e18;
+    uint256 public constant NATIVE_TO_ERC20_SCALE = 1e12; // 18-dec native USDC <-> 6-dec ERC-20 USDC
     uint256 public constant DEFAULT_GRACE_PERIOD = 24 hours;
     uint256 public constant ANNUAL_FLOAT_YIELD_BPS = 450; // 4.50% APY reference float rate
-    uint256 public constant FAUCET_DRIP = 0.25 ether; // 0.25 native USDC on Arc Testnet
+    uint256 public constant FAUCET_DRIP = 0.25 ether; // 0.25 native USDC (18 decimals)
 
-    // secp256k1n / 2 for EIP-2 signature malleability protection
     uint256 private constant SECP256K1_HALF_N =
         0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
 
@@ -61,6 +78,8 @@ contract DiptosEscrow {
 
     mapping(bytes32 => Escrow) public escrows;
     mapping(bytes32 => Milestone[]) private _milestones;
+    bytes32[] public allEscrowIds;
+    mapping(address => bytes32[]) public userEscrows;
     mapping(address => uint256) public lastFaucetClaim;
 
     event EscrowCreated(
@@ -147,6 +166,20 @@ contract DiptosEscrow {
 
     receive() external payable {}
 
+    function protocolFeeBps() external pure returns (uint256) {
+        return PROTOCOL_FEE_BPS;
+    }
+
+    /// @notice Converts Arc native 18-decimal USDC wei to 6-decimal ERC-20 USDC units.
+    function toUsdc6(uint256 nativeWei) external pure returns (uint256) {
+        return nativeWei / NATIVE_TO_ERC20_SCALE;
+    }
+
+    /// @notice Converts 6-decimal ERC-20 USDC units to Arc native 18-decimal USDC wei.
+    function fromUsdc6(uint256 usdc6) external pure returns (uint256) {
+        return usdc6 * NATIVE_TO_ERC20_SCALE;
+    }
+
     function DOMAIN_SEPARATOR() public view returns (bytes32) {
         return keccak256(
             abi.encode(EIP712_DOMAIN_TYPEHASH, NAME_HASH, VERSION_HASH, block.chainid, address(this))
@@ -213,6 +246,7 @@ contract DiptosEscrow {
             payer: msg.sender,
             payee: payee,
             totalFunded: msg.value,
+            createdAt: block.timestamp,
             fundedAt: block.timestamp,
             lambdaBps: lambdaBps,
             gracePeriod: DEFAULT_GRACE_PERIOD,
@@ -232,6 +266,12 @@ contract DiptosEscrow {
             );
         }
 
+        allEscrowIds.push(escrowId);
+        userEscrows[msg.sender].push(escrowId);
+        if (payee != msg.sender) {
+            userEscrows[payee].push(escrowId);
+        }
+
         emit EscrowCreated(
             escrowId,
             msg.sender,
@@ -244,7 +284,6 @@ contract DiptosEscrow {
         );
     }
 
-    /// @notice 1-click helper to fund a test escrow with sensible defaults.
     function fundTestEscrow(
         bytes32 escrowId,
         address payee,
@@ -257,7 +296,6 @@ contract DiptosEscrow {
         createEscrowLink(escrowId, payee, resolvedDeadline, resolvedLambda, isAgentMode);
     }
 
-    /// @notice Dispenses native testnet USDC from the contract faucet reserve.
     function faucetMint() external {
         if (lastFaucetClaim[msg.sender] != 0 && block.timestamp < lastFaucetClaim[msg.sender] + 1 hours) {
             revert FaucetCooldown();
@@ -268,7 +306,70 @@ contract DiptosEscrow {
         emit FaucetDispensed(msg.sender, FAUCET_DRIP);
     }
 
-    /// @notice Computes the EIP-712 digest for releasing a milestone with Grok oracle attestation.
+    /// @notice Total number of escrows created on-chain.
+    function getEscrowCount() external view returns (uint256) {
+        return allEscrowIds.length;
+    }
+
+    /// @notice Returns all escrow IDs associated with a payer or payee address.
+    function getUserEscrowIds(address user) external view returns (bytes32[] memory) {
+        return userEscrows[user];
+    }
+
+    /// @notice Returns a full EscrowView struct for a single escrowId.
+    function getEscrowView(bytes32 escrowId) public view returns (EscrowView memory viewData) {
+        Escrow storage e = escrows[escrowId];
+        Milestone[] storage list = _milestones[escrowId];
+        uint256 deadline = 0;
+        MilestoneStatus status = MilestoneStatus.PENDING;
+        bytes32 delHash = bytes32(0);
+
+        if (list.length > 0) {
+            uint256 lastIdx = list.length - 1;
+            deadline = list[lastIdx].deadline;
+            status = list[lastIdx].status;
+            delHash = list[lastIdx].deliverableHash;
+            for (uint256 i = 0; i < list.length; i++) {
+                if (list[i].status == MilestoneStatus.FUNDED) {
+                    status = MilestoneStatus.FUNDED;
+                    deadline = list[i].deadline;
+                    break;
+                }
+            }
+        }
+
+        return EscrowView({
+            escrowId: escrowId,
+            payer: e.payer,
+            payee: e.payee,
+            amount: e.totalFunded,
+            deadline: deadline,
+            createdAt: e.createdAt,
+            fundedAt: e.fundedAt,
+            lambdaBps: e.lambdaBps,
+            nonce: e.nonce,
+            isAgentMode: e.isAgentMode,
+            status: status,
+            deliverableHash: delHash
+        });
+    }
+
+    /// @notice Paginated on-chain enumeration of all escrows (newest first when queried from end or sequential offset).
+    function getEscrowsPaginated(uint256 offset, uint256 limit) external view returns (EscrowView[] memory items) {
+        uint256 total = allEscrowIds.length;
+        if (offset >= total || limit == 0) {
+            return new EscrowView[](0);
+        }
+        uint256 remaining = total - offset;
+        uint256 count = remaining < limit ? remaining : limit;
+        items = new EscrowView[](count);
+        for (uint256 i = 0; i < count; i++) {
+            // Return newest-first order so recent escrows appear at offset 0
+            bytes32 id = allEscrowIds[total - 1 - offset - i];
+            items[i] = getEscrowView(id);
+        }
+    }
+
     function computeReleaseDigest(
         bytes32 escrowId,
         uint256 milestoneIndex,
@@ -288,7 +389,6 @@ contract DiptosEscrow {
         return keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR(), structHash));
     }
 
-    /// @notice Verifies Grok EIP-712 signature with nonce replay protection and settles atomically with TECD.
     function releaseWithOracle(
         bytes32 escrowId,
         uint256 milestoneIndex,
@@ -309,7 +409,6 @@ contract DiptosEscrow {
         address recovered = _recoverSigner(digest, grokSignature);
         if (recovered != oracleSigner) revert InvalidOracleSignature();
 
-        // Increment nonce before external interactions (CEI + replay protection)
         e.nonce = expectedNonce + 1;
         m.deliverableHash = deliverableHash;
         m.status = MilestoneStatus.SETTLED;
@@ -320,10 +419,8 @@ contract DiptosEscrow {
         uint256 delaySeconds = block.timestamp > m.deadline ? block.timestamp - m.deadline : 0;
         bool onTime = delaySeconds == 0;
 
-        // Record counterparty reliability telemetry on DiptosRegistry
         registry.recordSettlement(escrowId, e.payee, m.amount, delaySeconds, onTime);
 
-        // Ergodic float accounting telemetry
         uint256 lockDuration = block.timestamp > e.fundedAt ? block.timestamp - e.fundedAt : 0;
         uint256 accruedYieldBps = (lockDuration * ANNUAL_FLOAT_YIELD_BPS) / 365 days;
         uint256 notionalYieldWei = (m.amount * lockDuration * ANNUAL_FLOAT_YIELD_BPS) / (365 days * BPS_DENOMINATOR);
@@ -349,8 +446,6 @@ contract DiptosEscrow {
         );
     }
 
-    /// @notice Permissionless timeout recovery: lets payer reclaim 100% of any funded milestone
-    ///         abandoned past `deadline + gracePeriod`.
     function claimTimeoutRefund(bytes32 escrowId) external {
         Escrow storage e = escrows[escrowId];
         if (e.payer == address(0)) revert InvalidParameters();
@@ -379,7 +474,6 @@ contract DiptosEscrow {
         emit TimeoutRefunded(escrowId, e.payer, refundAmount, refundedCount);
     }
 
-    /// @notice Mutual cancellation: payee can voluntarily release all remaining funded milestones back to payer.
     function mutualCancel(bytes32 escrowId) external {
         Escrow storage e = escrows[escrowId];
         if (e.payer == address(0)) revert InvalidParameters();
@@ -409,8 +503,18 @@ contract DiptosEscrow {
         return _milestones[escrowId].length;
     }
 
-    /// @notice Pure TECD formula helper used by both on-chain settlement and fuzz/invariant verification.
-    ///         Guarantees exact conservation: payeePayout + payerRebate + protocolFee == amount (0 wei dust).
+    /// @notice Stateless on-chain TECD simulator callable via eth_call so UI matches Solidity WAD math 1:1.
+    function previewTECDPayout(
+        uint256 amount,
+        uint256 deadline,
+        uint256 simulatedTimestamp,
+        uint256 lambdaBps
+    ) external view returns (uint256 payeePayout, uint256 payerRebate, uint256 protocolFee, uint256 decayBps) {
+        uint256 delaySeconds = simulatedTimestamp > deadline ? simulatedTimestamp - deadline : 0;
+        uint256 window = deadline > block.timestamp ? deadline - block.timestamp : 24 hours;
+        return calculateTECD(amount, delaySeconds, window, lambdaBps);
+    }
+
     function calculateTECD(
         uint256 amount,
         uint256 delaySeconds,
@@ -426,7 +530,6 @@ contract DiptosEscrow {
         }
 
         uint256 window = windowSeconds < 1 hours ? 1 hours : windowSeconds;
-        // Cap ratio at 100 WAD to prevent overflow on extreme fuzz delays (at 100x window, exp(-x) -> 0)
         uint256 ratioWad = delaySeconds >= window * 100 ? 100 * WAD : (delaySeconds * WAD) / window;
         uint256 sqrtRatioWad = _sqrt(ratioWad * WAD);
         uint256 ratioGammaWad = (ratioWad * sqrtRatioWad) / WAD;
@@ -456,7 +559,6 @@ contract DiptosEscrow {
         return calculateTECD(m.amount, delaySeconds, window, e.lambdaBps);
     }
 
-    /// @notice Backward-compatible preview for milestone 0.
     function previewTECD(
         bytes32 escrowId,
         uint256 atTimestamp
@@ -468,7 +570,6 @@ contract DiptosEscrow {
         if (x == 0) return WAD;
         if (x >= 20 * WAD) return 0;
 
-        // Argument reduction: halve x until y <= 0.25 WAD so 6th-order Taylor is accurate to < 1e-9
         uint256 k = 0;
         uint256 y = x;
         while (y > WAD / 4) {

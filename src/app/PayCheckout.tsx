@@ -10,6 +10,7 @@ import {
   LogOut,
   Pause,
   Radio,
+  RotateCcw,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -17,20 +18,14 @@ import {
   Volume2,
   Wallet,
 } from 'lucide-react'
-import { parseUnits } from 'viem'
+import { type Address, isAddress } from 'viem'
 import { Wordmark } from '@/components/Logo'
 import { Button, CopyButton, Field, inputCls, PulseDot } from '@/components/ui'
-import { ARC_NATIVE_DECIMALS } from '@/config/protocol'
-import {
-  type EscrowRecord,
-  fetchEscrowById,
-  fetchVoiceBriefAudio,
-  patchEscrow,
-  verifyWithGrok,
-} from '@/lib/api'
-import { computeTECD, explorerUrl, fmtAmount, shortHex } from '@/lib/chain'
-import { useQuickNodeStream } from '@/lib/hooks'
+import { fetchVoiceBriefAudio } from '@/lib/api'
+import { explorerUrl, fmtAmount, shortHex } from '@/lib/chain'
+import { useProtocolEvents } from '@/lib/hooks'
 import { navigate } from '@/lib/route'
+import { diptos, type EscrowMode, type EscrowRecord, type GrokMilestoneReceipt } from '@/lib/sdk'
 import { useWallet, WalletProvider } from './wallet'
 
 function formatCountdown(deadlineMs: number, nowMs: number) {
@@ -43,17 +38,69 @@ function formatCountdown(deadlineMs: number, nowMs: number) {
   const pad = (n: number) => String(n).padStart(2, '0')
   return {
     overdue,
-    delayHours: overdue ? abs / 3600 : 0,
+    delaySeconds: overdue ? abs : 0,
     label: `${overdue ? '+' : ''}${pad(hrs)}:${pad(mins)}:${pad(secs)}`,
+  }
+}
+
+/** Hydrates an unfunded stateless checkout intent from URL query parameters */
+function parseIntentFromUrl(escrowId: string): EscrowRecord | null {
+  if (typeof window === 'undefined') return null
+  const sp = new URLSearchParams(window.location.search)
+  const title = sp.get('title')?.trim()
+  const scope = sp.get('scope')?.trim()
+  const amount = Number(sp.get('amount') ?? 0)
+  if (!title || !scope || !Number.isFinite(amount) || amount <= 0) return null
+
+  const hours = Math.max(0.03, Number(sp.get('hours') ?? 24))
+  const mode: EscrowMode = sp.get('mode') === 'agent' ? 'agent' : 'human'
+  const rawPayee = sp.get('payee')?.trim() ?? ''
+  const payee: Address = isAddress(rawPayee)
+    ? rawPayee
+    : '0x000000000000000000000000000000000000dEaD'
+  const lambda = Number(sp.get('lambda') ?? 0.35)
+  const safeLambda = Number.isFinite(lambda) ? Math.min(2, Math.max(0.05, lambda)) : 0.35
+  const now = Date.now()
+  const deadlineMs = now + Math.round(hours * 3600 * 1000)
+
+  const bytes32Id =
+    escrowId.startsWith('0x') && escrowId.length === 66
+      ? (escrowId as `0x${string}`)
+      : diptos.computeEscrowHash({
+          payer: payee,
+          payee,
+          amountUsdc: amount,
+          deadline: Math.floor(deadlineMs / 1000),
+          salt: escrowId,
+        }).escrowIdBytes32
+
+  return {
+    id: escrowId,
+    escrowIdBytes32: bytes32Id,
+    title,
+    scope,
+    amountUsdc: amount,
+    deadline: new Date(deadlineMs).toISOString(),
+    deadlineUnix: Math.floor(deadlineMs / 1000),
+    deadlineHours: hours,
+    mode,
+    payee,
+    nonce: 0,
+    tecdLambda: Number(safeLambda.toFixed(4)),
+    tecdLambdaBps: Math.round(safeLambda * 10_000),
+    status: 'created',
+    onChain: false,
+    createdAt: new Date(now).toISOString(),
   }
 }
 
 function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
   const { address, balanceUsdc, connecting, connect, disconnect, execute, txStage, error: walletError, clearError } =
     useWallet()
-  const { events, connected: streamConnected } = useQuickNodeStream()
+  const { events, connected: feedConnected } = useProtocolEvents(4000)
 
   const [escrow, setEscrow] = useState<EscrowRecord | null>(null)
+  const [grokReceipt, setGrokReceipt] = useState<GrokMilestoneReceipt | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
@@ -71,16 +118,26 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
   const [verifying, setVerifying] = useState(false)
   const [verifyError, setVerifyError] = useState<string | null>(null)
 
-  // On-chain action feedback
   const [txSuccess, setTxSuccess] = useState<{ label: string; hash: string } | null>(null)
 
   const loadEscrow = useCallback(async () => {
     try {
-      const rec = await fetchEscrowById(escrowId)
-      setEscrow(rec)
+      const rec = await diptos.getEscrow(escrowId)
+      const urlIntent = parseIntentFromUrl(escrowId)
+      setEscrow({
+        ...rec,
+        title: urlIntent?.title ?? rec.title,
+        scope: urlIntent?.scope ?? rec.scope,
+      })
       setLoadError(null)
     } catch (e) {
-      setLoadError((e as Error).message)
+      const urlIntent = parseIntentFromUrl(escrowId)
+      if (urlIntent) {
+        setEscrow(urlIntent)
+        setLoadError(null)
+      } else {
+        setLoadError((e as Error).message)
+      }
     } finally {
       setLoading(false)
     }
@@ -103,22 +160,22 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
   }, [])
 
   const countdown = useMemo(() => {
-    if (!escrow) return { overdue: false, delayHours: 0, label: '00:00:00' }
+    if (!escrow) return { overdue: false, delaySeconds: 0, label: '00:00:00' }
     return formatCountdown(new Date(escrow.deadline).getTime(), nowMs)
   }, [escrow, nowMs])
 
   const tecdPreview = useMemo(() => {
     if (!escrow) return null
-    return computeTECD({
-      amountUsdc: escrow.amountUsdc,
-      delayHours: countdown.delayHours,
-      slaWindowHours: escrow.deadlineHours,
+    return diptos.calculateTECD({
+      principalUsdc: escrow.amountUsdc,
       lambda: escrow.tecdLambda,
+      delaySeconds: countdown.delaySeconds,
+      totalDurationSeconds: Math.max(60, escrow.deadlineHours * 3600),
       gamma: 1.5,
     })
-  }, [escrow, countdown.delayHours])
+  }, [escrow, countdown.delaySeconds])
 
-  const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/pay/${escrowId}` : `https://diptos.xyz/pay/${escrowId}`
+  const shareUrl = typeof window !== 'undefined' ? window.location.href : `https://diptos.xyz/pay/${escrowId}`
 
   const handlePlayVoiceBrief = async () => {
     setAudioError(null)
@@ -158,55 +215,97 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
     if (!escrow) return
     clearError()
     setTxSuccess(null)
-    const valueWei = parseUnits(String(escrow.amountUsdc), ARC_NATIVE_DECIMALS)
+
+    const freshDeadline = Math.max(
+      escrow.deadlineUnix,
+      Math.floor(Date.now() / 1000) + Math.max(120, Math.round(escrow.deadlineHours * 3600)),
+    )
+
+    const built = diptos.buildCreateEscrowTx({
+      escrowId: escrow.escrowIdBytes32,
+      payee: escrow.payee,
+      amountUsdc: escrow.amountUsdc,
+      deadlineUnix: freshDeadline,
+      lambdaBps: escrow.tecdLambdaBps,
+      isAgentMode: escrow.mode === 'agent',
+    })
+
     const rc = await execute({
       kind: 'Fund Escrow',
       contract: 'DiptosEscrow',
-      functionName: 'createEscrowLink',
-      args: [
-        escrow.escrowIdBytes32,
-        escrow.payee as `0x${string}`,
-        BigInt(escrow.deadlineUnix),
-        BigInt(escrow.tecdLambdaBps),
-        escrow.mode === 'agent',
-      ],
-      value: valueWei,
+      functionName: built.functionName,
+      args: built.args,
+      value: built.value,
     })
+
     if (rc && rc.status === 'success') {
-      const updated = await patchEscrow(escrow.id, {
-        payer: rc.from,
-        txHash: rc.hash,
-        status: 'funded',
-      })
-      setEscrow(updated)
+      setEscrow((prev) =>
+        prev
+          ? {
+              ...prev,
+              payer: rc.from,
+              txHash: rc.hash,
+              status: 'funded',
+              onChain: true,
+              deadlineUnix: freshDeadline,
+              deadline: new Date(freshDeadline * 1000).toISOString(),
+            }
+          : prev,
+      )
       setTxSuccess({ label: 'Escrow funded on Arc Testnet', hash: rc.hash })
+      void loadEscrow()
     }
   }
 
   const handleSettleOnArc = async () => {
-    const sig = escrow?.grokAudit?.eip712Signature ?? escrow?.grokAudit?.signature
-    if (!escrow?.grokAudit || !sig) return
+    const audit = grokReceipt ?? escrow?.grokAudit
+    const sig = audit?.eip712Signature ?? audit?.signature
+    if (!escrow || !audit || !sig) return
     clearError()
     setTxSuccess(null)
+
+    const built = diptos.buildReleaseWithOracleTx({
+      escrowId: escrow.escrowIdBytes32,
+      milestoneIndex: audit.milestoneIndex ?? 0,
+      deliverableHash: audit.deliverableHash,
+      expectedNonce: audit.nonce ?? escrow.nonce ?? 0,
+      grokSignature: sig,
+    })
+
     const rc = await execute({
       kind: 'Settle Escrow',
       contract: 'DiptosEscrow',
-      functionName: 'releaseWithOracle',
-      args: [
-        escrow.escrowIdBytes32,
-        BigInt(escrow.grokAudit.milestoneIndex ?? 0),
-        escrow.grokAudit.deliverableHash,
-        BigInt(escrow.grokAudit.nonce ?? 0),
-        sig as `0x${string}`,
-      ],
+      functionName: built.functionName,
+      args: built.args,
     })
+
     if (rc && rc.status === 'success') {
-      const updated = await patchEscrow(escrow.id, {
-        settleTxHash: rc.hash,
-        status: 'settled',
-      })
-      setEscrow(updated)
+      setEscrow((prev) => (prev ? { ...prev, settleTxHash: rc.hash, status: 'settled' } : prev))
       setTxSuccess({ label: 'Escrow settled atomically on Arc', hash: rc.hash })
+      void loadEscrow()
+    }
+  }
+
+  const handleClaimTimeoutRefund = async () => {
+    if (!escrow) return
+    clearError()
+    setTxSuccess(null)
+
+    const built = diptos.buildClaimTimeoutRefundTx({
+      escrowId: escrow.escrowIdBytes32,
+    })
+
+    const rc = await execute({
+      kind: 'Claim Timeout Refund',
+      contract: 'DiptosEscrow',
+      functionName: built.functionName,
+      args: built.args,
+    })
+
+    if (rc && rc.status === 'success') {
+      setEscrow((prev) => (prev ? { ...prev, status: 'refunded' } : prev))
+      setTxSuccess({ label: 'Timeout refund claimed on Arc', hash: rc.hash })
+      void loadEscrow()
     }
   }
 
@@ -220,12 +319,16 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
     }
     setVerifying(true)
     try {
-      await verifyWithGrok({
-        escrowId: escrow.id,
+      const receipt = await diptos.verifyDeliverableWithGrok({
+        escrowId: escrow.escrowIdBytes32,
+        scope: escrow.scope,
         deliverableUrl: deliverableUrl.trim() || undefined,
-        deliverableNotes: deliverableNotes.trim() || undefined,
+        notes: deliverableNotes.trim() || undefined,
       })
-      await loadEscrow()
+      setGrokReceipt(receipt)
+      if (receipt.approved) {
+        setEscrow((prev) => (prev && prev.status !== 'settled' ? { ...prev, status: 'verified' } : prev))
+      }
     } catch (err) {
       setVerifyError((err as Error).message)
     } finally {
@@ -243,6 +346,10 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
     )
     return matched.length > 0 ? matched : events
   }, [events, escrow])
+
+  const activeAudit = grokReceipt ?? escrow?.grokAudit
+  const grokSig = activeAudit?.eip712Signature ?? activeAudit?.signature
+  const canRefund = escrow?.status === 'funded' && countdown.delaySeconds > 24 * 3600
 
   return (
     <div className="min-h-screen">
@@ -280,12 +387,10 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="primary" loading={connecting === 'metamask'} onClick={() => connect('metamask')}>
-                  <Wallet className="size-3.5" />
-                  Connect Wallet
-                </Button>
-              </div>
+              <Button size="sm" variant="primary" loading={connecting === 'metamask'} onClick={() => connect('metamask')}>
+                <Wallet className="size-3.5" />
+                Connect Wallet
+              </Button>
             )}
           </div>
         </div>
@@ -300,9 +405,9 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
         ) : loadError || !escrow ? (
           <div className="mx-auto max-w-xl rounded-[10px] border border-white/[0.08] bg-surface p-8 text-center">
             <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-crimson">Escrow Not Found</p>
-            <h1 className="mt-2 text-2xl font-semibold text-primary">No escrow found for ID “{escrowId}”</h1>
+            <h1 className="mt-2 text-2xl font-semibold text-primary">No on-chain escrow found for “{shortHex(escrowId, 12, 8)}”</h1>
             <p className="mt-2 text-[13px] text-secondary">
-              {loadError || 'This escrow link may have expired or does not exist on this server.'}
+              {loadError || 'This escrow ID has not been funded on Arc Testnet (5042002) yet.'}
             </p>
             <Button variant="primary" onClick={() => navigate('/')} className="mt-6 font-bold">
               Return to diptos.xyz
@@ -313,7 +418,6 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
             {/* LEFT COLUMN (7 cols): Deal & On-Chain Settlement */}
             <section className="space-y-5 lg:col-span-7">
               <div className="rounded-[10px] border border-white/[0.08] bg-surface p-6">
-                {/* Top badges */}
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] pb-4">
                   <div className="flex items-center gap-2">
                     <span className="inline-flex items-center gap-1.5 rounded-md border border-white/[0.08] bg-elevated px-2.5 py-1 font-mono text-[10px] font-medium text-primary">
@@ -329,10 +433,10 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                     </span>
                     <span
                       className={`rounded-md border px-2.5 py-1 font-mono text-[10px] font-semibold uppercase ${
-                        escrow.status === 'settled' || escrow.status === 'verified'
-                          ? 'border-emerald/35 bg-emerald/10 text-emerald'
-                          : escrow.status === 'funded'
-                            ? 'border-emerald/30 bg-emerald/10 text-emerald'
+                        escrow.status === 'refunded'
+                          ? 'border-crimson/35 bg-crimson/10 text-crimson'
+                          : escrow.status === 'settled' || escrow.status === 'verified' || escrow.status === 'funded'
+                            ? 'border-emerald/35 bg-emerald/10 text-emerald'
                             : 'border-gold/30 bg-gold/10 text-gold'
                       }`}
                     >
@@ -342,7 +446,9 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                           ? 'FUNDED ON ARC'
                           : escrow.status === 'verified'
                             ? 'GROK VERIFIED'
-                            : 'SETTLED ON ARC'}
+                            : escrow.status === 'refunded'
+                              ? 'REFUNDED'
+                              : 'SETTLED ON ARC'}
                     </span>
                   </div>
 
@@ -352,7 +458,6 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                   </div>
                 </div>
 
-                {/* Title & Scope Checklist */}
                 <h1 className="mt-5 text-[24px] font-bold text-primary sm:text-[28px]">{escrow.title}</h1>
                 <div className="mt-4 rounded-lg border border-white/[0.08] bg-elevated p-4">
                   <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-gold">
@@ -361,14 +466,13 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                   <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-primary/90">{escrow.scope}</p>
                 </div>
 
-                {/* Financial + TECD Countdown Grid */}
                 <div className="mt-5 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-lg border border-white/[0.08] bg-elevated p-4">
                     <p className="font-mono text-[10px] uppercase text-secondary">Locked Principal</p>
                     <p className="mt-1.5 font-mono text-[20px] font-semibold text-primary">
                       {fmtAmount(escrow.amountUsdc)} <span className="text-[11px] text-secondary">USDC</span>
                     </p>
-                    <p className="mt-1 font-mono text-[10px] text-secondary">0.5% flat protocol fee</p>
+                    <p className="mt-1 font-mono text-[10px] text-secondary">0.5% flat fee • 18-dec native</p>
                   </div>
 
                   <div className="rounded-lg border border-white/[0.08] bg-elevated p-4">
@@ -390,11 +494,11 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                   <div className="rounded-lg border border-white/[0.08] bg-elevated p-4">
                     <p className="font-mono text-[10px] uppercase text-secondary">Projected Payout</p>
                     <p className="mt-1.5 font-mono text-[20px] font-semibold text-emerald">
-                      {tecdPreview ? fmtAmount(tecdPreview.sellerPayout) : fmtAmount(escrow.amountUsdc * 0.995)}{' '}
+                      {tecdPreview ? fmtAmount(tecdPreview.payeePayoutUsdc) : fmtAmount(escrow.amountUsdc * 0.995)}{' '}
                       <span className="text-[11px] text-secondary">USDC</span>
                     </p>
                     <p className="mt-1 font-mono text-[10px] text-secondary">
-                      Rebate: {tecdPreview ? fmtAmount(tecdPreview.buyerRebate) : '0.00'} USDC
+                      Rebate: {tecdPreview ? fmtAmount(tecdPreview.buyerRebateUsdc) : '0.00'} USDC
                     </p>
                   </div>
                 </div>
@@ -404,11 +508,16 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                   <div>
                     <p className="text-[13px] font-medium text-primary">Executive Deal Brief (ElevenLabs)</p>
                     <p className="font-mono text-[11px] text-secondary">
-                      Synthesizes escrow scope, TECD terms &amp; live Gemini macro risk
+                      Streams audio/mpeg brief with live Gemini λ odds &amp; TECD schedule
                     </p>
                   </div>
                   <Button size="sm" variant="secondary" loading={audioLoading} onClick={handlePlayVoiceBrief}>
-                    {!audioLoading && (audioPlaying ? <Pause className="size-3.5 text-gold" /> : <Volume2 className="size-3.5 text-gold" />)}
+                    {!audioLoading &&
+                      (audioPlaying ? (
+                        <Pause className="size-3.5 text-gold" />
+                      ) : (
+                        <Volume2 className="size-3.5 text-gold" />
+                      ))}
                     {audioPlaying ? 'Pause Deal Brief' : 'Listen to Deal Brief'}
                   </Button>
                 </div>
@@ -423,7 +532,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                   <Button
                     variant="primary"
                     loading={txStage?.kind === 'Fund Escrow'}
-                    disabled={escrow.status === 'funded' || escrow.status === 'settled'}
+                    disabled={escrow.status === 'funded' || escrow.status === 'settled' || escrow.status === 'refunded'}
                     onClick={address ? handleFundOnArc : () => connect('metamask')}
                     className="h-11 flex-1 font-bold"
                   >
@@ -438,13 +547,25 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                   <Button
                     variant="secondary"
                     loading={txStage?.kind === 'Settle Escrow'}
-                    disabled={!escrow.grokAudit?.approved || !escrow.grokAudit?.signature || escrow.status === 'settled'}
+                    disabled={!activeAudit?.approved || !grokSig || escrow.status === 'settled' || escrow.status === 'refunded'}
                     onClick={address ? handleSettleOnArc : () => connect('metamask')}
                     className="h-11 flex-1"
                   >
                     <CheckCircle2 className="size-4 text-emerald" />
                     {escrow.status === 'settled' ? 'Settled On-Chain' : 'Settle On-Chain'}
                   </Button>
+
+                  {canRefund && (
+                    <Button
+                      variant="danger"
+                      loading={txStage?.kind === 'Claim Timeout Refund'}
+                      onClick={address ? handleClaimTimeoutRefund : () => connect('metamask')}
+                      className="h-11"
+                    >
+                      <RotateCcw className="size-4" />
+                      Claim Timeout Refund
+                    </Button>
+                  )}
                 </div>
 
                 {txStage && (
@@ -478,7 +599,6 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                   </div>
                 )}
 
-                {/* Existing tx hashes */}
                 {(escrow.txHash || escrow.settleTxHash) && (
                   <div className="mt-4 space-y-1.5 border-t border-white/[0.08] pt-4 font-mono text-[11px]">
                     {escrow.txHash && (
@@ -514,7 +634,6 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
 
             {/* RIGHT COLUMN (5 cols): Grok AI Deliverable Verifier & QuickNode Audit Log */}
             <aside className="space-y-5 lg:col-span-5">
-              {/* Grok AI Deliverable Verifier */}
               <div className="rounded-[10px] border border-white/[0.08] bg-surface p-6">
                 <div className="flex items-center justify-between gap-2 border-b border-white/[0.08] pb-4">
                   <div className="flex items-center gap-2">
@@ -557,16 +676,15 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                   </Button>
                 </form>
 
-                {/* Structured Grok Audit Verdict */}
-                {escrow.grokAudit && (
+                {activeAudit && (
                   <div className="mt-5 rounded-lg border border-white/[0.08] bg-elevated p-4">
                     <div className="flex items-center justify-between gap-2">
                       <span
                         className={`inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold ${
-                          escrow.grokAudit.approved ? 'text-emerald' : 'text-crimson'
+                          activeAudit.approved ? 'text-emerald' : 'text-crimson'
                         }`}
                       >
-                        {escrow.grokAudit.approved ? (
+                        {activeAudit.approved ? (
                           <>
                             <ShieldCheck className="size-4" /> APPROVED BY GROK
                           </>
@@ -577,76 +695,61 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                         )}
                       </span>
                       <span className="font-mono text-[11px] text-primary">
-                        Confidence {Math.round(escrow.grokAudit.confidence * 100)}%
+                        Confidence {Math.round(activeAudit.confidence * 100)}%
                       </span>
                     </div>
 
                     <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-canvas">
                       <div
-                        className={escrow.grokAudit.approved ? 'h-full bg-emerald' : 'h-full bg-crimson'}
-                        style={{ width: `${Math.round(escrow.grokAudit.confidence * 100)}%` }}
+                        className={activeAudit.approved ? 'h-full bg-emerald' : 'h-full bg-crimson'}
+                        style={{ width: `${Math.round(activeAudit.confidence * 100)}%` }}
                       />
                     </div>
 
-                    <p className="mt-3 text-[12px] leading-relaxed text-primary/90">{escrow.grokAudit.summary}</p>
+                    <p className="mt-3 text-[12px] leading-relaxed text-primary/90">
+                      {activeAudit.auditReasoning || activeAudit.summary}
+                    </p>
 
                     <dl className="mt-3 space-y-1.5 border-t border-white/[0.08] pt-3 font-mono text-[10.5px]">
                       <div className="flex items-center justify-between gap-2">
-                        <dt className="text-secondary">Deliverable Hash</dt>
+                        <dt className="text-secondary">Evidence Hash</dt>
                         <dd className="flex items-center gap-1.5 text-primary">
-                          <span>{shortHex(escrow.grokAudit.deliverableHash, 10, 6)}</span>
-                          <CopyButton value={escrow.grokAudit.deliverableHash} label="Copy deliverable hash" />
+                          <span>{shortHex(activeAudit.evidenceHash ?? activeAudit.deliverableHash, 10, 6)}</span>
+                          <CopyButton
+                            value={activeAudit.evidenceHash ?? activeAudit.deliverableHash}
+                            label="Copy evidence hash"
+                          />
                         </dd>
                       </div>
-                      {escrow.grokAudit.signature && (
+                      {grokSig && (
                         <div className="flex items-center justify-between gap-2">
-                          <dt className="text-secondary">ECDSA Signature</dt>
+                          <dt className="text-secondary">EIP-712 Signature</dt>
                           <dd className="flex items-center gap-1.5 text-emerald">
-                            <span>{shortHex(escrow.grokAudit.signature, 10, 6)}</span>
-                            <CopyButton value={escrow.grokAudit.signature} label="Copy ECDSA release signature" />
+                            <span>{shortHex(grokSig, 10, 6)}</span>
+                            <CopyButton value={grokSig} label="Copy EIP-712 release signature" />
                           </dd>
                         </div>
                       )}
-                      {escrow.grokAudit.oracleSigner && (
+                      {activeAudit.oracleSigner && (
                         <div className="flex items-center justify-between gap-2">
                           <dt className="text-secondary">Oracle Signer</dt>
-                          <dd className="text-primary">{shortHex(escrow.grokAudit.oracleSigner)}</dd>
+                          <dd className="text-primary">{shortHex(activeAudit.oracleSigner)}</dd>
                         </div>
                       )}
                     </dl>
-                    <details className="mt-3 border-t border-white/[0.08] pt-2.5">
-                      <summary className="cursor-pointer font-mono text-[10.5px] text-secondary hover:text-primary">
-                        Inspect EIP-712 Cryptographic Proof JSON
-                      </summary>
-                      <pre className="mt-2 max-h-48 overflow-auto rounded-md border border-white/[0.08] bg-canvas p-2.5 font-mono text-[10px] text-secondary">
-                        {JSON.stringify(
-                          {
-                            evidenceHash: escrow.grokAudit.evidenceHash ?? escrow.grokAudit.deliverableHash,
-                            grokModel: escrow.grokAudit.grokModel ?? 'grok-3-mini',
-                            milestoneIndex: escrow.grokAudit.milestoneIndex ?? 0,
-                            nonce: escrow.grokAudit.nonce ?? 0,
-                            auditReasoning: escrow.grokAudit.auditReasoning ?? escrow.grokAudit.summary,
-                            eip712Signature: escrow.grokAudit.eip712Signature ?? escrow.grokAudit.signature,
-                          },
-                          null,
-                          2,
-                        )}
-                      </pre>
-                    </details>
                   </div>
                 )}
               </div>
 
-              {/* QuickNode Stream Audit Log */}
               <div className="rounded-[10px] border border-white/[0.08] bg-surface p-6">
                 <div className="flex items-center justify-between gap-2 border-b border-white/[0.08] pb-3.5">
                   <div className="flex items-center gap-2">
                     <Radio className="size-4 text-gold" />
-                    <h2 className="text-[14px] font-semibold text-primary">QuickNode Stream Audit Log</h2>
+                    <h2 className="text-[14px] font-semibold text-primary">QuickNode &amp; Arc Audit Log</h2>
                   </div>
                   <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-secondary">
-                    <span className={`size-1.5 rounded-full ${streamConnected ? 'bg-emerald' : 'bg-gold'}`} />
-                    {streamConnected ? 'LIVE' : 'SYNCING'}
+                    <span className={`size-1.5 rounded-full ${feedConnected ? 'bg-emerald' : 'bg-gold'}`} />
+                    {feedConnected ? 'LIVE' : 'POLLING'}
                   </span>
                 </div>
 
@@ -662,7 +765,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-semibold text-gold">{evt.eventName}</span>
                           <span className="text-[10px] text-secondary">
-                            {new Date(evt.receivedAt).toLocaleTimeString()}
+                            blk #{evt.blockNumber} · idx {evt.logIndex}
                           </span>
                         </div>
                         <p className="mt-1 text-primary/90">{evt.summary}</p>
@@ -689,7 +792,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
   )
 }
 
-export function Terminal({ escrowId }: { escrowId: string }) {
+export function PayCheckout({ escrowId }: { escrowId: string }) {
   return (
     <WalletProvider>
       <CheckoutRoomInner escrowId={escrowId} />

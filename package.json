@@ -7,13 +7,14 @@
     "dev": "concurrently -k -n api,web -c cyan,yellow \"pnpm dev:server\" \"pnpm dev:web\"",
     "dev:web": "vite",
     "dev:server": "tsx watch server/src/index.ts",
-    "build": "tsc --noEmit && vite build",
-    "build:all": "tsc --noEmit && tsc -p server/tsconfig.json --noEmit && tsc -p packages/sdk/tsconfig.json --noEmit && vite build",
+    "build": "pnpm --filter @diptos/sdk build && tsc --noEmit && vite build",
+    "build:all": "pnpm --filter @diptos/sdk build && tsc --noEmit && tsc -p server/tsconfig.json --noEmit && vite build",
     "preview": "vite preview",
     "format": "oxfmt"
   },
   "dependencies": {
     "@coinbase/wallet-sdk": "^4.4.0",
+    "@diptos/sdk": "workspace:*",
     "@hono/node-server": "^1.14.1",
     "dotenv": "^16.4.7",
     "hono": "^4.7.6",

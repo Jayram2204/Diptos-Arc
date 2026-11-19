@@ -19,6 +19,13 @@ export interface GrokAuditRecord {
   auditedAt: string
 }
 
+export interface CounterpartyStatsDto {
+  completedOnTime: number
+  completedLate: number
+  totalVolumeSettledUsdc: number
+  averageLatencySeconds: number
+}
+
 export interface EscrowRecord {
   id: string
   escrowIdBytes32: `0x${string}`
@@ -31,6 +38,7 @@ export interface EscrowRecord {
   mode: EscrowMode
   payer?: string
   payee: string
+  nonce?: number
   txHash?: string
   settleTxHash?: string
   tecdLambda: number
@@ -38,6 +46,7 @@ export interface EscrowRecord {
   status: EscrowStatus
   grokAudit?: GrokAuditRecord
   createdAt: string
+  onChain?: boolean
 }
 
 export interface GeminiContractSnapshot {
@@ -60,11 +69,17 @@ export interface GeminiRiskSnapshot {
 export interface StreamEvent {
   id: string
   source: 'quicknode' | 'arc-rpc'
-  eventName: 'EscrowCreated' | 'MilestoneSettled' | 'EscrowSettled' | 'TECDPenaltyApplied' | 'TimeoutRefunded' | 'ArcBlock'
+  eventName:
+    | 'EscrowCreated'
+    | 'MilestoneSettled'
+    | 'EscrowSettled'
+    | 'TECDPenaltyApplied'
+    | 'TimeoutRefunded'
+    | 'ArcBlock'
   chainId: 5042002
   blockNumber: number
-  txHash?: string
   logIndex?: number
+  txHash?: string
   escrowId?: string
   summary: string
   receivedAt: string
@@ -74,10 +89,17 @@ export interface GrokVerifyResponse {
   approved: boolean
   confidence: number
   summary: string
-  deliverableHash: string
-  signature: string
-  oracleSigner: string
-  model: string
+  auditReasoning?: string
+  grokModel?: string
+  milestoneIndex?: number
+  nonce?: number
+  deliverableHash: `0x${string}`
+  evidenceHash?: `0x${string}`
+  evidenceSummary?: string
+  eip712Signature?: `0x${string}`
+  signature?: string
+  oracleSigner?: string
+  auditedAt: string
 }
 
 async function parseJson<T>(res: Response): Promise<T> {
@@ -95,10 +117,11 @@ export async function fetchEscrows(): Promise<EscrowRecord[]> {
   return data.escrows ?? []
 }
 
-export async function fetchEscrowById(id: string): Promise<EscrowRecord> {
+export async function fetchEscrowById(
+  id: string,
+): Promise<{ escrow: EscrowRecord; counterpartyStats: CounterpartyStatsDto | null }> {
   const res = await fetch(`/api/escrows/${encodeURIComponent(id)}`)
-  const data = await parseJson<{ escrow: EscrowRecord }>(res)
-  return data.escrow
+  return parseJson<{ escrow: EscrowRecord; counterpartyStats: CounterpartyStatsDto | null }>(res)
 }
 
 export async function createEscrow(payload: {
@@ -118,17 +141,9 @@ export async function createEscrow(payload: {
   return parseJson(res)
 }
 
-export async function patchEscrow(
-  id: string,
-  patch: Partial<Pick<EscrowRecord, 'payer' | 'payee' | 'txHash' | 'settleTxHash' | 'status'>>,
-): Promise<EscrowRecord> {
-  const res = await fetch(`/api/escrows/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(patch),
-  })
-  const data = await parseJson<{ escrow: EscrowRecord }>(res)
-  return data.escrow
+export async function fetchOnChainEvents(limit = 25): Promise<{ events: StreamEvent[]; latestBlock: number }> {
+  const res = await fetch(`/api/events?limit=${limit}`)
+  return parseJson<{ events: StreamEvent[]; latestBlock: number }>(res)
 }
 
 export async function fetchGeminiRisk(): Promise<GeminiRiskSnapshot> {
@@ -140,6 +155,9 @@ export async function verifyWithGrok(payload: {
   escrowId: string
   deliverableUrl?: string
   deliverableNotes?: string
+  title?: string
+  scope?: string
+  amountUsdc?: number
 }): Promise<GrokVerifyResponse> {
   const res = await fetch('/api/verify/grok', {
     method: 'POST',
@@ -149,11 +167,22 @@ export async function verifyWithGrok(payload: {
   return parseJson<GrokVerifyResponse>(res)
 }
 
-export async function fetchVoiceBriefAudio(escrowId?: string): Promise<Blob> {
+export async function fetchVoiceBriefAudio(
+  payload?:
+    | string
+    | {
+        escrowId?: string
+        title?: string
+        amountUsdc?: number
+        tecdLambda?: number
+        mode?: EscrowMode
+      },
+): Promise<Blob> {
+  const body = typeof payload === 'string' ? { escrowId: payload } : (payload ?? {})
   const res = await fetch('/api/voice/brief', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(escrowId ? { escrowId } : {}),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))

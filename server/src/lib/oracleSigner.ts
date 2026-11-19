@@ -1,22 +1,33 @@
-import { type Address, createPublicClient, defineChain, type Hex, http, isAddress } from 'viem'
+import {
+  type Address,
+  createPublicClient,
+  defineChain,
+  fallback,
+  type Hex,
+  http,
+  isAddress,
+} from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { getTotalAttestationsSigned, incrementAttestationCount } from '../store.js'
 
 export const ARC_CHAIN_ID = 5042002 as const
-export const ARC_RPC_URL = process.env.ARC_RPC_URL?.trim() || 'https://rpc.testnet.arc.io'
+export const ARC_RPC_PRIMARY = process.env.ARC_RPC_URL?.trim() || 'https://rpc.testnet.arc.network'
+export const ARC_RPC_FALLBACK = 'https://rpc.solidrpc.io/public/evm/5042002'
 
 export const arcTestnetChain = defineChain({
   id: ARC_CHAIN_ID,
   name: 'Arc Testnet',
   nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
-  rpcUrls: { default: { http: [ARC_RPC_URL] } },
-  blockExplorers: { default: { name: 'Arc Explorer', url: 'https://explorer.testnet.arc.io' } },
+  rpcUrls: { default: { http: [ARC_RPC_PRIMARY, ARC_RPC_FALLBACK] } },
+  blockExplorers: { default: { name: 'ArcScan', url: 'https://testnet.arcscan.app' } },
   testnet: true,
 })
 
 export const arcPublicClient = createPublicClient({
   chain: arcTestnetChain,
-  transport: http(ARC_RPC_URL, { timeout: 8000 }),
+  transport: fallback([
+    http(ARC_RPC_PRIMARY, { timeout: 6000 }),
+    http(ARC_RPC_FALLBACK, { timeout: 6000 }),
+  ]),
 })
 
 export function getEscrowContractAddress(): Address | null {
@@ -60,10 +71,8 @@ export interface SignMilestoneInput {
   nonce: bigint
 }
 
-/**
- * Signs an EIP-712 ReleaseMilestone typed payload matching DiptosEscrow.sol:
- * DOMAIN_SEPARATOR: { name: "DiptosEscrow", version: "2", chainId: 5042002, verifyingContract }
- */
+let sessionAttestations = 0
+
 export async function signMilestoneReleaseEIP712(
   input: SignMilestoneInput,
 ): Promise<{ signature: Hex; oracleSigner: Address } | null> {
@@ -89,7 +98,7 @@ export async function signMilestoneReleaseEIP712(
     },
   })
 
-  incrementAttestationCount()
+  sessionAttestations += 1
   return { signature, oracleSigner: account.address }
 }
 
@@ -108,7 +117,7 @@ export async function getOracleStatus() {
   return {
     chainId: ARC_CHAIN_ID,
     network: 'Arc Testnet',
-    rpcUrl: ARC_RPC_URL,
+    rpcUrl: ARC_RPC_PRIMARY,
     oracleSigner: account?.address ?? null,
     eip712Domain: {
       name: 'DiptosEscrow',
@@ -118,6 +127,6 @@ export async function getOracleStatus() {
     },
     latestArcBlock,
     rpcError,
-    totalAttestationsSigned: getTotalAttestationsSigned(),
+    totalAttestationsSigned: sessionAttestations,
   }
 }

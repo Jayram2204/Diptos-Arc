@@ -1,4 +1,4 @@
-import { ArrowUpRight, CheckCircle2 } from 'lucide-react'
+import { AlertCircle, ArrowUpRight, CheckCircle2 } from 'lucide-react'
 import { CopyButton, Eyebrow } from '@/components/ui'
 import { ARC_NETWORK, CONTRACTS, type ContractMeta } from '@/config/protocol'
 import { explorerUrl } from '@/lib/chain'
@@ -7,22 +7,39 @@ import { useBytecode } from '@/lib/hooks'
 function ContractRow({ contract }: { contract: ContractMeta }) {
   const code = useBytecode(contract.address)
 
-  const badge =
-    code.status === 'loading' ? (
-      <span className="font-mono text-[11px] text-secondary">Checking eth_getCode…</span>
-    ) : (
-      <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald/30 bg-emerald/10 px-2.5 py-1 font-mono text-[10px] font-semibold tracking-[0.04em] text-emerald">
-        <CheckCircle2 className="size-3" />
-        <span>
-          BYTECODE VERIFIED
-          {code.status === 'ok' && code.value > 0
-            ? ` • ${code.value.toLocaleString('en-US')} B`
-            : contract.isNativeAsset
-              ? ' • NATIVE PRECOMPILE'
-              : ' • ARC 5042002'}
-        </span>
+  let badge: React.ReactNode
+  if (code.status === 'loading') {
+    badge = <span className="font-mono text-[11px] text-secondary">Checking eth_getCode…</span>
+  } else if (code.status === 'error') {
+    badge = (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-md border border-crimson/35 bg-crimson/10 px-2.5 py-1 font-mono text-[10px] font-medium text-crimson"
+        title={code.error}
+      >
+        <AlertCircle className="size-3" /> RPC unreachable
       </span>
     )
+  } else if (code.value.hasCode) {
+    badge = (
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald/30 bg-emerald/10 px-2.5 py-1 font-mono text-[10px] font-semibold tracking-[0.04em] text-emerald">
+        <CheckCircle2 className="size-3" />
+        <span>{code.value.byteLength.toLocaleString('en-US')} bytes verified on Arc</span>
+      </span>
+    )
+  } else if (contract.isNativeAsset) {
+    badge = (
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald/30 bg-emerald/10 px-2.5 py-1 font-mono text-[10px] font-semibold tracking-[0.04em] text-emerald">
+        <CheckCircle2 className="size-3" />
+        <span>NATIVE PRECOMPILE VERIFIED</span>
+      </span>
+    )
+  } else {
+    badge = (
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-gold/30 bg-gold/10 px-2.5 py-1 font-mono text-[10px] font-medium text-gold">
+        <span>0 bytes at address (deploy via Forge)</span>
+      </span>
+    )
+  }
 
   return (
     <tr className="transition-colors hover:bg-elevated/60">
@@ -68,12 +85,13 @@ export function Registry() {
             Deployed Arc Testnet contract inspector.
           </h2>
           <p className="mt-3 text-[14px] text-secondary">
-            Live <span className="font-mono text-primary">eth_getCode</span> verification against{' '}
-            <span className="font-mono text-primary">{ARC_NETWORK.short}</span> with direct explorer links.
+            Live <span className="font-mono text-primary">diptos.verifyContractBytecode(address)</span> (
+            <span className="font-mono text-primary">eth_getCode</span>) against{' '}
+            <span className="font-mono text-primary">{ARC_NETWORK.short}</span>.
           </p>
         </div>
         <span className="inline-flex h-8 items-center rounded-md border border-emerald/25 bg-emerald/10 px-3 font-mono text-[11px] font-medium text-emerald">
-          {CONTRACTS.length}/{CONTRACTS.length} Verified on Arc Testnet
+          Live eth_getCode • Chain 5042002
         </span>
       </div>
 
@@ -85,7 +103,7 @@ export function Registry() {
                 <th className="px-5 py-3 font-medium">Contract</th>
                 <th className="px-5 py-3 font-medium">Standard</th>
                 <th className="px-5 py-3 font-medium">Arc Address</th>
-                <th className="px-5 py-3 font-medium">Verification</th>
+                <th className="px-5 py-3 font-medium">On-Chain Bytecode</th>
                 <th className="px-5 py-3 text-right font-medium">Explorer</th>
               </tr>
             </thead>
