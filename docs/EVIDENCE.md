@@ -34,23 +34,25 @@ cd contracts && forge test -vvv
 ```
 Observed output (Solc `0.8.24`, `via_ir = true`, optimizer `200` runs):
 ```text
-Ran 15 tests for test/DiptosEscrow.t.sol:DiptosEscrowTest
-[PASS] testFuzz_TECDConservationZeroDust(uint256,uint256,uint256) (runs: 256, μ: 19409, ~: 19677)
-[PASS] testFuzz_TECDDecayMonotonicity(uint256,uint256) (runs: 256, μ: 36043, ~: 35242)
-[PASS] test_CounterpartyReputationTelemetryOnRegistry() (gas: 1311814)
-[PASS] test_FaucetMintAndCooldown() (gas: 64023)
-[PASS] test_LateReleaseTECDDecayAndConservation() (gas: 829404)
-[PASS] test_MultiMilestonePartialAndFullSettlement() (gas: 898406)
-[PASS] test_MutualCancellationByPayee() (gas: 544634)
-[PASS] test_OnChainEnumerationAndPagination() (gas: 1391700)
-[PASS] test_PermissionlessTimeoutRefund() (gas: 545865)
-[PASS] test_PreviewTECDPayoutAndDualDecimals() (gas: 25136)
-[PASS] test_RevertOnDoubleSpendEscrowId() (gas: 544291)
-[PASS] test_RevertOnSignatureReplay() (gas: 816757)
-[PASS] test_RevertOnWrongOracleSigner() (gas: 545988)
-[PASS] test_RevertTimeoutRefundBeforeGracePeriod() (gas: 535952)
-[PASS] test_SingleShotOnTimeRelease() (gas: 747856)
-Suite result: ok. 15 passed; 0 failed; 0 skipped
+Ran 17 tests for test/DiptosEscrow.t.sol:DiptosEscrowTest
+[PASS] testFuzz_TECDConservationZeroDust(uint256,uint256,uint256) (runs: 256, μ: 19976, ~: 19832)
+[PASS] testFuzz_TECDDecayMonotonicity(uint256,uint256) (runs: 256, μ: 36311, ~: 35530)
+[PASS] test_CounterpartyReputationTelemetryOnRegistry() (gas: 1323786)
+[PASS] test_FaucetMintAndCooldown() (gas: 64184)
+[PASS] test_LateReleaseTECDDecayAndConservation() (gas: 835434)
+[PASS] test_MultiMilestonePartialAndFullSettlement() (gas: 910092)
+[PASS] test_MutualCancellationByPayee() (gas: 549736)
+[PASS] test_OnChainEnumerationAndPagination() (gas: 1537877)
+[PASS] test_PermissionlessTimeoutRefund() (gas: 550985)
+[PASS] test_PreviewTECDPayoutAndDualDecimals() (gas: 25457)
+[PASS] test_ReleaseByPayerDirectApproval() (gas: 789743)
+[PASS] test_RevertOnDoubleSpendEscrowId() (gas: 549655)
+[PASS] test_RevertOnSignatureReplay() (gas: 827187)
+[PASS] test_RevertOnWrongOracleSigner() (gas: 559268)
+[PASS] test_RevertTimeoutRefundBeforeGracePeriod() (gas: 541074)
+[PASS] test_SingleShotOnTimeRelease() (gas: 753855)
+[PASS] test_VerifyAndReleaseWithEIP712Oracle() (gas: 902671)
+Suite result: ok. 17 passed; 0 failed; 0 skipped
 ```
 
 ### B. Full Workspace Typecheck & Production Bundle

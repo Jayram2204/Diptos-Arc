@@ -684,7 +684,7 @@ export class DiptosClient {
     const payee: Address =
       params.payee && /^0x[0-9a-fA-F]{40}$/.test(params.payee.trim())
         ? (params.payee.trim() as Address)
-        : ('0x742d35Cc6634C0532925a3b844Bc454e4438f44e' as Address)
+        : ('0x000000000000000000000000000000000000dEaD' as Address)
     const tecdLambda = Number.isFinite(Number(params.tecdLambda))
       ? Math.min(2.0, Math.max(0.05, Number(params.tecdLambda)))
       : 0.35

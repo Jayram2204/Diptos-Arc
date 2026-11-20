@@ -7,8 +7,8 @@ import { fmtAmount, publicClient, shortHex } from '@/lib/chain'
 import { useGeminiRisk } from '@/lib/hooks'
 import { diptos } from '@/lib/sdk'
 
-const SAMPLE_PAYER = '0x5A0b54D5dc17e0AadC383d2db43B0a0D3E029c4c' as const
-const SAMPLE_PAYEE = '0x742d35Cc6634C0532925a3b844Bc454e4438f44e' as const
+const SAMPLE_PAYER = '0x0000000000000000000000000000000000000001' as const
+const SAMPLE_PAYEE = '0x0000000000000000000000000000000000000002' as const
 
 interface RowTrace {
   open: boolean

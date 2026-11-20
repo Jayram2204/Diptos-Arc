@@ -61,7 +61,7 @@ const escrowId = keccak256(toHex('diptos:arc:5042002:agent_task_01'))
 // Build native 18-dec USDC deposit tx (msg.value == amountWei)
 const fundTx = diptos.buildFundEscrowTx({
   escrowId,
-  payee: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
+  payee: '0x000000000000000000000000000000000000dEaD',
   amountUsdc: 1250,
   deadlineUnix: Math.floor(Date.now() / 1000) + 86400,
   lambdaBps: 3500, // λ = 0.35

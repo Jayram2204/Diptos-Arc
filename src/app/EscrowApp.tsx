@@ -55,7 +55,7 @@ function EscrowDashboardInner() {
   const [amountInput, setAmountInput] = useState('0.05')
   const [deadlineHours, setDeadlineHours] = useState<number>(24)
   const [mode, setMode] = useState<EscrowMode>('human')
-  const [payeeInput, setPayeeInput] = useState('0x742d35Cc6634C0532925a3b844Bc454e4438f44e')
+  const [payeeInput, setPayeeInput] = useState('')
 
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -360,7 +360,7 @@ function EscrowDashboardInner() {
                         type="text"
                         value={payeeInput}
                         onChange={(e) => setPayeeInput(e.target.value)}
-                        placeholder="0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+                        placeholder="0x... (Arc Testnet payee wallet address)"
                         className={`${inputCls} font-mono text-[12px]`}
                       />
                     </Field>
