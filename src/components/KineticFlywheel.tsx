@@ -3,11 +3,11 @@ import { useCallback, useEffect, useState } from 'react'
 const STORAGE_KEY = 'diptos_flywheel_played'
 
 /**
- * Custom Precision SVG Settlement Wheel:
- * - Outer concentric precision ring
+ * Custom Precision SVG Settlement Wheel — Crisp White (#FFFFFF) for dark institutional surfaces:
+ * - Outer concentric precision rings
  * - 24 radial CNC-style degree ticks
- * - 6 geometric spokes in #0A0B0E (carbon ink)
- * - 1 high-contrast #C8FF00 Acid Lime calibration notch at 12 o'clock
+ * - 6 geometric spokes in #FFFFFF
+ * - High-contrast #FFFFFF calibration notch at 12 o'clock
  */
 export function SettlementWheelSvg({
   size = 120,
@@ -30,8 +30,8 @@ export function SettlementWheelSvg({
       aria-hidden="true"
     >
       {/* Outer concentric precision rings */}
-      <circle cx="60" cy="60" r="56" stroke="#0A0B0E" strokeWidth="1.5" strokeOpacity="0.9" />
-      <circle cx="60" cy="60" r="46" stroke="#0A0B0E" strokeWidth="1" strokeOpacity="0.28" />
+      <circle cx="60" cy="60" r="56" stroke="#FFFFFF" strokeWidth="1.5" strokeOpacity="0.92" />
+      <circle cx="60" cy="60" r="46" stroke="#FFFFFF" strokeWidth="1" strokeOpacity="0.3" />
 
       {/* 24 radial CNC-style degree ticks */}
       {ticks.map((deg) => {
@@ -43,9 +43,9 @@ export function SettlementWheelSvg({
             y1={isMajor ? '5.5' : '7.5'}
             x2="60"
             y2="12.5"
-            stroke="#0A0B0E"
+            stroke="#FFFFFF"
             strokeWidth={isMajor ? '1.6' : '1'}
-            strokeOpacity={isMajor ? '0.9' : '0.42'}
+            strokeOpacity={isMajor ? '0.95' : '0.45'}
             transform={`rotate(${deg} 60 60)`}
           />
         )
@@ -59,7 +59,7 @@ export function SettlementWheelSvg({
           y1="20"
           x2="60"
           y2="46"
-          stroke="#0A0B0E"
+          stroke="#FFFFFF"
           strokeWidth="2.4"
           strokeLinecap="round"
           transform={`rotate(${deg} 60 60)`}
@@ -67,11 +67,11 @@ export function SettlementWheelSvg({
       ))}
 
       {/* Inner hub ring + core */}
-      <circle cx="60" cy="60" r="16" stroke="#0A0B0E" strokeWidth="2" fill="#F7F6F2" />
-      <circle cx="60" cy="60" r="4.5" fill="#0A0B0E" />
+      <circle cx="60" cy="60" r="16" stroke="#FFFFFF" strokeWidth="2" fill="#000000" />
+      <circle cx="60" cy="60" r="4.5" fill="#FFFFFF" />
 
-      {/* High-contrast #C8FF00 calibration notch at 12 o'clock */}
-      <rect x="57" y="1.5" width="6" height="14" rx="1.5" fill="#C8FF00" stroke="#0A0B0E" strokeWidth="1.2" />
+      {/* Crisp white calibration notch at 12 o'clock */}
+      <rect x="57" y="1.5" width="6" height="14" rx="1.5" fill="#FFFFFF" />
     </svg>
   )
 }
@@ -94,10 +94,10 @@ function RadialBurstLines({ size }: { size: number }) {
           y1="8"
           x2="90"
           y2="24"
-          stroke={deg === 0 ? '#C8FF00' : '#0A0B0E'}
-          strokeWidth={deg === 0 ? '2.5' : '1.5'}
+          stroke="#FFFFFF"
+          strokeWidth={deg === 0 ? '2.4' : '1.5'}
           strokeLinecap="round"
-          strokeOpacity={deg === 0 ? '1' : '0.45'}
+          strokeOpacity={deg === 0 ? '1' : '0.55'}
           transform={`rotate(${deg} 90 90)`}
         />
       ))}
@@ -106,8 +106,8 @@ function RadialBurstLines({ size }: { size: number }) {
 }
 
 /**
- * Compact 28px–36px interactive Settlement Wheel emblem.
- * Spins 720deg with radial burst + shockwave whenever clicked, double-tapped, or externally triggered.
+ * Compact 28px–36px interactive Settlement Wheel emblem in crisp white (#FFFFFF).
+ * Spins 720deg with white radial burst + shockwave whenever clicked, double-tapped, or externally triggered.
  */
 export function InteractiveFlywheelEmblem({
   size = 28,
@@ -142,7 +142,7 @@ export function InteractiveFlywheelEmblem({
       onDoubleClick={trigger}
       aria-label={ariaLabel}
       title="Click or double-tap to spin settlement wheel"
-      className="relative inline-grid shrink-0 cursor-pointer place-items-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0A0B0E]"
+      className="relative inline-grid shrink-0 cursor-pointer place-items-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFFFFF]"
       style={{ width: size, height: size }}
     >
       {burstKey > 0 && (
@@ -156,7 +156,7 @@ export function InteractiveFlywheelEmblem({
           </span>
           <span
             key={`wave-${burstKey}`}
-            className="animate-flywheel-inline-shockwave pointer-events-none absolute rounded-full border border-[#0A0B0E]/60"
+            className="animate-flywheel-inline-shockwave pointer-events-none absolute rounded-full border border-[#FFFFFF]/70"
             style={{ width: size, height: size }}
           />
         </>
@@ -173,8 +173,9 @@ export function InteractiveFlywheelEmblem({
 
 /**
  * Full-screen 3-stage Kinetic Cryptographic Flywheel Preloader (apex diptos.xyz only):
- * - Stage 1 (0–650ms): Inertial spin-up (scale 0.72 -> 1.0, 540deg) + 8 radial burst lines
- * - Stage 2 (650–1050ms): Detent lock at 720deg + 1px shockwave + ARC 5042002 telemetry
+ * - Pitch-black #000000 backdrop with pure white (#FFFFFF) 120px precision settlement wheel
+ * - Stage 1 (0–650ms): Inertial spin-up (scale 0.72 -> 1.0, 540deg) + 8 white radial burst lines
+ * - Stage 2 (650–1050ms): Detent lock at 720deg + white 1px shockwave + ARC 5042002 telemetry in #F4F2EC
  * - Stage 3 (1050–1400ms): Smooth upward curtain reveal translateY(-100%) + unmount
  * - Hard 1550ms unconditional failsafe + sessionStorage once-per-session guard
  */
@@ -230,23 +231,23 @@ export function KineticFlywheel() {
     <div
       role="status"
       aria-label="Initializing Diptos Settlement Engine"
-      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#F7F6F2] text-[#0A0B0E] transition-transform duration-[350ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${
+      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#000000] text-[#F4F2EC] transition-transform duration-[350ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${
         exiting ? 'pointer-events-none -translate-y-full' : 'translate-y-0'
       }`}
     >
       <div className="relative flex size-[180px] items-center justify-center">
-        {/* 8 radial burst lines flaring outward in Stage 1 */}
+        {/* 8 crisp white radial burst lines flaring outward in Stage 1 */}
         <div className="animate-flywheel-burst pointer-events-none absolute inset-0">
           <RadialBurstLines size={180} />
         </div>
 
-        {/* 1px expanding shockwave ring in Stage 2 */}
+        {/* White 1px expanding shockwave ring in Stage 2 */}
         <span
           aria-hidden="true"
-          className="animate-flywheel-shockwave pointer-events-none absolute size-[120px] rounded-full border border-[#0A0B0E]/70 opacity-0"
+          className="animate-flywheel-shockwave pointer-events-none absolute size-[120px] rounded-full border border-[#FFFFFF]/75 opacity-0"
         />
 
-        {/* 120px Precision Settlement Wheel */}
+        {/* 120px Pure White Precision Settlement Wheel */}
         <div className="animate-flywheel-spin will-change-transform">
           <SettlementWheelSvg size={120} />
         </div>
@@ -254,11 +255,11 @@ export function KineticFlywheel() {
 
       {/* Stage 2 Detent Telemetry */}
       <div
-        className={`mt-6 flex items-center gap-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-[#0A0B0E] transition-opacity duration-200 ${
+        className={`mt-6 flex items-center gap-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.16em] text-[#F4F2EC] transition-opacity duration-200 ${
           locked ? 'opacity-100' : 'opacity-0'
         }`}
       >
-        <span className="inline-block size-2 rounded-full bg-[#C8FF00] ring-1 ring-[#0A0B0E]/40" />
+        <span className="inline-block size-2 rounded-full bg-[#FFFFFF]" />
         <span>ARC 5042002 // SETTLEMENT ENGINE READY</span>
       </div>
 
@@ -266,7 +267,7 @@ export function KineticFlywheel() {
       <button
         type="button"
         onClick={dismissNow}
-        className="fixed bottom-6 right-6 rounded-full border border-[#0A0B0E]/20 bg-[#F7F6F2] px-4 py-1.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.14em] text-[#0A0B0E]/75 transition-colors hover:border-[#0A0B0E] hover:text-[#0A0B0E]"
+        className="fixed bottom-6 right-6 rounded-full border border-[#F4F2EC]/25 bg-[#000000] px-4 py-1.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.14em] text-[#F4F2EC]/75 transition-colors hover:border-[#FFFFFF] hover:text-[#FFFFFF]"
       >
         SKIP →
       </button>
