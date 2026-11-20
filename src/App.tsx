@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { KineticFlywheel } from '@/components/KineticFlywheel'
 import { Gateway } from '@/site/Gateway'
 import { useAppRoute } from '@/lib/route'
 
@@ -32,41 +31,27 @@ export default function App() {
 
   if (route.view === 'pay' && route.escrowId) {
     return (
-      <>
-        <KineticFlywheel />
-        <Suspense fallback={<div className="min-h-screen bg-black" />}>
-          <PayCheckout escrowId={route.escrowId} />
-        </Suspense>
-      </>
+      <Suspense fallback={<div className="min-h-screen bg-black" />}>
+        <PayCheckout escrowId={route.escrowId} />
+      </Suspense>
     )
   }
 
   if (route.view === 'app') {
     return (
-      <>
-        <KineticFlywheel />
-        <Suspense fallback={<div className="min-h-screen bg-black" />}>
-          <EscrowApp />
-        </Suspense>
-      </>
+      <Suspense fallback={<div className="min-h-screen bg-black" />}>
+        <EscrowApp />
+      </Suspense>
     )
   }
 
   if (route.view === 'sdk') {
     return (
-      <>
-        <KineticFlywheel />
-        <Suspense fallback={<div className="min-h-screen bg-black" />}>
-          <SdkPortal />
-        </Suspense>
-      </>
+      <Suspense fallback={<div className="min-h-screen bg-black" />}>
+        <SdkPortal />
+      </Suspense>
     )
   }
 
-  return (
-    <>
-      <KineticFlywheel />
-      <Gateway />
-    </>
-  )
+  return <Gateway />
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ArrowUpRight, Menu, Plus, X } from 'lucide-react'
+import { InteractiveFlywheelEmblem } from '@/components/KineticFlywheel'
 import { PulseDot } from '@/components/ui'
 import { getApexUrl, getAppUrl, getSdkUrl, navigate } from '@/lib/route'
 
@@ -30,8 +31,8 @@ export function Header() {
       }`}
     >
       <div className="mx-auto flex h-full max-w-[1280px] items-center justify-between gap-6 px-6 lg:px-8">
-        {/* Left: Expanded Archivo Wordmark + Acid Lime Dot + Arc HUD tag */}
-        <div className="flex items-center gap-4">
+        {/* Left: Expanded Archivo Wordmark + Acid Lime Dot + 28px White Flywheel + Arc HUD tag */}
+        <div className="flex items-center gap-3.5">
           <a
             href={getApexUrl()}
             onClick={(e) => {
@@ -43,6 +44,7 @@ export function Header() {
           >
             DIPTOS<span className="ml-0.5 inline-block size-2 rounded-full bg-lime" />
           </a>
+          <InteractiveFlywheelEmblem size={28} ariaLabel="Spin Diptos header settlement wheel" />
           <span className="hidden items-center gap-2 rounded-full border border-paper/12 bg-surface px-3 py-1 font-mono text-[10.5px] uppercase tracking-[0.12em] text-secondary sm:inline-flex">
             <PulseDot color="bg-lime" />
             ARC TESTNET // 5042002
