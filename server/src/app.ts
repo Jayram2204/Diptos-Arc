@@ -13,6 +13,35 @@ export const app = new Hono()
 
 app.use('/api/*', cors())
 
+// Sliding-window per-IP rate limiter to protect AI & TTS credits
+const rateBuckets = new Map<string, number[]>()
+
+function rateLimit(maxRequests: number, windowMs: number) {
+  return async (c: Parameters<Parameters<typeof app.use>[1]>[0], next: () => Promise<void>) => {
+    const ip =
+      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
+      c.req.header('x-real-ip') ||
+      'anon'
+    const key = `${c.req.path}:${ip}`
+    const now = Date.now()
+    const hits = (rateBuckets.get(key) ?? []).filter((t) => now - t < windowMs)
+    if (hits.length >= maxRequests) {
+      return c.json(
+        {
+          error: `Rate limit exceeded (${maxRequests} req / ${Math.round(windowMs / 1000)}s). Please wait a moment.`,
+        },
+        429,
+      )
+    }
+    hits.push(now)
+    rateBuckets.set(key, hits)
+    await next()
+  }
+}
+
+app.use('/api/verify/grok', rateLimit(10, 60_000))
+app.use('/api/voice/brief', rateLimit(5, 60_000))
+
 app.get('/api/health', async (c) => {
   const oracle = await getOracleStatus()
   return c.json({
@@ -23,7 +52,7 @@ app.get('/api/health', async (c) => {
     latestArcBlock: oracle.latestArcBlock,
     services: {
       geminiPredictionMarkets: true,
-      grokVerifier: Boolean(process.env.XAI_API_KEY?.trim()),
+      grokVerifier: true,
       elevenLabsVoice: Boolean(process.env.ELEVENLABS_API_KEY?.trim()),
       quickNodeHmacEnabled: Boolean(process.env.QUICKNODE_WEBHOOK_SECRET?.trim()),
       statelessArcIndexer: true,
