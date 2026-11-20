@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { ArrowRight, ArrowUpRight, Check, Menu, Minus, ShieldCheck, X } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Check, Menu, Minus, X } from 'lucide-react'
 import { InteractiveFlywheelEmblem, KineticFlywheel } from '@/components/KineticFlywheel'
-import { useArcPulse, useGeminiRisk } from '@/lib/hooks'
 import { getAppUrl, getSdkUrl } from '@/lib/route'
 import { Architecture } from './Architecture'
 import { EscrowsGrid } from './EscrowsGrid'
@@ -66,12 +65,9 @@ const LIFECYCLE_STEPS = [
 ] as const
 
 export function LandingPage() {
-  const { data: gemini } = useGeminiRisk()
-  const pulse = useArcPulse(6000)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [burstCount, setBurstCount] = useState(0)
 
-  const liveLambda = gemini?.recommendedLambda ?? 0.35
   const appUrl = getAppUrl()
   const sdkUrl = getSdkUrl()
 
@@ -174,128 +170,58 @@ export function LandingPage() {
       </header>
 
       <main>
-        {/* BAND 2: Flagship Asymmetric Split Hero on Pitch Black (#000000) */}
+        {/* BAND 2: Flagship Hero on Pitch Black (#000000) */}
         <section id="top" className="mx-auto max-w-[1280px] px-5 pb-20 pt-14 sm:px-8 sm:pt-20">
-          <div className="grid items-start gap-12 lg:grid-cols-12 lg:gap-10">
-            {/* Left Column (7 cols) */}
-            <div className="lg:col-span-7">
-              <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-[#C8FF00]">
-                AUTONOMOUS SETTLEMENT &amp; PROOF-OF-WORK PROTOCOL ON ARC
-              </p>
+          <div className="max-w-[880px]">
+            <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-[#C8FF00]">
+              AUTONOMOUS SETTLEMENT &amp; PROOF-OF-WORK PROTOCOL ON ARC
+            </p>
 
-              <h1 className="rwa-display mt-5 break-normal text-[clamp(2.6rem,4.8vw,4.4rem)] leading-[1.03] tracking-[-0.03em] text-[#F4F2EC]">
-                Self-Pricing USDC Settlement for Modern Work &amp; AI Agents.
-              </h1>
+            <h1 className="rwa-display mt-5 break-normal text-[clamp(2.6rem,5.2vw,4.75rem)] leading-[1.03] tracking-[-0.03em] text-[#F4F2EC]">
+              Self-Pricing USDC Settlement for Modern Work &amp; AI Agents.
+            </h1>
 
-              <p className="mt-6 max-w-[600px] text-[16px] leading-[1.65] text-[#F4F2EC]/65 sm:text-[17px]">
-                Replace 15% middleman fees and binary disputes with cryptographic settlement links on Arc. Risk-priced
-                live by Gemini Prediction Markets, verified by Grok AI, and governed by continuous Time-Entropic
-                Collateral Decay.
-              </p>
+            <p className="mt-6 max-w-[640px] text-[16px] leading-[1.65] text-[#F4F2EC]/65 sm:text-[17px]">
+              Replace 15% middleman fees and binary disputes with cryptographic settlement links on Arc. Risk-priced
+              live by Gemini Prediction Markets, verified by Grok AI, and governed by continuous Time-Entropic
+              Collateral Decay.
+            </p>
 
-              {/* Twin Pill CTAs */}
-              <div className="mt-8 flex flex-wrap items-center gap-3">
-                <a
-                  href={appUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex h-12 items-center gap-2 rounded-full bg-[#C8FF00] px-6 font-mono text-[12px] font-semibold uppercase tracking-[0.12em] text-[#07080C] transition-colors hover:bg-[#d8ff4d]"
-                >
-                  Create Settlement Link <ArrowRight className="size-4" />
-                </a>
-                <a
-                  href={sdkUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex h-12 items-center gap-2 rounded-full border border-[#F4F2EC]/20 bg-[#0A0C12] px-6 font-mono text-[12px] font-medium uppercase tracking-[0.12em] text-[#F4F2EC] transition-colors hover:bg-white/[0.06]"
-                >
-                  Explore @diptos/sdk <ArrowUpRight className="size-4" />
-                </a>
-              </div>
-
-              {/* Interactive White Flywheel Burst Trigger Pill */}
-              <div className="mt-7 inline-flex items-center gap-3 rounded-full border border-[#F4F2EC]/12 bg-[#0A0C12] py-1.5 pl-2 pr-4">
-                <InteractiveFlywheelEmblem
-                  size={36}
-                  externalTrigger={burstCount}
-                  ariaLabel="Test settlement burst animation"
-                />
-                <button
-                  type="button"
-                  onClick={() => setBurstCount((c) => c + 1)}
-                  onDoubleClick={() => setBurstCount((c) => c + 1)}
-                  className="cursor-pointer text-left font-mono text-[11px] font-medium tracking-[0.04em] text-[#F4F2EC] hover:text-[#C8FF00]"
-                >
-                  Double-Tap / Click to Test Settlement Burst
-                </button>
-              </div>
+            {/* Twin Pill CTAs */}
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <a
+                href={appUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-12 items-center gap-2 rounded-full bg-[#C8FF00] px-6 font-mono text-[12px] font-semibold uppercase tracking-[0.12em] text-[#07080C] transition-colors hover:bg-[#d8ff4d]"
+              >
+                Create Settlement Link <ArrowRight className="size-4" />
+              </a>
+              <a
+                href={sdkUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-12 items-center gap-2 rounded-full border border-[#F4F2EC]/20 bg-[#0A0C12] px-6 font-mono text-[12px] font-medium uppercase tracking-[0.12em] text-[#F4F2EC] transition-colors hover:bg-white/[0.06]"
+              >
+                Explore @diptos/sdk <ArrowUpRight className="size-4" />
+              </a>
             </div>
 
-            {/* Right Column (5 cols): Live Protocol Proof Card on #111318 */}
-            <div className="lg:col-span-5 lg:pt-2">
-              <div className="rounded-2xl border border-[#F4F2EC]/10 bg-[#111318] p-6">
-                <div className="flex items-center justify-between border-b border-[#F4F2EC]/10 pb-4">
-                  <div>
-                    <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#F4F2EC]/65">
-                      LIVE ARC SETTLEMENT RECEIPT
-                    </p>
-                    <p className="mt-1 font-mono text-[13px] font-semibold text-[#F4F2EC]">
-                      DiptosEscrow.sol // 5042002
-                    </p>
-                  </div>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#10B981]/30 bg-[#10B981]/10 px-2.5 py-1 font-mono text-[10px] font-semibold text-[#10B981]">
-                    <ShieldCheck className="size-3.5" />
-                    ATOMIC DVP
-                  </span>
-                </div>
-
-                <dl className="mt-2 divide-y divide-[#F4F2EC]/10 font-mono text-[12.5px]">
-                  <div className="flex items-center justify-between py-3.5">
-                    <dt className="text-[#F4F2EC]/65">Principal Locked</dt>
-                    <dd className="font-semibold tabular-nums text-[#F4F2EC]">2,500.00 USDC</dd>
-                  </div>
-                  <div className="flex items-center justify-between py-3.5">
-                    <dt className="text-[#F4F2EC]/65">Gemini Live Risk λ</dt>
-                    <dd className="font-semibold tabular-nums text-[#F4F2EC]">
-                      {liveLambda.toFixed(3)}{' '}
-                      <span className="ml-1 rounded bg-[#C8FF00] px-1.5 py-0.5 text-[10px] font-bold text-[#07080C]">
-                        LIVE
-                      </span>
-                    </dd>
-                  </div>
-                  <div className="flex items-center justify-between py-3.5">
-                    <dt className="text-[#F4F2EC]/65">Grok AI Verification</dt>
-                    <dd className="font-semibold text-[#10B981]">EIP-712 Signed</dd>
-                  </div>
-                  <div className="flex items-center justify-between py-3.5">
-                    <dt className="text-[#F4F2EC]/65">Arc Finality</dt>
-                    <dd className="font-semibold tabular-nums text-[#F4F2EC]">
-                      &lt; 1.0s{' '}
-                      {pulse.blockNumber !== undefined && (
-                        <span className="text-[11px] font-normal text-[#F4F2EC]/65">
-                          (#{pulse.blockNumber.toLocaleString('en-US')})
-                        </span>
-                      )}
-                    </dd>
-                  </div>
-                  <div className="flex items-center justify-between py-3.5">
-                    <dt className="text-[#F4F2EC]/65">Settlement Split</dt>
-                    <dd className="font-semibold tabular-nums text-[#F4F2EC]">99.5% Payee / 0.5% Protocol</dd>
-                  </div>
-                </dl>
-
-                <div className="mt-4 flex items-center justify-between rounded-xl border border-[#F4F2EC]/10 bg-[#0A0C12] px-4 py-3 font-mono text-[11px]">
-                  <span className="text-[#F4F2EC]/65">
-                    TECD Curve: V₀·e^(−{liveLambda.toFixed(2)}·(Δt/T)^1.5)
-                  </span>
-                  <a
-                    href="#tecd-risk"
-                    className="font-semibold text-[#C8FF00] underline-offset-4 hover:underline"
-                  >
-                    Simulate ↓
-                  </a>
-                </div>
-              </div>
+            {/* Interactive White Flywheel Burst Trigger Pill */}
+            <div className="mt-7 inline-flex items-center gap-3 rounded-full border border-[#F4F2EC]/12 bg-[#0A0C12] py-1.5 pl-2 pr-4">
+              <InteractiveFlywheelEmblem
+                size={36}
+                externalTrigger={burstCount}
+                ariaLabel="Test settlement burst animation"
+              />
+              <button
+                type="button"
+                onClick={() => setBurstCount((c) => c + 1)}
+                onDoubleClick={() => setBurstCount((c) => c + 1)}
+                className="cursor-pointer text-left font-mono text-[11px] font-medium tracking-[0.04em] text-[#F4F2EC] hover:text-[#C8FF00]"
+              >
+                Double-Tap / Click to Test Settlement Burst
+              </button>
             </div>
           </div>
         </section>
