@@ -43,7 +43,7 @@
 | **Smart Contracts (`DiptosEscrow` + `DiptosRegistry`)** | **Demonstrated** (Foundry) / **Intended** (Live Arc Broadcast) | 15/15 unit & fuzz tests pass (`forge test -vvv`) | Broadcast `contracts/script/DeployArc.s.sol` with a funded Arc Testnet key and update `VITE_ESCROW_CONTRACT_ADDRESS` & `VITE_REGISTRY_CONTRACT_ADDRESS`. |
 | **Consumer Checkout & Live UI (`src/`)** | **Demonstrated** | `pnpm build:all` passes; Lenis smooth scroll, SVG TECD simulator, live Arc RPC telemetry | Requires live contract addresses and Vercel env vars for end-to-end mainnet-like settlement. |
 | **Stateless Serverless API (`server/` + `api/[[...route]].ts`)** | **Demonstrated** | Deployed on Vercel Functions; zero `fs.writeFileSync` state storage | Requires `XAI_API_KEY`, `GROK_ORACLE_PRIVATE_KEY`, `ELEVENLABS_API_KEY`, and `QUICKNODE_WEBHOOK_SECRET` in Vercel settings. |
-| **`@diptos/sdk` (`packages/sdk/`)** | **Demonstrated** (ESM + CJS + `.d.ts`) | `pnpm --filter @diptos/sdk build` (`tsup`) & `pack --dry-run` pass with `"files": ["dist", "README.md"]` and zero `workspace:*` leaks | Ready for npm publish when desired. |
+| **`@diptos/sdk` (`packages/sdk/`)** | **Demonstrated** (Published on npm: `@diptos/sdk@1.0.0`) | Live at `https://www.npmjs.com/package/@diptos/sdk` (`dist/index.js`, `dist/index.cjs`, `dist/index.d.ts` via `tsup`) | Installable via `pnpm add @diptos/sdk` or `npm install @diptos/sdk`. |
 | **Broader Commercial / Invoice Workflows** | **Potential** | N/A | Exploratory extension of canonical hash + TECD primitives; not built in this repo. |
 
 ---
@@ -106,7 +106,10 @@ pnpm build:all
 ## Durable Links
 
 - **GitHub Repository:** https://github.com/Jayram2204/Diptos-Arc
-- **Live Web App:** https://diptos.xyz (`app.diptos.xyz` · `sdk.diptos.xyz`)
+- **Live Gateway (`diptos.xyz`):** https://diptos.xyz (https://www.diptos.xyz)
+- **Live Escrow Terminal (`app.diptos.xyz`):** https://app.diptos.xyz
+- **Live SDK Portal (`sdk.diptos.xyz`):** https://sdk.diptos.xyz
+- **Published npm Package (`@diptos/sdk@1.0.0`):** https://www.npmjs.com/package/@diptos/sdk (`https://registry.npmjs.org/@diptos/sdk/-/sdk-1.0.0.tgz`)
 - **Verification & Evidence Log:** [docs/EVIDENCE.md](docs/EVIDENCE.md)
 - **TypeScript SDK Documentation:** [packages/sdk/README.md](packages/sdk/README.md)
 - **Arc Testnet Explorer:** https://testnet.arcscan.app

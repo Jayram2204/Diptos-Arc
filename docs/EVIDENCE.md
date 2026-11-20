@@ -84,8 +84,14 @@ LICENSE
 package.json
 README.md
 ```
-- `packages/sdk/package.json` contains zero `workspace:*` specifiers (`peerDependencies: { "viem": "^2.0.0" }`).
-- Built via `tsup` (`packages/sdk/tsup.config.ts`) emitting dual ESM (`dist/index.js`), CJS (`dist/index.cjs`), and TypeScript declarations (`dist/index.d.ts`, `dist/index.d.cts`) with `"files": ["dist", "README.md"]`.
+- `packages/sdk/package.json` contains zero `workspace:*` specifiers.
+- Built via `tsup` (`packages/sdk/tsup.config.ts`) emitting dual ESM (`dist/index.js`), CJS (`dist/index.cjs`), and TypeScript declarations (`dist/index.d.ts`, `dist/index.d.cts`) with `"files": ["dist", "README.md", "LICENSE"]`.
+- **Published Live on npm:** `@diptos/sdk@1.0.0` → https://www.npmjs.com/package/@diptos/sdk (tarball: `https://registry.npmjs.org/@diptos/sdk/-/sdk-1.0.0.tgz`).
+- **Verified Production Vercel Domains (`diptos-arc-protocol`):**
+  - https://diptos.xyz (`A` records `216.198.79.1`, `64.29.17.1`)
+  - https://www.diptos.xyz (`CNAME` `97620e9d782044d5.vercel-dns-017.com.`)
+  - https://app.diptos.xyz (`CNAME` `97620e9d782044d5.vercel-dns-017.com.`)
+  - https://sdk.diptos.xyz (`CNAME` `97620e9d782044d5.vercel-dns-017.com.`)
 
 ---
 
