@@ -33,15 +33,28 @@ contract DeployArc {
         escrow = new DiptosEscrow(oracleSigner, treasury, address(registry));
         registry.setEscrowContract(address(escrow));
 
-        // Seed 1 live Genesis Escrow (0.05 native USDC) on Arc Testnet so diptos.xyz renders live on-chain data immediately
-        if (deployer.balance >= 0.06 ether) {
-            bytes32 genesisId = keccak256(abi.encodePacked("diptos:arc:5042002:genesis-v1", address(escrow)));
-            escrow.createEscrowLink{value: 0.05 ether}(
-                genesisId,
+        // Seed 2 real initial on-chain escrows (0.02 USDC AI Agent Code Audit + 0.05 USDC Design System Sprint)
+        if (deployer.balance >= 0.08 ether) {
+            bytes32 agentAuditId = keccak256(
+                abi.encodePacked("diptos:arc:5042002:genesis-agent-audit", address(escrow))
+            );
+            escrow.createEscrowLink{value: 0.02 ether}(
+                agentAuditId,
                 genesisPayee,
                 block.timestamp + 24 hours,
-                3500,
+                3200,
                 true
+            );
+
+            bytes32 designSprintId = keccak256(
+                abi.encodePacked("diptos:arc:5042002:genesis-design-sprint", address(escrow))
+            );
+            escrow.createEscrowLink{value: 0.05 ether}(
+                designSprintId,
+                genesisPayee,
+                block.timestamp + 72 hours,
+                2500,
+                false
             );
         }
 

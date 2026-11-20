@@ -1,0 +1,43 @@
+name: Publish @diptos/sdk to npm
+
+on:
+  push:
+    tags:
+      - 'v*'
+    paths:
+      - 'packages/sdk/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build @diptos/sdk (ESM + CJS + DTS)
+        run: pnpm --filter @diptos/sdk build
+
+      - name: Publish @diptos/sdk to npm with provenance
+        run: pnpm --filter @diptos/sdk publish --access public --no-git-checks --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

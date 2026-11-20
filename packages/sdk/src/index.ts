@@ -18,8 +18,17 @@ import {
   type WalletClient,
 } from 'viem'
 
-export const ARC_RPC_PRIMARY = 'https://rpc.testnet.arc.io'
+export const ARC_RPC_PRIMARY = 'https://rpc.testnet.arc.network'
 export const ARC_RPC_FALLBACK = 'https://rpc.solidrpc.io/public/evm/5042002'
+
+export const ARC_TESTNET_CONFIG = {
+  chainId: 5042002,
+  rpcUrl: ARC_RPC_PRIMARY,
+  fallbackRpcUrl: ARC_RPC_FALLBACK,
+  explorerUrl: 'https://testnet.arcscan.app',
+  nativeDecimals: 18,
+  erc20UsdcDecimals: 6,
+} as const
 
 export const ARC_TESTNET: Chain = defineChain({
   id: 5042002,
@@ -29,7 +38,7 @@ export const ARC_TESTNET: Chain = defineChain({
     default: { http: [ARC_RPC_PRIMARY, ARC_RPC_FALLBACK] },
   },
   blockExplorers: {
-    default: { name: 'Arc Explorer', url: 'https://explorer.testnet.arc.io' },
+    default: { name: 'ArcScan', url: 'https://testnet.arcscan.app' },
   },
   testnet: true,
 })
@@ -699,6 +708,11 @@ export class DiptosClient {
     return { txHash, blockNumber: receipt.blockNumber }
   }
 }
+
+export type TECDResult = CalculateTECDResult
+export type GeminiRiskResponse = GeminiRiskResult
+export type GrokAuditResponse = GrokMilestoneReceipt
+export type ArcTelemetry = ArcTelemetryResult
 
 export function createDiptosClient(config?: DiptosClientConfig): DiptosClient {
   return new DiptosClient(config)

@@ -1,33 +1,42 @@
 import { useEffect, useMemo, useState } from 'react'
-import { RefreshCw, TrendingUp } from 'lucide-react'
-import { Button, Eyebrow, Reveal } from '@/components/ui'
+import { RefreshCw } from 'lucide-react'
+import { formatEther, parseUnits } from 'viem'
 import { fmtAmount } from '@/lib/chain'
 import { useGeminiRisk } from '@/lib/hooks'
-import { diptos, type OnChainTECDPreview } from '@/lib/sdk'
+import { diptos } from '@/lib/sdk'
+
+interface TECDDisplay {
+  payeePayoutUsdc: number
+  buyerRebateUsdc: number
+  protocolFeeUsdc: number
+  decayPercent: number
+  source: 'arc-eth-call' | 'sdk-wad'
+}
 
 export function Waterfall() {
   const { data: gemini, loading: geminiLoading, error: geminiError, refresh: refreshGemini } = useGeminiRisk()
 
   const [amountUsdc, setAmountUsdc] = useState(5000)
   const [slaWindowHours, setSlaWindowHours] = useState(24)
-  const [delayHours, setDelayHours] = useState(14)
+  const [delayHours, setDelayHours] = useState(12)
   const [manualLambda, setManualLambda] = useState<number | null>(null)
 
   const effectiveLambda = manualLambda ?? gemini?.recommendedLambda ?? 0.35
 
-  const [result, setResult] = useState<OnChainTECDPreview>(() => {
-    const init = diptos.calculateTECD({
+  const [result, setResult] = useState<TECDDisplay>(() => {
+    const local = diptos.calculateTECD({
       principalUsdc: 5000,
       lambda: 0.35,
-      delaySeconds: 14 * 3600,
+      delaySeconds: 12 * 3600,
       totalDurationSeconds: 24 * 3600,
+      gamma: 1.5,
     })
     return {
-      payeePayoutUsdc: init.payeePayoutUsdc,
-      buyerRebateUsdc: init.buyerRebateUsdc,
-      protocolFeeUsdc: init.protocolFeeUsdc,
-      decayPercent: init.decayPercent,
-      source: 'sdk-wad-fallback',
+      payeePayoutUsdc: local.payeePayoutUsdc,
+      buyerRebateUsdc: local.buyerRebateUsdc,
+      protocolFeeUsdc: local.protocolFeeUsdc,
+      decayPercent: local.decayPercent,
+      source: 'sdk-wad',
     }
   })
 
@@ -38,25 +47,38 @@ export function Waterfall() {
       lambda: effectiveLambda,
       delaySeconds: delayHours * 3600,
       totalDurationSeconds: slaWindowHours * 3600,
+      gamma: 1.5,
     })
     setResult({
       payeePayoutUsdc: immediate.payeePayoutUsdc,
       buyerRebateUsdc: immediate.buyerRebateUsdc,
       protocolFeeUsdc: immediate.protocolFeeUsdc,
       decayPercent: immediate.decayPercent,
-      source: 'sdk-wad-fallback',
+      source: 'sdk-wad',
     })
 
     const timer = setTimeout(() => {
+      if (amountUsdc <= 0) return
+      const nowSec = Math.floor(Date.now() / 1000)
+      const deadlineUnix = BigInt(nowSec + Math.max(60, Math.round(slaWindowHours * 3600)))
+      const simulatedTimestamp = deadlineUnix + BigInt(Math.max(0, Math.round(delayHours * 3600)))
+
       diptos
-        .previewTECDOnChain({
-          principalUsdc: amountUsdc,
-          slaWindowSeconds: slaWindowHours * 3600,
-          delaySeconds: delayHours * 3600,
-          lambda: effectiveLambda,
+        .previewTECDPayoutOnChain({
+          amountWei: parseUnits(String(amountUsdc), 18),
+          deadlineUnix,
+          simulatedTimestamp,
+          lambdaBps: BigInt(Math.round(effectiveLambda * 10_000)),
         })
         .then((onChain) => {
-          if (alive) setResult(onChain)
+          if (!alive) return
+          setResult({
+            payeePayoutUsdc: Number(formatEther(onChain.payeePayout)),
+            buyerRebateUsdc: Number(formatEther(onChain.payerRebate)),
+            protocolFeeUsdc: Number(formatEther(onChain.protocolFee)),
+            decayPercent: Number(onChain.decayBps) / 100,
+            source: 'arc-eth-call',
+          })
         })
         .catch(() => {})
     }, 150)
@@ -67,264 +89,223 @@ export function Waterfall() {
     }
   }, [amountUsdc, delayHours, slaWindowHours, effectiveLambda])
 
-  // Build smooth SVG exponential decay path over 0h -> 72h
-  const svgCurve = useMemo(() => {
-    const W = 560
-    const H = 190
-    const padX = 16
-    const padY = 18
-    const plotW = W - padX * 2
-    const plotH = H - padY * 2
-
+  // Acid Lime SVG decay curve coordinates (0h to 72h)
+  const curve = useMemo(() => {
+    const w = 520
+    const h = 136
+    const padX = 12
+    const padY = 14
     const pts: string[] = []
-    for (let h = 0; h <= 72; h += 2) {
-      const r = h === 0 ? 1 : Math.exp(-effectiveLambda * Math.pow(h / Math.max(1, slaWindowHours), 1.5))
-      const x = padX + (h / 72) * plotW
-      const y = padY + (1 - r) * plotH
-      pts.push(`${h === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`)
+    for (let hr = 0; hr <= 72; hr += 2) {
+      const r = diptos.calculateTECD({
+        principalUsdc: 100,
+        lambda: effectiveLambda,
+        delaySeconds: hr * 3600,
+        totalDurationSeconds: slaWindowHours * 3600,
+        gamma: 1.5,
+      })
+      const x = padX + (hr / 72) * (w - padX * 2)
+      const y = padY + (1 - r.retentionRatio) * (h - padY * 2)
+      pts.push(`${x.toFixed(1)},${y.toFixed(1)}`)
     }
-    const linePath = pts.join(' ')
-    const areaPath = `${linePath} L ${(padX + plotW).toFixed(1)} ${(padY + plotH).toFixed(1)} L ${padX} ${(padY + plotH).toFixed(1)} Z`
-
-    const activeRatio =
-      delayHours === 0 ? 1 : Math.exp(-effectiveLambda * Math.pow(delayHours / Math.max(1, slaWindowHours), 1.5))
-    const markerX = padX + (delayHours / 72) * plotW
-    const markerY = padY + (1 - activeRatio) * plotH
-
-    return { W, H, linePath, areaPath, markerX, markerY }
+    const curRatio = diptos.calculateTECD({
+      principalUsdc: 100,
+      lambda: effectiveLambda,
+      delaySeconds: delayHours * 3600,
+      totalDurationSeconds: slaWindowHours * 3600,
+      gamma: 1.5,
+    }).retentionRatio
+    const dotX = padX + (delayHours / 72) * (w - padX * 2)
+    const dotY = padY + (1 - curRatio) * (h - padY * 2)
+    return { w, h, path: `M ${pts.join(' L ')}`, dotX, dotY }
   }, [effectiveLambda, slaWindowHours, delayHours])
 
   return (
-    <section id="tecd-risk" className="border-t border-paper/10 bg-black py-28 lg:py-36">
-      <div className="mx-auto max-w-[1380px] px-6 lg:px-10">
-        <Reveal className="max-w-2xl">
-          <Eyebrow>03 // TECD &amp; MACRO RISK STUDIO</Eyebrow>
-          <h2 className="rwa-display mt-4 text-[clamp(2rem,4vw,3.4rem)] uppercase text-paper">
-            EXPONENTIAL SLA DECAY CALIBRATED BY GEMINI.
-          </h2>
-          <p className="mt-4 text-[16px] leading-relaxed text-secondary">
-            Drag the delay slider to inspect real-time Solidity WAD math via{' '}
-            <code className="font-mono text-paper">DiptosEscrow.previewTECDPayout</code> while live Gemini Prediction
-            Markets probabilities tune <code className="font-mono text-lime">λ</code>.
-          </p>
-        </Reveal>
+    <section id="tecd-risk" className="mx-auto max-w-[1280px] border-t border-paper/12 px-6 py-20 lg:px-8">
+      <div className="max-w-2xl">
+        <p className="rwa-hud text-lime">03 // TECD RISK &amp; GEMINI ORACLE</p>
+        <h2 className="rwa-display mt-3 text-[28px] text-paper sm:text-[38px]">
+          EXPONENTIAL LATENCY DECAY. LIVE MACRO CALIBRATION.
+        </h2>
+      </div>
 
-        <div className="mt-14 grid gap-6 lg:grid-cols-12">
-          {/* Left 7 cols: Morphing SVG TECD Curve Studio */}
-          <Reveal className="rounded-2xl border border-paper/10 bg-surface p-8 lg:col-span-7">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-paper/10 pb-5">
-              <div>
-                <p className="rwa-hud text-lime">
-                  {result.source === 'arc-eth-call' ? 'LIVE ARC ETH_CALL' : 'SOLIDITY WAD CURVE'}
-                </p>
-                <h3 className="rwa-display mt-1.5 text-[22px] text-paper">
-                  V(t) = V₀ · e^(−{effectiveLambda.toFixed(2)} · ({delayHours}/{slaWindowHours})^1.5)
-                </h3>
-              </div>
-              <span
-                className={`rounded-full border px-3.5 py-1 font-mono text-[10.5px] uppercase tracking-[0.12em] ${
-                  delayHours === 0
-                    ? 'border-emerald/35 bg-emerald/10 text-emerald'
-                    : 'border-lime/40 bg-lime/10 text-lime'
-                }`}
-              >
-                {delayHours === 0 ? 'ON-TIME · 0% DECAY' : `LATE +${delayHours}H · -${result.decayPercent.toFixed(1)}%`}
-              </span>
-            </div>
-
-            {/* Morphing SVG Curve */}
-            <div className="mt-6 overflow-hidden rounded-xl border border-paper/10 bg-black p-4">
-              <svg viewBox={`0 0 ${svgCurve.W} ${svgCurve.H}`} className="h-44 w-full">
-                <defs>
-                  <linearGradient id="tecdFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#C8FF00" stopOpacity="0.24" />
-                    <stop offset="100%" stopColor="#C8FF00" stopOpacity="0.01" />
-                  </linearGradient>
-                </defs>
-                {/* Reference grid lines */}
-                <line x1="16" y1="18" x2="544" y2="18" stroke="rgba(244,242,236,0.08)" strokeDasharray="3 4" />
-                <line x1="16" y1="95" x2="544" y2="95" stroke="rgba(244,242,236,0.08)" strokeDasharray="3 4" />
-                <line x1="16" y1="172" x2="544" y2="172" stroke="rgba(244,242,236,0.12)" />
-                {/* Decay area + Acid Lime stroke */}
-                <path d={svgCurve.areaPath} fill="url(#tecdFill)" />
-                <path
-                  d={svgCurve.linePath}
-                  fill="none"
-                  stroke="#C8FF00"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                />
-                {/* Active marker */}
-                <line
-                  x1={svgCurve.markerX}
-                  y1={svgCurve.markerY}
-                  x2={svgCurve.markerX}
-                  y2={172}
-                  stroke="rgba(200,255,0,0.4)"
-                  strokeDasharray="2 3"
-                />
-                <circle cx={svgCurve.markerX} cy={svgCurve.markerY} r="6" fill="#C8FF00" />
-                <circle cx={svgCurve.markerX} cy={svgCurve.markerY} r="11" fill="#C8FF00" fillOpacity="0.2" />
-              </svg>
-            </div>
-
-            {/* Delivery Delay Slider */}
-            <div className="mt-6">
-              <div className="flex items-baseline justify-between font-mono text-[11.5px] uppercase tracking-[0.1em]">
-                <span className="text-secondary">DELIVERY DELAY SLIDER (0H → 72H)</span>
-                <span className="text-[15px] font-semibold text-lime">+{delayHours}H</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={72}
-                step={1}
-                value={delayHours}
-                onChange={(e) => setDelayHours(Number(e.target.value))}
-                aria-label="Delivery delay in hours"
-                className="mt-3 w-full cursor-pointer"
-              />
-              <div className="mt-1 flex justify-between font-mono text-[10px] text-secondary">
-                <span>0H (ON-TIME)</span>
-                <span>24H</span>
-                <span>48H</span>
-                <span>72H</span>
-              </div>
-            </div>
-
-            {/* Inputs */}
-            <div className="mt-6 grid grid-cols-3 gap-3">
-              <label className="block">
-                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-secondary">USDC</span>
-                <input
-                  type="number"
-                  min={10}
-                  value={amountUsdc}
-                  onChange={(e) => setAmountUsdc(Math.max(1, Number(e.target.value) || 0))}
-                  className="mt-1.5 h-10 w-full rounded-xl border border-paper/15 bg-black px-3 font-mono text-[13px] text-paper outline-none focus:border-lime"
-                />
-              </label>
-              <label className="block">
-                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-secondary">SLA (HRS)</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={720}
-                  value={slaWindowHours}
-                  onChange={(e) => setSlaWindowHours(Math.max(1, Number(e.target.value) || 1))}
-                  className="mt-1.5 h-10 w-full rounded-xl border border-paper/15 bg-black px-3 font-mono text-[13px] text-paper outline-none focus:border-lime"
-                />
-              </label>
-              <label className="block">
-                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-secondary">LAMBDA λ</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min={0.05}
-                  max={2}
-                  value={effectiveLambda}
-                  onChange={(e) => setManualLambda(Math.max(0.05, Math.min(2, Number(e.target.value) || 0.05)))}
-                  className="mt-1.5 h-10 w-full rounded-xl border border-paper/15 bg-black px-3 font-mono text-[13px] text-lime outline-none focus:border-lime"
-                />
-              </label>
-            </div>
-
-            {/* Payout Breakdown */}
-            <div className="mt-7 grid grid-cols-3 gap-3 border-t border-paper/10 pt-6 font-mono">
-              <div>
-                <span className="block text-[10px] uppercase tracking-[0.12em] text-secondary">PAYEE PAYOUT</span>
-                <span className="mt-1 block text-[20px] font-semibold tabular-nums text-emerald">
-                  ${fmtAmount(result.payeePayoutUsdc)}
-                </span>
-              </div>
-              <div>
-                <span className="block text-[10px] uppercase tracking-[0.12em] text-secondary">BUYER REBATE</span>
-                <span className="mt-1 block text-[20px] font-semibold tabular-nums text-lime">
-                  ${fmtAmount(result.buyerRebateUsdc)}
-                </span>
-              </div>
-              <div>
-                <span className="block text-[10px] uppercase tracking-[0.12em] text-secondary">FEE (0.5%)</span>
-                <span className="mt-1 block text-[20px] font-semibold tabular-nums text-paper">
-                  ${fmtAmount(result.protocolFeeUsdc)}
-                </span>
-              </div>
-            </div>
-          </Reveal>
-
-          {/* Right 5 cols: Live Gemini Prediction Markets Risk Oracle */}
-          <Reveal delayMs={100} className="rwa-depth-card flex flex-col justify-between rounded-2xl p-8 lg:col-span-5">
-            <div>
-              <div className="flex items-start justify-between gap-3 border-b border-paper/10 pb-5">
-                <div>
-                  <p className="rwa-hud inline-flex items-center gap-1.5 text-lime">
-                    <TrendingUp className="size-3.5" /> GEMINI PREDICTION MARKETS
-                  </p>
-                  <h3 className="rwa-display mt-1.5 text-[22px] text-paper">Live Macro Risk Oracle</h3>
-                </div>
-                <Button size="sm" variant="secondary" loading={geminiLoading} onClick={() => void refreshGemini()}>
-                  {!geminiLoading && <RefreshCw className="size-3.5" />} SYNC
-                </Button>
-              </div>
-
-              {gemini ? (
-                <>
-                  <div className="mt-6 grid grid-cols-2 gap-4 border-b border-paper/10 pb-6 font-mono">
-                    <div>
-                      <span className="block text-[10px] uppercase tracking-[0.12em] text-secondary">
-                        VOLATILITY INDEX
-                      </span>
-                      <span className="mt-1 block text-[26px] font-semibold tabular-nums text-paper">
-                        {(gemini.volatilityIndex * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[10px] uppercase tracking-[0.12em] text-secondary">
-                        CALIBRATED λ
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setManualLambda(null)}
-                        className="mt-1 block text-left text-[26px] font-semibold tabular-nums text-lime hover:underline"
-                      >
-                        {gemini.recommendedLambda.toFixed(2)}
-                      </button>
-                    </div>
-                  </div>
-
-                  <ul className="mt-5 divide-y divide-paper/10">
-                    {gemini.contracts.slice(0, 5).map((c) => (
-                      <li key={c.instrumentSymbol} className="flex items-center justify-between gap-3 py-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-[13px] font-medium text-paper">{c.title}</p>
-                          <p className="font-mono text-[10px] uppercase tracking-[0.1em] text-secondary">
-                            {c.instrumentSymbol}
-                          </p>
-                        </div>
-                        <span className="shrink-0 rounded-full border border-emerald/35 bg-emerald/10 px-3 py-1 font-mono text-[10.5px] font-medium tabular-nums text-emerald">
-                          YES {Math.round(c.yesProbability * 100)}%
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : geminiError ? (
-                <div className="mt-6 rounded-xl border border-crimson/35 bg-crimson/10 p-4 font-mono text-[12px] text-crimson">
-                  Gemini feed unreachable ({geminiError}). Manual λ tuning remains active.
-                </div>
-              ) : (
-                <div className="mt-6 space-y-3">
-                  {[0, 1, 2, 3].map((i) => (
-                    <div key={i} className="h-12 animate-pulse rounded-xl bg-black/60" />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <p className="mt-6 border-t border-paper/10 pt-4 font-mono text-[10.5px] uppercase tracking-[0.1em] text-secondary">
-              SOURCE: API.GEMINI.COM/V1/PREDICTION-MARKETS/EVENTS
+      {/* Card-light 12-column split directly on #000000 canvas with single 1px vertical hairline divider */}
+      <div className="mt-12 grid gap-10 border-t border-paper/10 pt-10 lg:grid-cols-12 lg:gap-0">
+        {/* Left (7 cols): Acid Lime SVG Decay Curve + 0h->72h Slider */}
+        <div className="lg:col-span-7 lg:border-r lg:border-paper/10 lg:pr-10">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-secondary">
+              V(t) = V₀ · e^(−{effectiveLambda.toFixed(3)} · ({delayHours}/{slaWindowHours})^1.5)
             </p>
-          </Reveal>
+            <span
+              className={`font-mono text-[11px] uppercase tracking-[0.12em] ${
+                delayHours === 0 ? 'text-emerald' : 'text-crimson'
+              }`}
+            >
+              {delayHours === 0 ? 'ON-TIME // 0% DECAY' : `LATE +${delayHours}H // -${result.decayPercent.toFixed(1)}%`}
+            </span>
+          </div>
+
+          {/* Acid Lime SVG Decay Curve */}
+          <div className="mt-5 border-y border-paper/10 py-4">
+            <svg viewBox={`0 0 ${curve.w} ${curve.h}`} className="h-[136px] w-full" aria-label="TECD Decay Curve">
+              <line x1="12" y1="14" x2="508" y2="14" stroke="rgba(244,242,236,0.08)" strokeDasharray="3 4" />
+              <line x1="12" y1="68" x2="508" y2="68" stroke="rgba(244,242,236,0.08)" strokeDasharray="3 4" />
+              <line x1="12" y1="122" x2="508" y2="122" stroke="rgba(244,242,236,0.12)" />
+              <path d={curve.path} fill="none" stroke="#C8FF00" strokeWidth="2.2" />
+              <line
+                x1={curve.dotX}
+                y1={curve.dotY}
+                x2={curve.dotX}
+                y2="122"
+                stroke="rgba(200,255,0,0.35)"
+                strokeDasharray="2 3"
+              />
+              <circle cx={curve.dotX} cy={curve.dotY} r="5" fill="#C8FF00" />
+            </svg>
+          </div>
+
+          {/* Compact Inputs + Delay Slider */}
+          <div className="mt-6 grid grid-cols-3 gap-4">
+            <label className="block">
+              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-secondary">PRINCIPAL (USDC)</span>
+              <input
+                type="number"
+                min={1}
+                value={amountUsdc}
+                onChange={(e) => setAmountUsdc(Math.max(1, Number(e.target.value) || 0))}
+                className="mt-1.5 h-9 w-full border-b border-paper/20 bg-transparent font-mono text-[14px] text-paper outline-none focus:border-lime"
+              />
+            </label>
+            <label className="block">
+              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-secondary">SLA WINDOW (H)</span>
+              <input
+                type="number"
+                min={1}
+                max={720}
+                value={slaWindowHours}
+                onChange={(e) => setSlaWindowHours(Math.max(1, Number(e.target.value) || 1))}
+                className="mt-1.5 h-9 w-full border-b border-paper/20 bg-transparent font-mono text-[14px] text-paper outline-none focus:border-lime"
+              />
+            </label>
+            <label className="block">
+              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-secondary">
+                LAMBDA λ {manualLambda === null && gemini ? '(LIVE)' : ''}
+              </span>
+              <input
+                type="number"
+                step="0.01"
+                min={0.05}
+                max={2}
+                value={Number(effectiveLambda.toFixed(3))}
+                onChange={(e) => setManualLambda(Math.max(0.05, Math.min(2, Number(e.target.value) || 0.05)))}
+                className="mt-1.5 h-9 w-full border-b border-paper/20 bg-transparent font-mono text-[14px] text-lime outline-none focus:border-lime"
+              />
+            </label>
+          </div>
+
+          <div className="mt-6">
+            <div className="flex items-baseline justify-between font-mono text-[11px] uppercase tracking-[0.1em]">
+              <span className="text-secondary">DELIVERY DELAY (0H → 72H)</span>
+              <span className="text-lime">{delayHours} HOURS LATE</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={72}
+              step={1}
+              value={delayHours}
+              onChange={(e) => setDelayHours(Number(e.target.value))}
+              aria-label="Delivery delay in hours"
+              className="mt-3 w-full cursor-pointer"
+            />
+          </div>
+
+          <div className="mt-6 grid grid-cols-3 gap-4 border-t border-paper/10 pt-5 font-mono">
+            <div>
+              <p className="text-[10px] uppercase text-secondary">PAYEE PAYOUT</p>
+              <p className="mt-1 text-[18px] font-semibold text-emerald">{fmtAmount(result.payeePayoutUsdc)} USDC</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-secondary">BUYER REBATE</p>
+              <p className="mt-1 text-[18px] font-semibold text-crimson">{fmtAmount(result.buyerRebateUsdc)} USDC</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase text-secondary">FEE (0.5%)</p>
+              <p className="mt-1 text-[18px] font-semibold text-paper">{fmtAmount(result.protocolFeeUsdc)} USDC</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Right (5 cols): Live Gemini Prediction Markets Probability Rows */}
+        <div className="flex flex-col justify-between lg:col-span-5 lg:pl-10">
+          <div>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-lime">
+                  GEMINI PREDICTION MARKETS
+                </p>
+                <p className="mt-0.5 font-mono text-[11px] text-secondary">GET /api/risk/gemini</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void refreshGemini()}
+                disabled={geminiLoading}
+                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-paper/15 px-3 font-mono text-[10.5px] uppercase tracking-[0.1em] text-secondary hover:border-lime hover:text-lime"
+              >
+                <RefreshCw className={`size-3 ${geminiLoading ? 'animate-spin' : ''}`} />
+                SYNC
+              </button>
+            </div>
+
+            {gemini ? (
+              <>
+                <div className="mt-5 grid grid-cols-2 gap-4 border-y border-paper/10 py-4 font-mono">
+                  <div>
+                    <p className="text-[10px] uppercase text-secondary">VOLATILITY INDEX</p>
+                    <p className="mt-1 text-[22px] font-semibold text-paper">{gemini.volatilityIndex.toFixed(3)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase text-secondary">CALIBRATED λ</p>
+                    <p className="mt-1 text-[22px] font-semibold text-lime">{gemini.recommendedLambda.toFixed(3)}</p>
+                  </div>
+                </div>
+
+                <ul className="mt-3 divide-y divide-paper/10">
+                  {gemini.contracts.slice(0, 5).map((c) => (
+                    <li key={c.instrumentSymbol} className="flex items-center justify-between gap-3 py-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-medium text-paper">{c.title}</p>
+                        <p className="font-mono text-[10px] text-secondary">{c.instrumentSymbol}</p>
+                      </div>
+                      <span className="shrink-0 font-mono text-[12px] font-semibold text-lime">
+                        YES {Math.round(c.yesProbability * 100)}%
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : geminiError ? (
+              <p className="mt-6 font-mono text-[12px] text-crimson">
+                Gemini Prediction Markets feed unavailable ({geminiError}).
+              </p>
+            ) : (
+              <p className="mt-6 font-mono text-[12px] text-secondary">Syncing active Gemini contracts…</p>
+            )}
+          </div>
+
+          {gemini && (
+            <div className="mt-6 flex items-center justify-between border-t border-paper/10 pt-4 font-mono text-[10.5px]">
+              <span className="text-secondary">UPDATED {new Date(gemini.fetchedAt).toLocaleTimeString()}</span>
+              <button
+                type="button"
+                onClick={() => setManualLambda(null)}
+                className="text-lime underline-offset-4 hover:underline"
+              >
+                USE LIVE λ = {gemini.recommendedLambda.toFixed(3)}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </section>

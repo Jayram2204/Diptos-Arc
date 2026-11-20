@@ -24,7 +24,7 @@ import { Button, CopyButton, Field, inputCls, PulseDot } from '@/components/ui'
 import { fetchVoiceBriefAudio } from '@/lib/api'
 import { explorerUrl, fmtAmount, shortHex } from '@/lib/chain'
 import { useProtocolEvents } from '@/lib/hooks'
-import { navigate } from '@/lib/route'
+import { getAppUrl, navigate } from '@/lib/route'
 import { diptos, type EscrowMode, type EscrowRecord, type GrokMilestoneReceipt } from '@/lib/sdk'
 import { useWallet, WalletProvider } from './wallet'
 
@@ -356,11 +356,11 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => navigate('/')}
+              onClick={() => navigate(getAppUrl())}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/[0.08] bg-surface px-2.5 font-mono text-[11px] text-secondary transition-colors hover:border-white/[0.18] hover:text-primary"
             >
               <ArrowLeft className="size-3.5" />
-              <span className="hidden sm:inline">diptos.xyz</span>
+              <span className="hidden sm:inline">app.diptos.xyz</span>
             </button>
             <Wordmark />
             <span className="hidden items-center gap-2 rounded-md border border-white/[0.08] bg-surface px-2.5 py-1 font-mono text-[11px] text-primary md:inline-flex">
