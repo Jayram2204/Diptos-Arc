@@ -115,7 +115,7 @@ for (const c of risk.contracts) {
     code: `const audit = await diptos.verifyDeliverableWithGrok({
   escrowId: escrow.escrowIdBytes32,
   scope: escrow.scope,
-  deliverableUrl: 'https://github.com/Jayram2204/diptos-arc-protocol/pull/1',
+  deliverableUrl: 'https://github.com/Jayram2204/Diptos-Arc/pull/1',
 })
 
 if (audit.approved && audit.eip712Signature) {

@@ -59,7 +59,7 @@ const { escrow } = await diptos.createEscrowLink({
   amountUsdc: 0.05, deadlineHours: 24, mode: 'agent', tecdLambda: risk.recommendedLambda,
 })
 const fundTx = diptos.buildCreateEscrowTx({ escrowId: escrow.escrowIdBytes32, payee: escrow.payee, amountUsdc: 0.05, deadlineUnix: escrow.deadlineUnix, lambdaBps: escrow.tecdLambdaBps, isAgentMode: true })
-const audit = await diptos.verifyDeliverableWithGrok({ escrowId: escrow.escrowIdBytes32, scope: escrow.scope, deliverableUrl: 'https://github.com/Jayram2204/diptos-arc-protocol/pull/1' })
+const audit = await diptos.verifyDeliverableWithGrok({ escrowId: escrow.escrowIdBytes32, scope: escrow.scope, deliverableUrl: 'https://github.com/Jayram2204/Diptos-Arc/pull/1' })
 if (audit.approved && audit.eip712Signature) {
   await diptos.settleEscrowOnArc({ escrowId: escrow.escrowIdBytes32, deliverableHash: audit.deliverableHash, nonce: audit.nonce ?? 0, grokSignature: audit.eip712Signature, walletClient })
 }

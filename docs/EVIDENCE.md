@@ -1,5 +1,7 @@
 # Diptos Protocol — Verification & Evidence Log
 
+Repository: https://github.com/Jayram2204/Diptos-Arc
+
 This document records reproducible build, test, and architectural evidence for **Diptos** on **Arc Testnet (`Chain ID: 5042002`)**.
 
 ---

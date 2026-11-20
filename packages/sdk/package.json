@@ -1,8 +1,31 @@
 {
   "name": "@diptos/sdk",
   "version": "1.0.0",
-  "description": "TypeScript SDK for Diptos programmable USDC escrow links and autonomous AI agent payment guardrails on Arc Testnet (5042002).",
+  "description": "Programmable USDC escrow links, Time-Entropic Collateral Decay (TECD) math, Grok AI deliverable auditing, and Gemini Prediction Markets risk pricing SDK for Arc Testnet (Chain ID 5042002).",
+  "license": "MIT",
   "type": "module",
+  "homepage": "https://diptos.xyz",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jayram2204/Diptos-Arc.git",
+    "directory": "packages/sdk"
+  },
+  "keywords": [
+    "diptos",
+    "arc",
+    "usdc",
+    "escrow",
+    "ai-agents",
+    "web3",
+    "viem",
+    "tecd",
+    "gemini-prediction-markets",
+    "grok"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -15,12 +38,17 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
-    "build": "tsup"
+    "build": "tsup",
+    "prepublishOnly": "pnpm build"
   },
-  "peerDependencies": {
-    "viem": "^2.0.0"
+  "dependencies": {
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1"
   }
 }

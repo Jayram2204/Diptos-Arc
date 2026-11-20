@@ -105,11 +105,11 @@ pnpm build:all
 
 ## Durable Links
 
-- **Live Web App:** https://diptos.xyz
+- **GitHub Repository:** https://github.com/Jayram2204/Diptos-Arc
+- **Live Web App:** https://diptos.xyz (`app.diptos.xyz` · `sdk.diptos.xyz`)
 - **Verification & Evidence Log:** [docs/EVIDENCE.md](docs/EVIDENCE.md)
 - **TypeScript SDK Documentation:** [packages/sdk/README.md](packages/sdk/README.md)
 - **Arc Testnet Explorer:** https://testnet.arcscan.app
-- **ArcUSDC Precompile:** https://testnet.arcscan.app/address/0x3600000000000000000000000000000000000000
 
 ---
 
