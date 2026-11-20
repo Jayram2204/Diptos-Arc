@@ -183,36 +183,33 @@ export function Architecture() {
   ]
 
   return (
-    <section id="architecture" className="mx-auto max-w-[1320px] border-t border-white/[0.08] px-6 py-20 lg:px-8">
+    <section id="architecture" className="mx-auto max-w-[1280px] border-t border-paper/12 px-6 py-20 lg:px-8">
       <div className="max-w-2xl">
-        <p className="rwa-hud text-secondary">02 // PROTOCOL STACK</p>
-        <h2 className="rwa-display mt-3 text-[28px] text-[#F4F2EC] sm:text-[38px]">
+        <p className="rwa-hud text-lime">02 // PROTOCOL STACK</p>
+        <h2 className="rwa-display mt-3 text-[28px] text-paper sm:text-[38px]">
           THREE LAYERS. EXECUTABLE IN ONE CLICK.
         </h2>
       </div>
 
-      <div className="mt-10 grid items-stretch gap-5">
+      <div className="mt-10 border-b border-paper/12">
         {rows.map((r) => (
-          <div
-            key={r.num}
-            className="rounded-xl border border-white/[0.08] bg-[#111318] p-6 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:border-white/[0.14]"
-          >
+          <div key={r.num} className="border-t border-paper/12 py-7">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-5">
-                <span className="font-mono text-[12px] font-semibold text-secondary">
-                  {r.num} / <span className="text-[#F4F2EC]">{r.contract}</span>
+                <span className="font-mono text-[12px] font-semibold text-lime">
+                  {r.num} / {r.contract}
                 </span>
-                <h3 className="text-[17px] font-semibold text-[#F4F2EC]">{r.title}</h3>
+                <h3 className="text-[17px] font-semibold text-paper">{r.title}</h3>
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
-                <label className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-[#161922] px-3.5 font-mono text-[11px] text-secondary">
+                <label className="inline-flex items-center gap-2 rounded-full border border-paper/15 bg-surface px-3.5 py-1.5 font-mono text-[11px] text-secondary">
                   <span>{r.inputLabel}</span>
                   <input
                     value={r.inputValue}
                     onChange={(e) => r.onInput(e.target.value)}
                     inputMode="decimal"
-                    className="w-16 bg-transparent text-right font-mono text-[12px] text-[#F4F2EC] outline-none"
+                    className="w-16 bg-transparent text-right font-mono text-[12px] text-paper outline-none"
                   />
                 </label>
 
@@ -220,7 +217,7 @@ export function Architecture() {
                   type="button"
                   onClick={() => void r.run()}
                   disabled={r.trace.running}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#F4F2EC] px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[#090A0D] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] hover:bg-white disabled:opacity-60"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-lime px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-ink transition-colors hover:bg-[#d8ff4d] disabled:opacity-60"
                 >
                   {r.trace.running ? <LoaderCircle className="size-3.5 animate-spin" /> : <Play className="size-3" />}
                   {r.cta}
@@ -231,7 +228,7 @@ export function Architecture() {
                     type="button"
                     onClick={r.toggle}
                     aria-label="Toggle trace drawer"
-                    className="grid size-9 place-items-center rounded-full border border-white/15 text-secondary transition-colors hover:border-white/30 hover:text-[#F4F2EC]"
+                    className="grid size-9 place-items-center rounded-full border border-paper/15 text-secondary hover:border-lime hover:text-lime"
                   >
                     {r.trace.open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
                   </button>
@@ -240,7 +237,7 @@ export function Architecture() {
             </div>
 
             {r.trace.open && r.trace.lines.length > 0 && (
-              <div className="mt-4 rounded-lg border border-white/[0.08] bg-[#090A0D] px-4 py-3 font-mono text-[11.5px] leading-relaxed text-[#F4F2EC]/90">
+              <div className="mt-4 border-l-2 border-lime/70 bg-surface/80 px-4 py-3 font-mono text-[11.5px] leading-relaxed text-paper/90">
                 {r.trace.lines.map((line, idx) => (
                   <p key={idx} className={line.startsWith('✕') ? 'text-crimson' : line.startsWith('✓') ? 'text-emerald' : 'text-secondary'}>
                     {line}

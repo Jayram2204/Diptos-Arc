@@ -4,49 +4,63 @@ import {
   ArrowRight,
   ArrowUpRight,
   Bot,
+  Clock,
+  Copy,
+  Droplets,
   LogOut,
+  Plus,
   RefreshCw,
+  ShieldCheck,
+  Sparkles,
   User,
   Wallet,
 } from 'lucide-react'
-import { Button, Field, inputCls, PulseDot } from '@/components/ui'
-import { fmtAmount, shortHex } from '@/lib/chain'
+import { isAddress } from 'viem'
+import { Button, CopyButton, Field, inputCls, PulseDot } from '@/components/ui'
+import { explorerUrl, fmtAmount, shortHex } from '@/lib/chain'
 import { useEscrows, useGeminiRisk } from '@/lib/hooks'
-import { getApexUrl, getPayUrl, getSdkUrl, openInNewTab } from '@/lib/route'
-import { diptos, type EscrowMode } from '@/lib/sdk'
+import { getApexUrl, getPayUrl, getSdkUrl, navigate } from '@/lib/route'
+import { diptos, type EscrowMode, type EscrowRecord } from '@/lib/sdk'
 import { useWallet, WalletProvider } from './wallet'
 
 const SLA_PRESETS = [
-  { label: '2 Mins', hours: '0.0334' },
-  { label: '24h', hours: '24' },
-  { label: '7d', hours: '168' },
-] as const
+  { label: '2 Mins', hours: 0.033 },
+  { label: '24h', hours: 24 },
+  { label: '7d', hours: 168 },
+]
 
-function formatRemaining(deadlineIso: string, nowMs: number) {
+function formatRemaining(deadlineIso: string, nowMs: number): { text: string; overdue: boolean } {
   const diffSec = Math.floor((new Date(deadlineIso).getTime() - nowMs) / 1000)
   const overdue = diffSec < 0
   const abs = Math.abs(diffSec)
-  const h = Math.floor(abs / 3600)
-  const m = Math.floor((abs % 3600) / 60)
-  const s = abs % 60
+  const hrs = Math.floor(abs / 3600)
+  const mins = Math.floor((abs % 3600) / 60)
+  const secs = abs % 60
   const pad = (n: number) => String(n).padStart(2, '0')
-  return { overdue, text: `${overdue ? '+' : ''}${pad(h)}:${pad(m)}:${pad(s)}` }
+  return {
+    overdue,
+    text: `${overdue ? '+' : ''}${pad(hrs)}:${pad(mins)}:${pad(secs)}`,
+  }
 }
 
-function EscrowAppInner() {
-  const { address, walletName, balanceUsdc, connecting, connect, disconnect, error: walletError } =
+function EscrowDashboardInner() {
+  const { address, balanceUsdc, connecting, connect, disconnect, execute, txStage, error: walletError, clearError } =
     useWallet()
-  const { escrows, loading: escrowsLoading, refresh } = useEscrows(4000)
+  const { escrows, loading, refresh } = useEscrows(4000)
   const { data: gemini } = useGeminiRisk()
 
-  const [tab, setTab] = useState<'create' | 'active'>('create')
+  const [tab, setTab] = useState<'create' | 'list'>('create')
   const [title, setTitle] = useState('')
   const [scope, setScope] = useState('')
-  const [amountUsdc, setAmountUsdc] = useState('250')
-  const [deadlineHours, setDeadlineHours] = useState('24')
+  const [amountInput, setAmountInput] = useState('1250')
+  const [deadlineHours, setDeadlineHours] = useState<number>(24)
   const [mode, setMode] = useState<EscrowMode>('human')
+  const [payeeInput, setPayeeInput] = useState('0x742d35Cc6634C0532925a3b844Bc454e4438f44e')
+
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [createdEscrow, setCreatedEscrow] = useState<EscrowRecord | null>(null)
+  const [faucetTxHash, setFaucetTxHash] = useState<string | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
@@ -54,441 +68,608 @@ function EscrowAppInner() {
     return () => clearInterval(t)
   }, [])
 
-  const parsedAmount = Math.max(0, Number(amountUsdc) || 0)
-  const payeePayout = parsedAmount * 0.995
-  const protocolFee = parsedAmount * 0.005
   const liveLambda = gemini?.recommendedLambda ?? 0.35
+  const parsedAmount = Math.max(0, Number(amountInput) || 0)
+  const payeeInstantPayout = parsedAmount * 0.995
+  const protocolFee = parsedAmount * 0.005
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleCreateEscrow = async (e: FormEvent) => {
     e.preventDefault()
-    setError(null)
-    const cleanTitle = title.trim()
-    const cleanScope = scope.trim()
-    const amt = Number(amountUsdc)
-    const hours = Number(deadlineHours)
+    setFormError(null)
+    clearError()
 
-    if (cleanTitle.length < 2) {
-      setError('Enter a deliverable title (at least 2 characters).')
+    const amount = Number(amountInput)
+    if (!title.trim() || title.trim().length < 3) {
+      setFormError('Enter a deliverable title (at least 3 characters).')
       return
     }
-    if (cleanScope.length < 4) {
-      setError('Specify acceptance criteria / scope for Grok verification.')
+    if (!scope.trim() || scope.trim().length < 8) {
+      setFormError('Describe the acceptance criteria so Grok AI can audit it.')
       return
     }
-    if (!Number.isFinite(amt) || amt <= 0) {
-      setError('Enter a valid positive USDC amount.')
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setFormError('Enter a valid USDC amount greater than 0.')
       return
     }
-    if (!Number.isFinite(hours) || hours < 0.03 || hours > 720) {
-      setError('Deadline must be between 2 minutes and 720 hours.')
+    const cleanPayee = payeeInput.trim()
+    if (cleanPayee && !isAddress(cleanPayee)) {
+      setFormError('Payee must be a valid 0x Ethereum/Arc address.')
       return
     }
 
     setSubmitting(true)
     try {
-      const res = await diptos.createEscrowLink({
-        title: cleanTitle,
-        scope: cleanScope,
-        amountUsdc: amt,
-        deadlineHours: hours,
+      const escrow = await diptos.createEscrowLink({
+        title: title.trim(),
+        scope: scope.trim(),
+        amountUsdc: amount,
+        deadlineHours,
         mode,
+        payee: (cleanPayee || undefined) as `0x${string}` | undefined,
         tecdLambda: liveLambda,
       })
-      openInNewTab(getPayUrl(res.checkoutPath))
+      setCreatedEscrow(escrow)
+      await refresh()
     } catch (err) {
-      setError((err as Error).message)
+      setFormError((err as Error).message)
     } finally {
       setSubmitting(false)
     }
   }
 
+  const handleClaimTestnetFaucet = async () => {
+    clearError()
+    setFaucetTxHash(null)
+    const rc = await execute({
+      kind: 'Claim Faucet',
+      contract: 'DiptosEscrow',
+      functionName: 'claimTestnetFaucet',
+      args: [],
+    })
+    if (rc && rc.status === 'success') {
+      setFaucetTxHash(rc.hash)
+    }
+  }
+
+  const buildShareLink = (esc: EscrowRecord) => {
+    const base = getPayUrl(esc.id)
+    const params = new URLSearchParams({
+      title: esc.title,
+      scope: esc.scope,
+      amount: String(esc.amountUsdc),
+      hours: String(esc.deadlineHours),
+      mode: esc.mode,
+      payee: esc.payee,
+      lambda: String(esc.tecdLambda),
+    })
+    return `${base}?${params.toString()}`
+  }
+
   return (
-    <div className="min-h-screen bg-[#090A0D] text-[#F4F2EC]">
+    <div className="min-h-screen bg-black text-paper">
       {/* Header Alignment (68px height, max-w-[1320px] mx-auto px-6) */}
-      <header className="sticky top-0 z-50 h-[68px] border-b border-white/[0.08] bg-[#090A0D]/90 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 h-[68px] border-b border-paper/10 bg-black/90 backdrop-blur-xl">
         <div className="mx-auto flex h-full max-w-[1320px] items-center justify-between gap-4 px-6">
-          <div className="flex items-center gap-4">
+          {/* Left: ← DIPTOS.XYZ (target="_blank") + APP.DIPTOS. wordmark */}
+          <div className="flex items-center gap-3.5">
             <a
               href={getApexUrl()}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/15 px-3 font-mono text-[11px] uppercase tracking-[0.12em] text-secondary transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-white/[0.06] hover:text-[#F4F2EC]"
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-paper/15 bg-surface px-3 font-mono text-[11px] uppercase tracking-[0.12em] text-secondary transition-colors hover:border-lime hover:text-lime"
             >
               <ArrowLeft className="size-3.5" />
-              diptos.xyz
+              <span className="hidden sm:inline">diptos.xyz</span>
             </a>
-            <span className="rwa-display hidden items-baseline text-[17px] text-[#F4F2EC] sm:inline-flex">
-              APP.DIPTOS<span className="ml-1 inline-block size-1.5 rounded-full bg-emerald" />
+
+            <span className="rwa-display inline-flex items-baseline text-[18px] tracking-[-0.04em] text-paper">
+              APP.DIPTOS<span className="ml-0.5 inline-block size-2 rounded-full bg-lime" />
             </span>
           </div>
 
-          {/* Center Segmented Pill Switcher */}
-          <nav className="flex items-center gap-1 rounded-full border border-white/[0.08] bg-[#111318] p-1">
+          {/* Center: Segmented Pill Switcher */}
+          <div className="hidden items-center rounded-full border border-paper/12 bg-surface p-1 md:flex">
             <button
               type="button"
               onClick={() => setTab('create')}
-              className={`h-8 rounded-full px-4 font-mono text-[11px] uppercase tracking-[0.1em] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+              className={`inline-flex h-8 items-center gap-1.5 rounded-full px-4 font-mono text-[11px] font-medium uppercase tracking-[0.12em] transition-all duration-200 ${
                 tab === 'create'
-                  ? 'bg-white/[0.1] font-medium text-[#F4F2EC]'
-                  : 'text-secondary hover:text-[#F4F2EC]'
+                  ? 'bg-lime text-ink font-semibold'
+                  : 'text-secondary hover:text-paper'
               }`}
             >
-              New Escrow Link
+              <Plus className="size-3" /> New Escrow Link
             </button>
             <button
               type="button"
-              onClick={() => setTab('active')}
-              className={`h-8 rounded-full px-4 font-mono text-[11px] uppercase tracking-[0.1em] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                tab === 'active'
-                  ? 'bg-white/[0.1] font-medium text-[#F4F2EC]'
-                  : 'text-secondary hover:text-[#F4F2EC]'
+              onClick={() => setTab('list')}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-full px-4 font-mono text-[11px] font-medium uppercase tracking-[0.12em] transition-all duration-200 ${
+                tab === 'list'
+                  ? 'bg-lime text-ink font-semibold'
+                  : 'text-secondary hover:text-paper'
               }`}
             >
               Active Arc Escrows ({escrows.length})
             </button>
-          </nav>
+          </div>
 
-          {/* Right: SDK ↗ + Connect Wallet */}
+          {/* Right: SDK ↗ (target="_blank") + Connect Wallet pill button */}
           <div className="flex items-center gap-2.5">
             <a
               href={getSdkUrl()}
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden h-9 items-center gap-1 rounded-full border border-white/15 px-3.5 font-mono text-[11px] uppercase tracking-[0.1em] text-[#F4F2EC] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-white/[0.06] sm:inline-flex"
+              className="hidden h-9 items-center gap-1 rounded-full border border-paper/20 bg-transparent px-3.5 font-mono text-[11px] uppercase tracking-[0.12em] text-paper transition-colors hover:border-lime hover:text-lime sm:inline-flex"
             >
-              SDK <ArrowUpRight className="size-3.5" />
+              SDK <ArrowUpRight className="size-3" />
             </a>
+
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={txStage?.kind === 'Claim Faucet'}
+              onClick={address ? handleClaimTestnetFaucet : () => connect('metamask')}
+              className="hidden lg:inline-flex"
+            >
+              <Droplets className="size-3.5 text-lime" />
+              Faucet
+            </Button>
+
             {address ? (
-              <div className="flex h-9 items-center gap-2 rounded-full border border-white/15 bg-[#111318] pl-3.5 pr-1.5 font-mono text-[11px]">
-                {balanceUsdc !== null && (
-                  <span className="hidden tabular-nums text-emerald sm:inline">{balanceUsdc} USDC</span>
-                )}
-                <span
-                  className="rounded-full bg-[#090A0D] px-2.5 py-0.5 text-[#F4F2EC]"
-                  title={walletName ?? undefined}
-                >
-                  {shortHex(address)}
-                </span>
+              <div className="flex h-9 items-center gap-2 rounded-full border border-paper/15 bg-surface pl-3.5 pr-1.5 font-mono text-[12px]">
+                {balanceUsdc !== null && <span className="hidden text-lime sm:inline">{balanceUsdc} USDC</span>}
+                <span className="rounded-full bg-elevated px-2.5 py-0.5 text-paper">{shortHex(address)}</span>
                 <button
                   type="button"
                   onClick={disconnect}
                   aria-label="Disconnect wallet"
-                  className="grid size-7 place-items-center rounded-full text-secondary hover:text-[#F4F2EC]"
+                  className="grid size-7 place-items-center rounded-full text-secondary hover:text-paper"
                 >
                   <LogOut className="size-3.5" />
                 </button>
               </div>
             ) : (
-              <Button
-                size="sm"
-                variant="primary"
-                loading={connecting !== null}
-                onClick={() => void connect('metamask')}
-              >
+              <Button size="sm" variant="primary" loading={connecting === 'metamask'} onClick={() => connect('metamask')}>
                 <Wallet className="size-3.5" />
                 Connect Wallet
               </Button>
             )}
           </div>
         </div>
-        {walletError && (
-          <div className="border-b border-crimson/30 bg-crimson/10 px-6 py-2 text-center font-mono text-[11px] text-crimson">
-            {walletError}
-          </div>
-        )}
       </header>
 
-      {/* Main Content Container */}
-      <main className="mx-auto max-w-[1320px] px-6 py-5">
+      {/* Mobile Tab Switcher */}
+      <div className="mx-auto flex max-w-[1320px] items-center justify-between gap-2 px-6 pt-4 md:hidden">
+        <div className="inline-flex w-full rounded-full border border-paper/12 bg-surface p-1">
+          <button
+            type="button"
+            onClick={() => setTab('create')}
+            className={`flex-1 rounded-full py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] ${
+              tab === 'create' ? 'bg-lime text-ink font-semibold' : 'text-secondary'
+            }`}
+          >
+            New Escrow Link
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('list')}
+            className={`flex-1 rounded-full py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] ${
+              tab === 'list' ? 'bg-lime text-ink font-semibold' : 'text-secondary'
+            }`}
+          >
+            Active Escrows ({escrows.length})
+          </button>
+        </div>
+      </div>
+
+      {/* Main Workspace */}
+      <main className="mx-auto max-w-[1320px] px-6 py-8">
+        {(faucetTxHash || walletError) && (
+          <div className="mb-6">
+            {faucetTxHash && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-emerald/35 bg-emerald/10 px-4 py-2.5 font-mono text-[11.5px] text-emerald">
+                <span>Claimed 0.25 Testnet USDC from DiptosEscrow on-chain faucet</span>
+                <a
+                  href={explorerUrl('tx', faucetTxHash)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 underline"
+                >
+                  {shortHex(faucetTxHash, 10, 6)} <ArrowUpRight className="size-3.5" />
+                </a>
+              </div>
+            )}
+            {walletError && (
+              <p className="mt-2 rounded-2xl border border-crimson/35 bg-crimson/10 px-4 py-2.5 font-mono text-[11.5px] text-crimson">
+                {walletError}
+              </p>
+            )}
+          </div>
+        )}
+
         {tab === 'create' ? (
-          <div className="animate-fade-up grid grid-cols-1 items-stretch gap-5 lg:grid-cols-12">
-            {/* Left Card (7 cols): Balanced Compact Form */}
-            <form
-              onSubmit={handleSubmit}
-              className="flex flex-col justify-between rounded-xl border border-white/[0.08] bg-[#111318] p-6 lg:col-span-7"
-            >
+          <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-12">
+            {/* Left Card (lg:col-span-7): Compact Equal-Height Origination Form */}
+            <div className="rwa-depth-card flex flex-col justify-between rounded-2xl p-7 lg:col-span-7">
               <div>
-                <div className="flex items-center justify-between border-b border-white/[0.08] pb-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-paper/10 pb-4">
                   <div>
-                    <p className="rwa-hud text-secondary">PROGRAMMABLE ESCROW COMPOSER</p>
-                    <h1 className="mt-1 text-[19px] font-semibold text-[#F4F2EC]">
-                      Create Non-Custodial USDC Escrow Link
+                    <p className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-lime">
+                      01 // ESCROW LINK ORIGINATION
+                    </p>
+                    <h1 className="rwa-display mt-1 text-[22px] uppercase text-paper sm:text-[26px]">
+                      CREATE USDC ESCROW LINK
                     </h1>
                   </div>
-                  <span className="rounded-full border border-white/[0.08] bg-[#090A0D] px-3 py-1 font-mono text-[10.5px] text-secondary">
-                    0.50% flat fee
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-paper/12 bg-black/50 px-3 py-1 font-mono text-[10.5px] text-secondary">
+                    <Sparkles className="size-3 text-lime" />
+                    λ = {liveLambda.toFixed(2)}
                   </span>
                 </div>
 
-                <div className="mt-4 space-y-3.5">
-                  {/* Row 1: Execution Mode */}
-                  <div>
-                    <span className="block font-mono text-[10.5px] uppercase tracking-[0.1em] text-paper/90">
-                      Execution Mode
-                    </span>
-                    <div className="mt-1.5 grid grid-cols-2 gap-2 rounded-lg border border-white/[0.08] bg-[#090A0D] p-1">
-                      <button
-                        type="button"
-                        onClick={() => setMode('human')}
-                        className={`flex h-9 items-center justify-center gap-2 rounded-md font-mono text-[11px] uppercase tracking-[0.1em] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                          mode === 'human'
-                            ? 'bg-white/[0.1] font-medium text-[#F4F2EC]'
-                            : 'text-secondary hover:text-[#F4F2EC]'
-                        }`}
-                      >
-                        <User className="size-3.5" /> Human Freelancer
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setMode('agent')}
-                        className={`flex h-9 items-center justify-center gap-2 rounded-md font-mono text-[11px] uppercase tracking-[0.1em] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                          mode === 'agent'
-                            ? 'bg-white/[0.1] font-medium text-[#F4F2EC]'
-                            : 'text-secondary hover:text-[#F4F2EC]'
-                        }`}
-                      >
-                        <Bot className="size-3.5" /> AI Agent API
-                      </button>
-                    </div>
+                <form id="escrow-create-form" onSubmit={handleCreateEscrow} className="mt-5 space-y-4">
+                  {/* Row 1: Execution Mode clean 2-button toggle + Payee Wallet */}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Execution Mode">
+                      <div className="grid h-10 grid-cols-2 gap-1.5 rounded-xl border border-paper/12 bg-elevated p-1">
+                        <button
+                          type="button"
+                          onClick={() => setMode('human')}
+                          className={`inline-flex items-center justify-center gap-1.5 rounded-lg font-mono text-[11px] uppercase tracking-[0.1em] transition-all ${
+                            mode === 'human'
+                              ? 'bg-lime text-ink font-semibold'
+                              : 'text-secondary hover:text-paper'
+                          }`}
+                        >
+                          <User className="size-3.5" /> Human Freelancer
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMode('agent')}
+                          className={`inline-flex items-center justify-center gap-1.5 rounded-lg font-mono text-[11px] uppercase tracking-[0.1em] transition-all ${
+                            mode === 'agent'
+                              ? 'bg-lime text-ink font-semibold'
+                              : 'text-secondary hover:text-paper'
+                          }`}
+                        >
+                          <Bot className="size-3.5" /> AI Agent API
+                        </button>
+                      </div>
+                    </Field>
+
+                    <Field label="Payee Wallet (Arc 0x)">
+                      <input
+                        type="text"
+                        value={payeeInput}
+                        onChange={(e) => setPayeeInput(e.target.value)}
+                        placeholder="0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
+                        className={`${inputCls} font-mono text-[12px]`}
+                      />
+                    </Field>
                   </div>
 
                   {/* Row 2: Deliverable Title */}
-                  <Field label="Deliverable Title" hint="Displayed on checkout link">
+                  <Field label="Deliverable Title">
                     <input
                       type="text"
-                      required
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
-                      placeholder={
-                        mode === 'agent'
-                          ? 'Autonomous Solidity Invariant Audit'
-                          : 'Frontend Design System & Checkout Room'
-                      }
+                      placeholder="e.g. Ship Arc Testnet USDC Checkout Integration & Foundry Tests"
                       className={inputCls}
                     />
                   </Field>
 
-                  {/* Row 3: Acceptance Criteria */}
-                  <Field label="Acceptance Criteria / Grok Audit Scope" hint="Verified via EIP-712">
+                  {/* Row 3: Acceptance Criteria / Grok Audit Scope (rows={2} compact textarea) */}
+                  <Field label="Acceptance Criteria / Grok Audit Scope" hint="Audited via POST /api/verify/grok">
                     <textarea
                       rows={2}
-                      required
                       value={scope}
                       onChange={(e) => setScope(e.target.value)}
-                      placeholder="Submit merged GitHub PR passing all Foundry fuzz tests and TypeScript checks."
-                      className="w-full rounded-lg border border-white/[0.08] bg-[#090A0D] px-3.5 py-2 font-mono text-[12.5px] text-[#F4F2EC] outline-none transition-colors duration-200 placeholder:text-paper/30 focus:border-white/30"
+                      placeholder="1. Merge PR with passing Foundry tests&#10;2. Verify live settlement on Arc Testnet (5042002)"
+                      className="w-full resize-none rounded-xl border border-paper/12 bg-elevated px-3.5 py-2.5 text-[13.5px] text-paper outline-none transition-colors placeholder:text-secondary/45 focus:border-lime"
                     />
                   </Field>
 
-                  {/* Row 4: 3 Equal Columns (Amount | SLA Presets | Custom Hours) */}
+                  {/* Row 4 (3 equal columns grid-cols-3 gap-4): Amount (USDC) | SLA Window | Custom Hours */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <Field label="Amount (USDC)">
-                      <input
-                        type="number"
-                        step="any"
-                        min="0.01"
-                        required
-                        value={amountUsdc}
-                        onChange={(e) => setAmountUsdc(e.target.value)}
-                        className={inputCls}
-                      />
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="any"
+                          min="0.01"
+                          value={amountInput}
+                          onChange={(e) => setAmountInput(e.target.value)}
+                          className={`${inputCls} pr-14 font-mono`}
+                        />
+                        <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 font-mono text-[10.5px] text-secondary">
+                          USDC
+                        </span>
+                      </div>
                     </Field>
 
-                    <div>
-                      <span className="block font-mono text-[10.5px] uppercase tracking-[0.1em] text-paper/90">
-                        SLA Window
-                      </span>
-                      <div className="mt-1.5 grid grid-cols-3 gap-1 rounded-lg border border-white/[0.08] bg-[#090A0D] p-1">
-                        {SLA_PRESETS.map((p) => (
+                    <Field label="SLA Window">
+                      <div className="grid h-10 grid-cols-3 gap-1 rounded-xl border border-paper/12 bg-elevated p-1">
+                        {SLA_PRESETS.map((preset) => (
                           <button
-                            key={p.label}
+                            key={preset.label}
                             type="button"
-                            onClick={() => setDeadlineHours(p.hours)}
-                            className={`h-8 rounded font-mono text-[10px] uppercase transition-all duration-200 ${
-                              deadlineHours === p.hours
-                                ? 'bg-white/[0.12] font-medium text-[#F4F2EC]'
-                                : 'text-secondary hover:text-[#F4F2EC]'
+                            onClick={() => setDeadlineHours(preset.hours)}
+                            className={`rounded-lg font-mono text-[10.5px] uppercase transition-all ${
+                              deadlineHours === preset.hours
+                                ? 'bg-lime text-ink font-semibold'
+                                : 'text-secondary hover:text-paper'
                             }`}
                           >
-                            {p.label}
+                            {preset.label}
                           </button>
                         ))}
                       </div>
-                    </div>
+                    </Field>
 
                     <Field label="Custom Hours">
                       <input
                         type="number"
+                        min={0.03}
+                        max={720}
                         step="any"
-                        min="0.03"
-                        max="720"
-                        required
                         value={deadlineHours}
-                        onChange={(e) => setDeadlineHours(e.target.value)}
-                        className={inputCls}
+                        onChange={(e) => setDeadlineHours(Math.max(0.03, Number(e.target.value) || 1))}
+                        className={`${inputCls} font-mono`}
                       />
                     </Field>
                   </div>
-                </div>
+
+                  {formError && (
+                    <p className="rounded-xl border border-crimson/35 bg-crimson/10 px-3.5 py-2 font-mono text-[11.5px] text-crimson">
+                      {formError}
+                    </p>
+                  )}
+                </form>
               </div>
 
               {/* Footer Action */}
-              <div className="mt-5 border-t border-white/[0.08] pt-4">
-                {error && (
-                  <p className="mb-3 rounded-lg border border-crimson/35 bg-crimson/10 px-3 py-2 font-mono text-[11.5px] text-crimson">
-                    {error}
-                  </p>
-                )}
-                <Button type="submit" loading={submitting} className="w-full">
+              <div className="mt-6 border-t border-paper/10 pt-5">
+                <Button
+                  type="submit"
+                  form="escrow-create-form"
+                  variant="primary"
+                  size="lg"
+                  loading={submitting}
+                  className="w-full"
+                >
                   Generate Escrow Link <ArrowRight className="size-4" />
                 </Button>
-              </div>
-            </form>
 
-            {/* Right Card (5 cols): Equal-Height Live Settlement & Risk Preview */}
-            <aside className="flex flex-col justify-between rounded-xl border border-white/[0.08] bg-[#111318] p-6 lg:col-span-5">
+                {createdEscrow && (
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-lime/35 bg-elevated px-4 py-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-lime">
+                        ✓ ESCROW LINK READY ({shortHex(createdEscrow.escrowIdBytes32, 8, 6)})
+                      </p>
+                      <p className="mt-0.5 truncate font-mono text-[11.5px] text-paper">
+                        {buildShareLink(createdEscrow)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CopyButton value={buildShareLink(createdEscrow)} label="Copy shareable link" />
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => navigate(buildShareLink(createdEscrow))}
+                      >
+                        Open Checkout <ArrowRight className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right Card (lg:col-span-5): Equal-Height Live Settlement & Risk Preview */}
+            <div className="rwa-depth-card flex flex-col justify-between rounded-2xl p-7 lg:col-span-5">
               <div>
-                <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
-                  <span className="rwa-hud text-paper/90">LIVE SETTLEMENT PREVIEW</span>
-                  <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-[#090A0D] px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-secondary">
-                    <PulseDot color="bg-emerald" />
+                <div className="flex items-center justify-between gap-2 border-b border-paper/10 pb-4">
+                  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-lime">
+                    LIVE SETTLEMENT PREVIEW
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-paper/12 bg-black/50 px-3 py-1 font-mono text-[10.5px] uppercase tracking-[0.12em] text-paper">
+                    <PulseDot color="bg-lime" />
                     ARC 5042002
                   </span>
                 </div>
 
-                <dl className="mt-2 divide-y divide-white/[0.06] font-mono text-[12px]">
+                {/* Tabular Breakdown Rows */}
+                <dl className="mt-2 divide-y divide-paper/10 font-mono text-[12px]">
                   <div className="flex items-center justify-between py-3">
                     <dt className="text-secondary">Escrow Principal</dt>
-                    <dd className="font-semibold tabular-nums text-[#F4F2EC]">
-                      {fmtAmount(parsedAmount)} USDC
-                    </dd>
+                    <dd className="font-semibold text-paper">{fmtAmount(parsedAmount)} USDC</dd>
                   </div>
                   <div className="flex items-center justify-between py-3">
                     <dt className="text-secondary">Payee Instant Payout (99.5%)</dt>
-                    <dd className="font-semibold tabular-nums text-emerald">
-                      {fmtAmount(payeePayout)} USDC
-                    </dd>
+                    <dd className="font-semibold text-emerald">{fmtAmount(payeeInstantPayout)} USDC</dd>
                   </div>
                   <div className="flex items-center justify-between py-3">
                     <dt className="text-secondary">Protocol Fee (0.5%)</dt>
-                    <dd className="tabular-nums text-[#F4F2EC]">{fmtAmount(protocolFee)} USDC</dd>
+                    <dd className="text-paper">{fmtAmount(protocolFee)} USDC</dd>
                   </div>
                   <div className="flex items-center justify-between py-3">
                     <dt className="text-secondary">Gemini Live Risk λ</dt>
-                    <dd className="tabular-nums text-[#F4F2EC]">
-                      {liveLambda.toFixed(2)} (Calibrated)
-                    </dd>
+                    <dd className="text-lime">{liveLambda.toFixed(3)} (Calibrated)</dd>
+                  </div>
+                  <div className="flex items-center justify-between py-3">
+                    <dt className="text-secondary">Execution Guardrail</dt>
+                    <dd className="text-paper">{mode === 'agent' ? 'AI Agent API' : 'Human Freelancer'}</dd>
                   </div>
                   <div className="flex items-center justify-between py-3">
                     <dt className="text-secondary">Checkout Endpoint</dt>
-                    <dd className="text-secondary">app.diptos.xyz/pay/:id</dd>
+                    <dd className="text-secondary">
+                      app.diptos.xyz/pay/{createdEscrow ? createdEscrow.id.slice(0, 12) : ':id'}
+                    </dd>
                   </div>
                 </dl>
               </div>
 
               {/* Bottom Section: Latest 2 Live On-Chain Arc Escrows */}
-              <div className="mt-6 border-t border-white/[0.08] pt-4">
+              <div className="mt-6 border-t border-paper/10 pt-5">
                 <div className="flex items-center justify-between">
-                  <span className="rwa-hud text-secondary">
-                    RECENT ON-CHAIN ESCROWS ({escrows.length})
+                  <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-lime">
+                    LATEST ON-CHAIN ARC ESCROWS ({escrows.length})
                   </span>
                   <button
                     type="button"
-                    onClick={() => void refresh()}
-                    className="inline-flex items-center gap-1 font-mono text-[10.5px] text-secondary hover:text-[#F4F2EC]"
+                    onClick={() => setTab('list')}
+                    className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-paper transition-colors hover:text-lime"
                   >
-                    <RefreshCw className={`size-3 ${escrowsLoading ? 'animate-spin' : ''}`} /> Sync
+                    View All →
                   </button>
                 </div>
 
-                <div className="mt-3 space-y-2">
-                  {escrows.slice(0, 2).map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.08] bg-[#090A0D] px-3.5 py-2.5"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-[12.5px] font-medium text-[#F4F2EC]">{item.title}</p>
-                        <p className="font-mono text-[10.5px] text-secondary">
-                          {fmtAmount(item.amountUsdc)} USDC · {item.status.toUpperCase()}
-                        </p>
-                      </div>
-                      <a
-                        href={getPayUrl(`/pay/${item.id}`)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/15 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-[#F4F2EC] transition-colors hover:bg-white/[0.08]"
+                <div className="mt-3 space-y-2.5">
+                  {escrows.slice(0, 2).map((esc) => {
+                    const rem = formatRemaining(esc.deadline, nowMs)
+                    return (
+                      <div
+                        key={esc.id}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-paper/12 bg-black/55 px-3.5 py-2.5 transition-colors hover:border-lime/50"
                       >
-                        Open Checkout <ArrowUpRight className="size-3" />
-                      </a>
-                    </div>
-                  ))}
+                        <div className="min-w-0">
+                          <p className="truncate text-[13px] font-medium text-paper">{esc.title}</p>
+                          <div className="mt-0.5 flex items-center gap-2 font-mono text-[10.5px] text-secondary">
+                            <span className="text-paper">{fmtAmount(esc.amountUsdc)} USDC</span>
+                            <span>•</span>
+                            <span className={rem.overdue ? 'text-crimson' : 'text-emerald'}>
+                              {esc.status.toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => navigate(buildShareLink(esc))}
+                          className="inline-flex shrink-0 items-center gap-1 rounded-full border border-paper/15 bg-surface px-3 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-paper transition-colors hover:border-lime hover:text-lime"
+                        >
+                          Open Checkout <ArrowRight className="size-3" />
+                        </button>
+                      </div>
+                    )
+                  })}
                   {escrows.length === 0 && (
-                    <p className="rounded-lg border border-white/[0.06] bg-[#090A0D] px-3.5 py-3 font-mono text-[11px] text-secondary">
-                      Syncing live escrows from DiptosEscrow.sol on Arc Testnet…
+                    <p className="rounded-xl border border-paper/10 bg-black/45 px-3.5 py-3 font-mono text-[11px] text-secondary">
+                      Syncing deployed genesis escrows from Arc Testnet (5042002)…
                     </p>
                   )}
                 </div>
               </div>
-            </aside>
+            </div>
           </div>
         ) : (
-          /* Active Arc Escrows Tab */
-          <div className="animate-fade-up space-y-6">
-            <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
+          /* Active Arc Escrows Tab — Symmetrical Equal-Height Card Grid */
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-paper/10 pb-5">
               <div>
-                <p className="rwa-hud text-secondary">DIRECT ARC TESTNET ENUMERATION</p>
-                <h1 className="mt-1 text-[22px] font-semibold text-[#F4F2EC]">
-                  Active Arc Escrows ({escrows.length})
-                </h1>
+                <p className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-lime">
+                  ON-CHAIN REGISTRY // DIPTOSESCROW.SOL
+                </p>
+                <h2 className="rwa-display mt-1 text-[24px] uppercase text-paper">
+                  ACTIVE ARC ESCROWS ({escrows.length})
+                </h2>
               </div>
-              <Button size="sm" variant="secondary" onClick={() => void refresh()}>
-                <RefreshCw className={`size-3.5 ${escrowsLoading ? 'animate-spin' : ''}`} /> Refresh
-              </Button>
+              <div className="flex items-center gap-2.5">
+                <Button size="sm" variant="secondary" onClick={() => void refresh()}>
+                  <RefreshCw className="size-3.5" /> Refresh
+                </Button>
+                <Button size="sm" variant="primary" onClick={() => setTab('create')}>
+                  <Plus className="size-3.5" /> New Escrow Link
+                </Button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {escrows.map((e) => {
-                const rem = formatRemaining(e.deadline, nowMs)
-                return (
-                  <article
-                    key={e.id}
-                    className="flex flex-col justify-between rounded-xl border border-white/[0.08] bg-[#111318] p-6 transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] hover:border-white/20"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-[#090A0D] px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-[#F4F2EC]">
-                          <span className="size-1.5 rounded-full bg-emerald" />
-                          {e.status}
-                        </span>
-                        <span className="font-mono text-[10.5px] uppercase text-secondary">
-                          {e.mode}
-                        </span>
-                      </div>
-                      <h2 className="mt-4 text-[17px] font-semibold text-[#F4F2EC]">{e.title}</h2>
-                      <p className="mt-1.5 line-clamp-2 text-[13px] text-secondary">{e.scope}</p>
-                    </div>
+            {loading ? (
+              <div className="mt-6 grid gap-5 md:grid-cols-2">
+                {[0, 1].map((i) => (
+                  <div
+                    key={i}
+                    className="h-52 animate-pulse rounded-2xl border border-paper/10 bg-surface"
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="mt-6 grid items-stretch gap-5 md:grid-cols-2">
+                {escrows.map((escrow) => {
+                  const rem = formatRemaining(escrow.deadline, nowMs)
+                  return (
+                    <article
+                      key={escrow.id}
+                      className="rwa-depth-card flex h-full flex-col justify-between rounded-2xl p-6 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] hover:border-lime/50"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-paper/15 bg-black/50 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-lime">
+                            {escrow.mode === 'agent' ? (
+                              <>
+                                <Bot className="size-3" /> AI AGENT
+                              </>
+                            ) : (
+                              <>
+                                <User className="size-3" /> FREELANCER
+                              </>
+                            )}
+                          </span>
+                          <span className="inline-flex items-center gap-1 font-mono text-[10.5px] uppercase text-emerald">
+                            <ShieldCheck className="size-3.5" /> {escrow.status}
+                          </span>
+                        </div>
 
-                    <div className="mt-6 border-t border-white/[0.08] pt-4">
-                      <div className="flex items-baseline justify-between font-mono">
-                        <span className="text-[18px] font-semibold tabular-nums text-[#F4F2EC]">
-                          {fmtAmount(e.amountUsdc)} USDC
-                        </span>
-                        <span className="text-[11px] tabular-nums text-secondary">{rem.text}</span>
+                        <h3 className="mt-3.5 text-[18px] font-semibold text-paper">{escrow.title}</h3>
+                        <p className="mt-1.5 line-clamp-2 text-[13px] text-secondary">{escrow.scope}</p>
                       </div>
-                      <a
-                        href={getPayUrl(`/pay/${e.id}`)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-4 flex h-9 w-full items-center justify-center gap-1.5 rounded-full border border-white/15 font-mono text-[11px] uppercase tracking-[0.12em] text-[#F4F2EC] transition-colors hover:bg-white/[0.08]"
-                      >
-                        Open Checkout <ArrowUpRight className="size-3.5" />
-                      </a>
-                    </div>
-                  </article>
-                )
-              })}
-            </div>
+
+                      <div>
+                        <dl className="mt-5 grid grid-cols-3 gap-2 rounded-xl border border-paper/10 bg-black/50 p-3.5 font-mono">
+                          <div>
+                            <dt className="text-[10px] uppercase text-secondary">AMOUNT</dt>
+                            <dd className="mt-0.5 text-[13px] font-semibold text-paper">
+                              {fmtAmount(escrow.amountUsdc)} USDC
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-[10px] uppercase text-secondary">TECD λ</dt>
+                            <dd className="mt-0.5 text-[13px] font-semibold text-lime">
+                              {escrow.tecdLambda.toFixed(2)}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="flex items-center gap-1 text-[10px] uppercase text-secondary">
+                              <Clock className="size-2.5" /> SLA
+                            </dt>
+                            <dd
+                              className={`mt-0.5 text-[13px] font-semibold ${
+                                rem.overdue ? 'text-crimson' : 'text-emerald'
+                              }`}
+                            >
+                              {rem.text}
+                            </dd>
+                          </div>
+                        </dl>
+
+                        <div className="mt-4 flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => navigator.clipboard?.writeText(buildShareLink(escrow))}
+                            className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-secondary transition-colors hover:text-lime"
+                          >
+                            <Copy className="size-3" /> Copy Link
+                          </button>
+                          <Button size="sm" variant="primary" onClick={() => navigate(buildShareLink(escrow))}>
+                            Open Checkout <ArrowRight className="size-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -499,7 +680,7 @@ function EscrowAppInner() {
 export function EscrowApp() {
   return (
     <WalletProvider>
-      <EscrowAppInner />
+      <EscrowDashboardInner />
     </WalletProvider>
   )
 }

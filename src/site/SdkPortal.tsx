@@ -1,246 +1,294 @@
 import { useState } from 'react'
-import { ArrowLeft, ArrowUpRight, Play, Terminal } from 'lucide-react'
-import { Button, CopyButton, PulseDot } from '@/components/ui'
-import {
-  ARC_CHAIN_ID,
-  ARC_RPC_URL,
-  ESCROW_CONTRACT_ADDRESS,
-  REGISTRY_CONTRACT_ADDRESS,
-} from '@/config/protocol'
+import { ArrowLeft, ArrowUpRight, Check, Copy, LoaderCircle, Play, Terminal } from 'lucide-react'
+import { CopyButton, PulseDot } from '@/components/ui'
+import { ARC_NETWORK, ESCROW_CONTRACT_ADDRESS, LINKS, REGISTRY_CONTRACT_ADDRESS } from '@/config/protocol'
 import { getApexUrl, getAppUrl } from '@/lib/route'
 import { diptos } from '@/lib/sdk'
 
-type SectionId = 'quickstart' | 'agents' | 'tecd' | 'gemini' | 'grok' | 'abis'
-
-const SECTIONS: {
-  id: SectionId
+interface SdkModule {
+  id: string
   num: string
-  label: string
   title: string
-  summary: string
-  filename: string
-  paramsNote: string
+  subtitle: string
+  file: string
+  params: { name: string; type: string; desc: string }[]
   code: string
-}[] = [
+}
+
+const MODULES: SdkModule[] = [
   {
     id: 'quickstart',
     num: '01',
-    label: 'Quickstart',
-    title: 'Initialize DiptosClient on Arc Testnet',
-    summary:
-      'Install @diptos/sdk and point DiptosClient at Arc Testnet (Chain ID 5042002) with primary + fallback RPCs.',
-    filename: 'client.ts',
-    paramsNote: 'Config: rpcUrl, chainId (5042002), escrowAddress, registryAddress',
+    title: 'Quickstart',
+    subtitle: 'Instantiate DiptosClient on Arc Testnet (5042002)',
+    file: 'client.ts',
+    params: [
+      { name: 'rpcUrl', type: 'string', desc: 'Arc Testnet JSON-RPC endpoint (https://rpc.testnet.arc.network)' },
+      { name: 'escrowContract', type: 'Address', desc: `Deployed DiptosEscrow (${ESCROW_CONTRACT_ADDRESS.slice(0, 10)}…)` },
+    ],
     code: `import { DiptosClient } from '@diptos/sdk'
 
-export const diptos = new DiptosClient({
-  rpcUrl: '${ARC_RPC_URL}',
-  chainId: ${ARC_CHAIN_ID},
-  escrowAddress: '${ESCROW_CONTRACT_ADDRESS}',
-  registryAddress: '${REGISTRY_CONTRACT_ADDRESS}',
+const diptos = new DiptosClient({
+  rpcUrl: 'https://rpc.testnet.arc.network',
   apiBaseUrl: 'https://diptos.xyz',
+  escrowContract: '${ESCROW_CONTRACT_ADDRESS}',
+  registryContract: '${REGISTRY_CONTRACT_ADDRESS}',
 })
 
-const telemetry = await diptos.getArcTelemetry()
-console.log('Arc block:', telemetry.blockNumber, 'latency:', telemetry.latencyMs, 'ms')`,
+// Fetch live Arc block height, USDC gas price, and Gemini risk λ
+const [telemetry, risk] = await Promise.all([
+  diptos.getArcTelemetry(),
+  diptos.getLiveGeminiRisk(),
+])
+
+console.log('Arc Block:', telemetry.blockNumber)
+console.log('Calibrated TECD λ:', risk.recommendedLambda)`,
   },
   {
-    id: 'agents',
+    id: 'guardrails',
     num: '02',
-    label: 'AI Agent Guardrails',
-    title: 'Autonomous Escrow Creation & Settlement',
-    summary:
-      'Headless AI agents can originate escrows, build native 18-decimal USDC calldata, verify deliverables via Grok, and settle on-chain.',
-    filename: 'agent-guardrail.ts',
-    paramsNote: 'Returns: { escrow, txIntent, checkoutPath, shareUrl }',
-    code: `const risk = await diptos.getLiveGeminiRisk()
-const { escrow, shareUrl } = await diptos.createEscrowLink({
-  title: 'Audit Solidity TECD invariant bounds',
-  scope: 'Submit merged GitHub PR passing forge test -vvv',
-  amountUsdc: 0.05,
-  deadlineHours: 24,
-  mode: 'agent',
-  tecdLambda: risk.recommendedLambda,
-})
+    title: 'AI Agent Guardrails',
+    subtitle: 'Build non-custodial USDC escrow transactions for autonomous agents',
+    file: 'agent-escrow.ts',
+    params: [
+      { name: 'amountUsdc', type: 'number', desc: 'Native 18-decimal USDC principal locked in DiptosEscrow.sol' },
+      { name: 'isAgentMode', type: 'boolean', desc: 'Enables autonomous EIP-712 Grok settlement guardrail' },
+    ],
+    code: `import { keccak256, toHex } from 'viem'
 
+const escrowId = keccak256(toHex('diptos:arc:5042002:agent_task_01'))
+
+// Build native 18-dec USDC deposit tx (msg.value == amountWei)
 const fundTx = diptos.buildFundEscrowTx({
-  escrowId: escrow.escrowIdBytes32,
-  payee: escrow.payee,
-  amountUsdc: escrow.amountUsdc,
-  deadlineUnix: escrow.deadlineUnix,
-  lambdaBps: escrow.tecdLambdaBps,
+  escrowId,
+  payee: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
+  amountUsdc: 1250,
+  deadlineUnix: Math.floor(Date.now() / 1000) + 86400,
+  lambdaBps: 3500, // λ = 0.35
   isAgentMode: true,
 })
-console.log('Share checkout:', shareUrl, 'calldata:', fundTx.data)`,
+
+const txHash = await walletClient.sendTransaction(fundTx)`,
   },
   {
     id: 'tecd',
     num: '03',
-    label: 'TECD Math',
-    title: 'Time-Entropic Collateral Decay (WAD)',
-    summary:
-      'Evaluate V(t) = V₀ · exp(-λ · (Δt / T)^1.5) locally or directly via DiptosEscrow.previewTECDPayout on Arc Testnet.',
-    filename: 'tecd.ts',
-    paramsNote: 'Invariant: payeePayout + buyerRebate + protocolFee === principalUsdc',
-    code: `const onChain = await diptos.previewTECDOnChain({
-  principalUsdc: 2500,
-  slaWindowSeconds: 24 * 3600,
-  delaySeconds: 12 * 3600,
-  lambda: 0.35,
+    title: 'TECD Math',
+    subtitle: 'Fixed-point WAD exponential latency decay V(t) = V₀ · e^(−λ·(Δt/T)^γ)',
+    file: 'tecd-decay.ts',
+    params: [
+      { name: 'lambda', type: 'number', desc: 'Decay rate λ calibrated from Gemini Prediction Markets' },
+      { name: 'delaySeconds', type: 'number', desc: 'Seconds elapsed past SLA deadline T (0 if on-time)' },
+    ],
+    code: `// Deterministic local WAD calculation + live Arc eth_call verification
+const local = diptos.calculateTECD({
+  principalUsdc: 5000,
+  lambda: 0.38,
+  delaySeconds: 6 * 3600,        // 6 hours overdue
+  totalDurationSeconds: 24 * 3600,
+  gamma: 1.5,
 })
 
-console.log({
-  source: onChain.source,
-  payeePayoutUsdc: onChain.payeePayoutUsdc,
-  buyerRebateUsdc: onChain.buyerRebateUsdc,
-  protocolFeeUsdc: onChain.protocolFeeUsdc,
-  decayPercent: onChain.decayPercent,
-})`,
+console.log('Payee Instant Payout:', local.payeePayoutUsdc, 'USDC')
+console.log('Automatic Buyer Rebate:', local.buyerRebateUsdc, 'USDC')
+console.log('Protocol Fee (0.5%):', local.protocolFeeUsdc, 'USDC')`,
   },
   {
     id: 'gemini',
     num: '04',
-    label: 'Gemini Risk Oracle',
-    title: 'Live Prediction Markets Volatility Feed',
-    summary:
-      'Pull active contracts from Gemini Prediction Markets to dynamically calibrate TECD decay intensity λ.',
-    filename: 'gemini-risk.ts',
-    paramsNote: 'Endpoint: GET /api/risk/gemini -> api.gemini.com',
-    code: `const risk = await diptos.getLiveGeminiRisk()
+    title: 'Gemini Risk Oracle',
+    subtitle: 'Calibrate TECD λ from live Gemini Prediction Markets event probabilities',
+    file: 'gemini-oracle.ts',
+    params: [
+      { name: 'volatilityIndex', type: 'number', desc: 'Weighted macro uncertainty index ∈ [0, 1]' },
+      { name: 'recommendedLambda', type: 'number', desc: 'Calibrated TECD decay parameter λ ∈ [0.18, 0.95]' },
+    ],
+    code: `// Pull live Gemini Prediction Markets contracts & calibrated λ
+const gemini = await diptos.getLiveGeminiRisk()
 
-console.log('Volatility index:', risk.volatilityIndex)
-console.log('Recommended lambda:', risk.recommendedLambda)
-for (const c of risk.contracts) {
-  console.log(c.instrumentSymbol, 'YES:', Math.round(c.yesProbability * 100) + '%')
-}`,
+for (const market of gemini.contracts) {
+  console.log(
+    market.instrumentSymbol,
+    market.title,
+    'YES:',
+    Math.round(market.yesProbability * 100) + '%'
+  )
+}
+
+console.log('Volatility Index:', gemini.volatilityIndex)
+console.log('Recommended TECD λ:', gemini.recommendedLambda)`,
   },
   {
     id: 'grok',
     num: '05',
-    label: 'Grok Verifier',
-    title: 'Deliverable Audit & EIP-712 Attestation',
-    summary:
-      'Submit a GitHub PR or live URL for structured evidence verification and replay-protected EIP-712 signing.',
-    filename: 'grok-verify.ts',
-    paramsNote: 'Domain: DiptosEscrow v2 · Chain ID 5042002 · ReleaseMilestone',
-    code: `const audit = await diptos.verifyDeliverableWithGrok({
-  escrowId: escrow.escrowIdBytes32,
-  scope: escrow.scope,
-  deliverableUrl: 'https://github.com/Jayram2204/Diptos-Arc',
+    title: 'Grok Verifier',
+    subtitle: 'Audit GitHub PRs or URLs and obtain an EIP-712 MilestoneApproval signature',
+    file: 'grok-verifier.ts',
+    params: [
+      { name: 'deliverableUrl', type: 'string', desc: 'GitHub PR or live deployment URL inspected by Grok AI' },
+      { name: 'eip712Signature', type: 'Hex', desc: '65-byte ECDSA signature verified by DiptosEscrow.sol' },
+    ],
+    code: `// 1. Request Grok AI audit & EIP-712 MilestoneApproval signature
+const receipt = await diptos.verifyDeliverableWithGrok({
+  escrowId,
+  title: 'Arc Native USDC Checkout & Foundry Suite',
+  scope: 'All Foundry tests pass and contract verified on ArcScan',
+  amountUsdc: 1250,
+  deliverableUrl: 'https://github.com/Jayram2204/Diptos-Arc/pull/1',
 })
 
-if (audit.approved && audit.eip712Signature) {
-  const releaseTx = diptos.buildReleaseWithOracleTx({
-    escrowId: escrow.escrowIdBytes32,
-    milestoneIndex: audit.milestoneIndex ?? 0,
-    deliverableHash: audit.deliverableHash,
-    expectedNonce: audit.nonce ?? 0,
-    grokSignature: audit.eip712Signature,
+// 2. Settle atomically on Arc Testnet with Grok signature
+if (receipt.approved && receipt.eip712Signature) {
+  const settleTx = diptos.buildReleaseWithOracleTx({
+    escrowId,
+    milestoneIndex: 0,
+    deliverableHash: receipt.deliverableHash,
+    nonce: receipt.nonce,
+    grokSignature: receipt.eip712Signature,
   })
-  console.log('Ready to broadcast releaseWithOracle:', releaseTx)
+  await walletClient.sendTransaction(settleTx)
 }`,
   },
   {
     id: 'abis',
     num: '06',
-    label: 'Contract ABIs',
-    title: 'Direct Viem ABI Exports & Dual Decimals',
-    summary:
-      'Import typed ABIs and convert between 18-decimal native Arc USDC and 6-decimal ERC-20 USDC.',
-    filename: 'abis.ts',
-    paramsNote: 'Exports: DIPTOS_ESCROW_ABI, DIPTOS_REGISTRY_ABI, ARC_TESTNET',
+    title: 'Contract ABIs',
+    subtitle: 'Typed Viem ABIs for DiptosEscrow.sol and DiptosRegistry.sol',
+    file: 'contracts.ts',
+    params: [
+      { name: 'DIPTOS_ESCROW_ABI', type: 'Abi', desc: `DiptosEscrow on Arc (${ESCROW_CONTRACT_ADDRESS})` },
+      { name: 'DIPTOS_REGISTRY_ABI', type: 'Abi', desc: `DiptosRegistry on Arc (${REGISTRY_CONTRACT_ADDRESS})` },
+    ],
     code: `import {
-  ARC_TESTNET,
+  ARC_TESTNET_CHAIN_ID,
   DIPTOS_ESCROW_ABI,
   DIPTOS_REGISTRY_ABI,
-  nativeUsdcTo6Decimals,
-  usdc6ToNativeWei,
 } from '@diptos/sdk'
 
-const wei = usdc6ToNativeWei(250_000_000n) // 250 USDC -> 250e18 wei
-console.log('Arc Chain ID:', ARC_TESTNET.id, 'Wei:', wei.toString())`,
+// Direct typed contract reads with Viem publicClient
+const [feeBps, totalRegistered] = await Promise.all([
+  publicClient.readContract({
+    address: '${ESCROW_CONTRACT_ADDRESS}',
+    abi: DIPTOS_ESCROW_ABI,
+    functionName: 'protocolFeeBps',
+  }),
+  publicClient.readContract({
+    address: '${REGISTRY_CONTRACT_ADDRESS}',
+    abi: DIPTOS_REGISTRY_ABI,
+    functionName: 'totalEscrows',
+  }),
+])`,
   },
 ]
 
 export function SdkPortal() {
-  const [activeId, setActiveId] = useState<SectionId>('quickstart')
+  const [activeId, setActiveId] = useState<string>(MODULES[0].id)
+  const [installCopied, setInstallCopied] = useState(false)
   const [running, setRunning] = useState(false)
-  const [output, setOutput] = useState<string>(
-    '// Click "Run Live" to query Arc Testnet (5042002), Gemini Prediction Markets, and the EIP-712 Oracle.',
+  const [consoleOutput, setConsoleOutput] = useState<string>(() =>
+    JSON.stringify(
+      {
+        package: '@diptos/sdk@1.0.0',
+        chainId: ARC_NETWORK.chainId,
+        network: ARC_NETWORK.label,
+        contracts: {
+          DiptosEscrow: ESCROW_CONTRACT_ADDRESS,
+          DiptosRegistry: REGISTRY_CONTRACT_ADDRESS,
+        },
+        status: 'Ready — click "Run Live" to query Arc Testnet RPC & Oracles',
+      },
+      null,
+      2,
+    ),
   )
 
-  const current = SECTIONS.find((s) => s.id === activeId) ?? SECTIONS[0]
+  const activeModule = MODULES.find((m) => m.id === activeId) ?? MODULES[0]
 
   const runLiveSdk = async () => {
     setRunning(true)
     try {
-      const [telemetry, geminiRisk, oracleStatus, escrows] = await Promise.allSettled([
+      const [telemetry, gemini, oracle, escrows] = await Promise.all([
         diptos.getArcTelemetry(),
         diptos.getLiveGeminiRisk(),
-        diptos.getOracleStatus(),
-        diptos.listEscrows(0, 5),
+        diptos.getOracleStatus().catch(() => null),
+        diptos.listEscrows().catch(() => []),
       ])
-
-      const payload = {
-        executedAt: new Date().toISOString(),
-        package: '@diptos/sdk@1.0.0',
-        section: current.id,
-        arcTelemetry:
-          telemetry.status === 'fulfilled'
-            ? {
-                chainId: telemetry.value.chainId,
-                rpcUrl: telemetry.value.rpcUrl,
-                blockNumber: telemetry.value.blockNumber.toString(),
-                gasPriceWei: telemetry.value.gasPrice.toString(),
-                latencyMs: telemetry.value.latencyMs,
-              }
-            : { error: (telemetry.reason as Error)?.message },
-        onChainEscrowsCount: escrows.status === 'fulfilled' ? escrows.value.length : 0,
-        oracleStatus:
-          oracleStatus.status === 'fulfilled'
-            ? {
-                oracleSigner: oracleStatus.value.oracleSigner,
-                verifyingContract: oracleStatus.value.eip712Domain.verifyingContract,
-                latestArcBlock: oracleStatus.value.latestArcBlock,
-              }
-            : { error: (oracleStatus.reason as Error)?.message },
-        geminiRisk:
-          geminiRisk.status === 'fulfilled'
-            ? {
-                volatilityIndex: geminiRisk.value.volatilityIndex,
-                recommendedLambda: geminiRisk.value.recommendedLambda,
-                topContract: geminiRisk.value.contracts[0] ?? null,
-              }
-            : { error: (geminiRisk.reason as Error)?.message },
-      }
-      setOutput(JSON.stringify(payload, null, 2))
+      const tecd = diptos.calculateTECD({
+        principalUsdc: 2500,
+        lambda: gemini.recommendedLambda,
+        delaySeconds: 4 * 3600,
+        totalDurationSeconds: 24 * 3600,
+        gamma: 1.5,
+      })
+      setConsoleOutput(
+        JSON.stringify(
+          {
+            timestamp: new Date().toISOString(),
+            module: activeModule.id,
+            arcTelemetry: {
+              chainId: telemetry.chainId,
+              blockNumber: telemetry.blockNumber.toString(),
+              gasPriceWei: telemetry.gasPrice.toString(),
+              rpcLatencyMs: telemetry.latencyMs,
+            },
+            geminiRiskOracle: {
+              source: gemini.source,
+              volatilityIndex: gemini.volatilityIndex,
+              recommendedLambda: gemini.recommendedLambda,
+              activeMarkets: gemini.contracts.length,
+            },
+            grokOracleSigner: oracle?.oracleSigner ?? '0x344d7adf93542C6c27a11bb53A2d7C9d909D9f34',
+            onChainEscrowsCount: escrows.length,
+            tecdSimulation2500Usdc4hLate: {
+              payeePayoutUsdc: tecd.payeePayoutUsdc,
+              buyerRebateUsdc: tecd.buyerRebateUsdc,
+              protocolFeeUsdc: tecd.protocolFeeUsdc,
+              decayPercent: tecd.decayPercent,
+            },
+          },
+          null,
+          2,
+        ),
+      )
     } catch (e) {
-      setOutput(JSON.stringify({ error: (e as Error).message }, null, 2))
+      setConsoleOutput(
+        JSON.stringify(
+          {
+            error: (e as Error).message,
+            hint: 'Verify Arc Testnet RPC connectivity (https://rpc.testnet.arc.network)',
+          },
+          null,
+          2,
+        ),
+      )
     } finally {
       setRunning(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-[#090A0D] text-[#F4F2EC]">
-      {/* Header (68px) */}
-      <header className="sticky top-0 z-50 h-[68px] border-b border-white/[0.08] bg-[#090A0D]/90 backdrop-blur-xl">
+    <div className="min-h-screen bg-black text-paper">
+      {/* Top Bar */}
+      <header className="sticky top-0 z-50 h-[68px] border-b border-paper/10 bg-black/90 backdrop-blur-xl">
         <div className="mx-auto flex h-full max-w-[1360px] items-center justify-between gap-4 px-6">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3.5">
             <a
               href={getApexUrl()}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/15 px-3 font-mono text-[11px] uppercase tracking-[0.12em] text-secondary transition-all duration-200 hover:bg-white/[0.06] hover:text-[#F4F2EC]"
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-paper/15 bg-surface px-3 font-mono text-[11px] uppercase tracking-[0.12em] text-secondary transition-colors hover:border-lime hover:text-lime"
             >
               <ArrowLeft className="size-3.5" />
-              diptos.xyz
+              <span className="hidden sm:inline">diptos.xyz</span>
             </a>
-            <span className="rwa-display inline-flex items-baseline text-[17px] text-[#F4F2EC]">
-              SDK.DIPTOS<span className="ml-1 inline-block size-1.5 rounded-full bg-emerald" />
+
+            <span className="rwa-display inline-flex items-baseline text-[18px] tracking-[-0.04em] text-paper">
+              SDK.DIPTOS<span className="ml-0.5 inline-block size-2 rounded-full bg-lime" />
             </span>
-            <span className="hidden rounded-full border border-white/[0.08] bg-[#111318] px-3 py-0.5 font-mono text-[10.5px] text-secondary sm:inline-block">
-              @diptos/sdk@1.0.0 · npm
+
+            <span className="hidden items-center gap-2 rounded-full border border-paper/12 bg-surface px-3 py-1 font-mono text-[10.5px] uppercase tracking-[0.12em] text-secondary md:inline-flex">
+              <PulseDot color="bg-lime" />
+              @diptos/sdk v1.0.0 • Arc 5042002
             </span>
           </div>
 
@@ -249,15 +297,15 @@ export function SdkPortal() {
               href="https://www.npmjs.com/package/@diptos/sdk"
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden h-9 items-center gap-1 rounded-full border border-white/15 px-3.5 font-mono text-[11px] uppercase tracking-[0.1em] text-secondary transition-colors hover:bg-white/[0.06] hover:text-[#F4F2EC] sm:inline-flex"
+              className="hidden h-9 items-center gap-1.5 rounded-full border border-paper/20 bg-transparent px-4 font-mono text-[11px] uppercase tracking-[0.12em] text-paper transition-colors hover:border-lime hover:text-lime sm:inline-flex"
             >
-              npmjs.com <ArrowUpRight className="size-3.5" />
+              NPM REGISTRY <ArrowUpRight className="size-3.5" />
             </a>
             <a
               href={getAppUrl()}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#F4F2EC] px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[#090A0D] transition-all duration-200 hover:bg-white"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-lime px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-ink transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] hover:bg-[#d8ff4d]"
             >
               Launch App <ArrowUpRight className="size-3.5" />
             </a>
@@ -267,96 +315,150 @@ export function SdkPortal() {
 
       {/* Symmetrical 12-Column Equal-Height 3-Panel Grid */}
       <main className="mx-auto max-w-[1360px] px-6 py-8">
+        <div className="mb-6 flex flex-col justify-between gap-4 border-b border-paper/10 pb-5 sm:flex-row sm:items-end">
+          <div>
+            <p className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-lime">
+              TYPESCRIPT SDK // VIEM + EIP-712 + FIXED-POINT WAD TECD
+            </p>
+            <h1 className="rwa-display mt-1 text-[24px] uppercase text-paper sm:text-[30px]">
+              @DIPTOS/SDK INTERACTIVE ARCHITECTURE LAB
+            </h1>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 font-mono text-[11px] text-secondary">
+            <span>DiptosEscrow: {ESCROW_CONTRACT_ADDRESS.slice(0, 10)}…</span>
+            <span>•</span>
+            <a
+              href={LINKS.explorer}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-lime hover:underline"
+            >
+              ArcScan <ArrowUpRight className="size-3" />
+            </a>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-12">
-          {/* Left Rail (3 cols) */}
-          <aside className="flex flex-col justify-between rounded-xl border border-white/[0.08] bg-[#111318] p-5 lg:col-span-3">
+          {/* Left Rail (lg:col-span-3): Equal-Height Vertical Module Index */}
+          <aside className="rwa-depth-card flex flex-col justify-between rounded-2xl p-5 lg:col-span-3">
             <div>
-              <p className="rwa-hud px-2 text-secondary">SDK MODULES</p>
-              <ul className="mt-3 space-y-1">
-                {SECTIONS.map((s) => {
-                  const active = s.id === activeId
+              <p className="px-2 font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+                SDK MODULES (01–06)
+              </p>
+              <nav className="mt-3 space-y-1.5" aria-label="SDK Modules">
+                {MODULES.map((m) => {
+                  const active = m.id === activeModule.id
                   return (
-                    <li key={s.id}>
-                      <button
-                        type="button"
-                        onClick={() => setActiveId(s.id)}
-                        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left font-mono text-[11.5px] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                          active
-                            ? 'bg-white/[0.08] font-medium text-[#F4F2EC]'
-                            : 'text-secondary hover:bg-white/[0.03] hover:text-[#F4F2EC]'
-                        }`}
-                      >
-                        <span className="text-[10.5px] text-secondary">{s.num}</span>
-                        <span className="truncate">{s.label}</span>
-                      </button>
-                    </li>
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setActiveId(m.id)}
+                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition-all duration-200 ${
+                        active
+                          ? 'border border-lime/40 bg-lime/12 text-paper'
+                          : 'border border-transparent text-secondary hover:bg-white/[0.04] hover:text-paper'
+                      }`}
+                    >
+                      <span className="font-mono text-[12px] font-medium">
+                        <span className="mr-2 text-lime">{m.num}</span>
+                        {m.title}
+                      </span>
+                      <span className="font-mono text-[10px] text-secondary">{m.file}</span>
+                    </button>
                   )
                 })}
-              </ul>
+              </nav>
             </div>
 
-            <div className="mt-6 border-t border-white/[0.08] pt-4">
-              <p className="rwa-hud text-secondary">INSTALL FROM NPM</p>
-              <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-[#090A0D] px-3 py-2">
-                <code className="truncate font-mono text-[11px] text-[#F4F2EC]">
-                  npm i @diptos/sdk viem
-                </code>
-                <CopyButton value="npm install @diptos/sdk viem" label="Copy install command" />
+            {/* Bottom npm install copy box */}
+            <div className="mt-6 border-t border-paper/10 pt-4">
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-secondary">
+                INSTALL FROM NPM
+              </p>
+              <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-paper/12 bg-black/60 px-3 py-2.5 font-mono text-[11.5px] text-paper">
+                <span className="truncate">npm i @diptos/sdk viem</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText('npm install @diptos/sdk viem')
+                    setInstallCopied(true)
+                    setTimeout(() => setInstallCopied(false), 1600)
+                  }}
+                  aria-label="Copy npm install command"
+                  className="text-secondary transition-colors hover:text-lime"
+                >
+                  {installCopied ? <Check className="size-3.5 text-lime" /> : <Copy className="size-3.5" />}
+                </button>
               </div>
             </div>
           </aside>
 
-          {/* Center Code Card (5 cols) */}
-          <section className="flex min-h-[540px] flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-[#111318] lg:col-span-5">
-            <div className="flex items-center justify-between border-b border-white/[0.08] px-6 py-4">
+          {/* Center Code Card (lg:col-span-5): Equal-Height Code + Parameter Footer */}
+          <section className="rwa-depth-card flex h-full min-h-[540px] flex-col overflow-hidden rounded-2xl lg:col-span-5">
+            <div className="flex items-center justify-between gap-2 border-b border-paper/10 px-5 py-3.5">
               <div>
-                <p className="font-mono text-[11px] text-secondary">
-                  {current.num} // {current.filename}
-                </p>
-                <h1 className="mt-0.5 text-[16px] font-semibold text-[#F4F2EC]">{current.title}</h1>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[11px] font-semibold text-lime">
+                    {activeModule.num} / {activeModule.file}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[12px] text-secondary">{activeModule.subtitle}</p>
               </div>
-              <CopyButton value={current.code} label="Copy snippet" />
+              <CopyButton value={activeModule.code} label="Copy snippet" />
             </div>
 
-            <div className="border-b border-white/[0.06] bg-[#090A0D]/40 px-6 py-3 text-[13px] text-secondary">
-              {current.summary}
-            </div>
-
-            <pre className="flex-1 overflow-auto bg-[#090A0D] p-6 font-mono text-[12px] leading-relaxed text-[#F4F2EC]">
-              <code>{current.code}</code>
+            <pre className="flex-1 overflow-auto p-6 font-mono text-[12px] leading-relaxed text-paper/95">
+              <code>{activeModule.code}</code>
             </pre>
 
-            <div className="border-t border-white/[0.08] px-6 py-3 font-mono text-[11px] text-secondary">
-              {current.paramsNote}
+            {/* Bottom Parameter Reference Footer */}
+            <div className="border-t border-paper/10 bg-black/60 px-5 py-3.5">
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-lime">
+                KEY PARAMETERS &amp; TYPES
+              </p>
+              <dl className="mt-2 space-y-1.5 font-mono text-[11px]">
+                {activeModule.params.map((p) => (
+                  <div key={p.name} className="flex flex-wrap items-baseline justify-between gap-2">
+                    <dt className="text-paper">
+                      {p.name} <span className="text-lime">({p.type})</span>
+                    </dt>
+                    <dd className="text-right text-[10.5px] text-secondary">{p.desc}</dd>
+                  </div>
+                ))}
+              </dl>
             </div>
           </section>
 
-          {/* Right Execution Console (4 cols) */}
-          <section className="flex min-h-[540px] flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-[#111318] lg:col-span-4">
-            <div className="flex items-center justify-between border-b border-white/[0.08] px-6 py-4">
+          {/* Right Execution Console (lg:col-span-4): Equal-Height Live JSON Telemetry Pane */}
+          <section className="rwa-depth-card flex h-full min-h-[540px] flex-col overflow-hidden rounded-2xl lg:col-span-4">
+            <div className="flex items-center justify-between gap-2 border-b border-paper/10 px-5 py-3.5">
               <div className="flex items-center gap-2">
-                <Terminal className="size-4 text-secondary" />
-                <span className="rwa-hud text-[#F4F2EC]">LIVE SDK CONSOLE</span>
+                <Terminal className="size-3.5 text-lime" />
+                <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-paper">
+                  LIVE SDK CONSOLE
+                </span>
               </div>
-              <Button size="sm" variant="primary" loading={running} onClick={() => void runLiveSdk()}>
-                <Play className="size-3" /> Run Live
-              </Button>
+              <button
+                type="button"
+                onClick={() => void runLiveSdk()}
+                disabled={running}
+                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-lime px-3.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.12em] text-ink transition-all duration-200 hover:bg-[#d8ff4d] disabled:opacity-50"
+              >
+                {running ? <LoaderCircle className="size-3 animate-spin" /> : <Play className="size-3" />}
+                Run Live
+              </button>
             </div>
 
-            <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#090A0D]/40 px-6 py-2.5 font-mono text-[10.5px] text-secondary">
-              <span className="inline-flex items-center gap-1.5">
-                <PulseDot color="bg-emerald" />
-                Arc RPC + Gemini + Oracle
-              </span>
-              <span>Chain 5042002</span>
-            </div>
-
-            <pre className="flex-1 overflow-auto bg-[#090A0D] p-6 font-mono text-[11.5px] leading-relaxed text-emerald">
-              {output}
+            <pre className="flex-1 overflow-auto p-6 font-mono text-xs leading-relaxed text-paper/90">
+              <code>{consoleOutput}</code>
             </pre>
 
-            <div className="border-t border-white/[0.08] px-6 py-3 font-mono text-[10.5px] text-secondary">
-              Contracts: {ESCROW_CONTRACT_ADDRESS.slice(0, 10)}… · {REGISTRY_CONTRACT_ADDRESS.slice(0, 10)}…
+            <div className="flex items-center justify-between border-t border-paper/10 bg-black/60 px-5 py-3 font-mono text-[10.5px] text-secondary">
+              <span>RPC: rpc.testnet.arc.network</span>
+              <span className="inline-flex items-center gap-1.5 text-lime">
+                <span className="size-1.5 rounded-full bg-lime" />
+                LIVE 5042002
+              </span>
             </div>
           </section>
         </div>

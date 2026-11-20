@@ -120,18 +120,18 @@ export function Waterfall() {
   }, [effectiveLambda, slaWindowHours, delayHours])
 
   return (
-    <section id="tecd-risk" className="mx-auto max-w-[1320px] border-t border-white/[0.08] px-6 py-20 lg:px-8">
+    <section id="tecd-risk" className="mx-auto max-w-[1280px] border-t border-paper/12 px-6 py-20 lg:px-8">
       <div className="max-w-2xl">
-        <p className="rwa-hud text-secondary">03 // TECD RISK &amp; GEMINI ORACLE</p>
-        <h2 className="rwa-display mt-3 text-[28px] text-[#F4F2EC] sm:text-[38px]">
+        <p className="rwa-hud text-lime">03 // TECD RISK &amp; GEMINI ORACLE</p>
+        <h2 className="rwa-display mt-3 text-[28px] text-paper sm:text-[38px]">
           EXPONENTIAL LATENCY DECAY. LIVE MACRO CALIBRATION.
         </h2>
       </div>
 
-      {/* Symmetrical 12-Column Equal-Height 2-Card Grid */}
+      {/* Symmetrical 12-Column Equal-Height 2-Card Grid with Royal Navy Depth Cards */}
       <div className="mt-10 grid grid-cols-1 items-stretch gap-6 lg:grid-cols-12">
-        {/* Left Card (7 cols): TECD Decay Curve + Interactive Simulator */}
-        <div className="flex flex-col justify-between rounded-xl border border-white/[0.08] bg-[#111318] p-7 lg:col-span-7">
+        {/* Left Card (7 cols): Acid Lime SVG Decay Curve + 0h->72h Slider */}
+        <div className="rwa-depth-card flex flex-col justify-between rounded-2xl p-7 lg:col-span-7">
           <div>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-secondary">
@@ -146,21 +146,21 @@ export function Waterfall() {
               </span>
             </div>
 
-            <div className="mt-5 rounded-lg border border-white/[0.06] bg-[#090A0D] px-3 py-4">
+            <div className="mt-5 border-y border-paper/10 py-4">
               <svg viewBox={`0 0 ${curve.w} ${curve.h}`} className="h-[136px] w-full" aria-label="TECD Decay Curve">
                 <line x1="12" y1="14" x2="508" y2="14" stroke="rgba(244,242,236,0.08)" strokeDasharray="3 4" />
                 <line x1="12" y1="68" x2="508" y2="68" stroke="rgba(244,242,236,0.08)" strokeDasharray="3 4" />
                 <line x1="12" y1="122" x2="508" y2="122" stroke="rgba(244,242,236,0.12)" />
-                <path d={curve.path} fill="none" stroke="#F4F2EC" strokeWidth="2" />
+                <path d={curve.path} fill="none" stroke="#C8FF00" strokeWidth="2.2" />
                 <line
                   x1={curve.dotX}
                   y1={curve.dotY}
                   x2={curve.dotX}
                   y2="122"
-                  stroke="rgba(16,185,129,0.45)"
+                  stroke="rgba(200,255,0,0.35)"
                   strokeDasharray="2 3"
                 />
-                <circle cx={curve.dotX} cy={curve.dotY} r="4.5" fill="#10B981" />
+                <circle cx={curve.dotX} cy={curve.dotY} r="5" fill="#C8FF00" />
               </svg>
             </div>
 
@@ -172,7 +172,7 @@ export function Waterfall() {
                   min={1}
                   value={amountUsdc}
                   onChange={(e) => setAmountUsdc(Math.max(1, Number(e.target.value) || 0))}
-                  className="mt-1.5 h-9 w-full rounded-lg border border-white/[0.08] bg-[#161922] px-3 font-mono text-[13px] text-[#F4F2EC] outline-none transition-colors focus:border-white/30"
+                  className="mt-1.5 h-9 w-full border-b border-paper/20 bg-transparent font-mono text-[14px] text-paper outline-none focus:border-lime"
                 />
               </label>
               <label className="block">
@@ -183,7 +183,7 @@ export function Waterfall() {
                   max={720}
                   value={slaWindowHours}
                   onChange={(e) => setSlaWindowHours(Math.max(1, Number(e.target.value) || 1))}
-                  className="mt-1.5 h-9 w-full rounded-lg border border-white/[0.08] bg-[#161922] px-3 font-mono text-[13px] text-[#F4F2EC] outline-none transition-colors focus:border-white/30"
+                  className="mt-1.5 h-9 w-full border-b border-paper/20 bg-transparent font-mono text-[14px] text-paper outline-none focus:border-lime"
                 />
               </label>
               <label className="block">
@@ -197,7 +197,7 @@ export function Waterfall() {
                   max={2}
                   value={Number(effectiveLambda.toFixed(3))}
                   onChange={(e) => setManualLambda(Math.max(0.05, Math.min(2, Number(e.target.value) || 0.05)))}
-                  className="mt-1.5 h-9 w-full rounded-lg border border-white/[0.08] bg-[#161922] px-3 font-mono text-[13px] text-[#F4F2EC] outline-none transition-colors focus:border-white/30"
+                  className="mt-1.5 h-9 w-full border-b border-paper/20 bg-transparent font-mono text-[14px] text-lime outline-none focus:border-lime"
                 />
               </label>
             </div>
@@ -205,7 +205,7 @@ export function Waterfall() {
             <div className="mt-6">
               <div className="flex items-baseline justify-between font-mono text-[11px] uppercase tracking-[0.1em]">
                 <span className="text-secondary">DELIVERY DELAY (0H → 72H)</span>
-                <span className="text-[#F4F2EC]">{delayHours} HOURS LATE</span>
+                <span className="text-lime">{delayHours} HOURS LATE</span>
               </div>
               <input
                 type="range"
@@ -220,28 +220,28 @@ export function Waterfall() {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-3 gap-4 border-t border-white/[0.08] pt-5 font-mono">
+          <div className="mt-6 grid grid-cols-3 gap-4 border-t border-paper/10 pt-5 font-mono">
             <div>
               <p className="text-[10px] uppercase text-secondary">PAYEE PAYOUT</p>
-              <p className="mt-1 text-[17px] font-semibold text-emerald">{fmtAmount(result.payeePayoutUsdc)} USDC</p>
+              <p className="mt-1 text-[18px] font-semibold text-emerald">{fmtAmount(result.payeePayoutUsdc)} USDC</p>
             </div>
             <div>
               <p className="text-[10px] uppercase text-secondary">BUYER REBATE</p>
-              <p className="mt-1 text-[17px] font-semibold text-crimson">{fmtAmount(result.buyerRebateUsdc)} USDC</p>
+              <p className="mt-1 text-[18px] font-semibold text-crimson">{fmtAmount(result.buyerRebateUsdc)} USDC</p>
             </div>
             <div>
               <p className="text-[10px] uppercase text-secondary">FEE (0.5%)</p>
-              <p className="mt-1 text-[17px] font-semibold text-[#F4F2EC]">{fmtAmount(result.protocolFeeUsdc)} USDC</p>
+              <p className="mt-1 text-[18px] font-semibold text-paper">{fmtAmount(result.protocolFeeUsdc)} USDC</p>
             </div>
           </div>
         </div>
 
         {/* Right Card (5 cols): Live Gemini Prediction Markets Probability Rows */}
-        <div className="flex flex-col justify-between rounded-xl border border-white/[0.08] bg-[#111318] p-7 lg:col-span-5">
+        <div className="rwa-depth-card flex flex-col justify-between rounded-2xl p-7 lg:col-span-5">
           <div>
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#F4F2EC]">
+                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-lime">
                   GEMINI PREDICTION MARKETS
                 </p>
                 <p className="mt-0.5 font-mono text-[11px] text-secondary">GET /api/risk/gemini</p>
@@ -250,7 +250,7 @@ export function Waterfall() {
                 type="button"
                 onClick={() => void refreshGemini()}
                 disabled={geminiLoading}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/15 px-3 font-mono text-[10.5px] uppercase tracking-[0.1em] text-secondary transition-colors hover:border-white/30 hover:text-[#F4F2EC]"
+                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-paper/15 px-3 font-mono text-[10.5px] uppercase tracking-[0.1em] text-secondary hover:border-lime hover:text-lime"
               >
                 <RefreshCw className={`size-3 ${geminiLoading ? 'animate-spin' : ''}`} />
                 SYNC
@@ -259,25 +259,25 @@ export function Waterfall() {
 
             {gemini ? (
               <>
-                <div className="mt-5 grid grid-cols-2 gap-4 border-y border-white/[0.08] py-4 font-mono">
+                <div className="mt-5 grid grid-cols-2 gap-4 border-y border-paper/10 py-4 font-mono">
                   <div>
                     <p className="text-[10px] uppercase text-secondary">VOLATILITY INDEX</p>
-                    <p className="mt-1 text-[22px] font-semibold text-[#F4F2EC]">{gemini.volatilityIndex.toFixed(3)}</p>
+                    <p className="mt-1 text-[22px] font-semibold text-paper">{gemini.volatilityIndex.toFixed(3)}</p>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase text-secondary">CALIBRATED λ</p>
-                    <p className="mt-1 text-[22px] font-semibold text-emerald">{gemini.recommendedLambda.toFixed(3)}</p>
+                    <p className="mt-1 text-[22px] font-semibold text-lime">{gemini.recommendedLambda.toFixed(3)}</p>
                   </div>
                 </div>
 
-                <ul className="mt-3 divide-y divide-white/[0.06]">
+                <ul className="mt-3 divide-y divide-paper/10">
                   {gemini.contracts.slice(0, 5).map((c) => (
                     <li key={c.instrumentSymbol} className="flex items-center justify-between gap-3 py-3">
                       <div className="min-w-0">
-                        <p className="truncate text-[13px] font-medium text-[#F4F2EC]">{c.title}</p>
+                        <p className="truncate text-[13px] font-medium text-paper">{c.title}</p>
                         <p className="font-mono text-[10px] text-secondary">{c.instrumentSymbol}</p>
                       </div>
-                      <span className="shrink-0 font-mono text-[12px] font-semibold text-[#F4F2EC]">
+                      <span className="shrink-0 font-mono text-[12px] font-semibold text-lime">
                         YES {Math.round(c.yesProbability * 100)}%
                       </span>
                     </li>
@@ -294,12 +294,12 @@ export function Waterfall() {
           </div>
 
           {gemini && (
-            <div className="mt-6 flex items-center justify-between border-t border-white/[0.08] pt-4 font-mono text-[10.5px]">
+            <div className="mt-6 flex items-center justify-between border-t border-paper/10 pt-4 font-mono text-[10.5px]">
               <span className="text-secondary">UPDATED {new Date(gemini.fetchedAt).toLocaleTimeString()}</span>
               <button
                 type="button"
                 onClick={() => setManualLambda(null)}
-                className="text-[#F4F2EC] underline-offset-4 hover:underline"
+                className="text-lime underline-offset-4 hover:underline"
               >
                 USE LIVE λ = {gemini.recommendedLambda.toFixed(3)}
               </button>
