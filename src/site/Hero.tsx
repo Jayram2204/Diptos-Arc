@@ -9,7 +9,9 @@ export function Hero() {
       </p>
 
       <h1 className="rwa-display mt-6 max-w-[1120px] break-normal text-[clamp(2.5rem,5.2vw,4.75rem)] leading-[1.03] text-paper">
-        PROGRAMMABLE ESCROW. ATOMIC USDC SETTLEMENT.
+        SELF-PRICING SETTLEMENT.
+        <br />
+        ATOMIC USDC FINALITY.
       </h1>
 
       <p className="mt-6 max-w-[680px] text-[16px] leading-[1.6] text-secondary sm:text-[18px]">
