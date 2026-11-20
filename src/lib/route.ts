@@ -93,7 +93,7 @@ export function navigate(to: string, newTab = false) {
   if (/^https?:\/\//i.test(to)) {
     const targetUrl = new URL(to)
     if (targetUrl.origin !== window.location.origin) {
-      window.open(to, '_blank', 'noopener,noreferrer')
+      window.location.assign(to)
       return
     }
     window.history.pushState({}, '', `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`)

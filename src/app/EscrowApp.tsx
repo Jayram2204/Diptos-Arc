@@ -99,7 +99,7 @@ function EscrowDashboardInner() {
 
     setSubmitting(true)
     try {
-      const escrow = await diptos.createEscrowLink({
+      const res = await diptos.createEscrowLink({
         title: title.trim(),
         scope: scope.trim(),
         amountUsdc: amount,
@@ -108,8 +108,9 @@ function EscrowDashboardInner() {
         payee: (cleanPayee || undefined) as `0x${string}` | undefined,
         tecdLambda: liveLambda,
       })
-      setCreatedEscrow(escrow)
-      await refresh()
+      const record = res.escrow ?? res
+      setCreatedEscrow(record)
+      navigate(buildShareLink(record))
     } catch (err) {
       setFormError((err as Error).message)
     } finally {

@@ -97,8 +97,10 @@ export function canonicalEscrowHash(
   )
 }
 
-export const shortHex = (h: string, head = 6, tail = 4) =>
-  h.length <= head + tail + 2 ? h : `${h.slice(0, head)}…${h.slice(-tail)}`
+export const shortHex = (h?: string | null, head = 6, tail = 4) => {
+  if (!h || typeof h !== 'string') return ''
+  return h.length <= head + tail + 2 ? h : `${h.slice(0, head)}…${h.slice(-tail)}`
+}
 
 export const fmtAmount = (n: number, digits = 2) =>
   n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })

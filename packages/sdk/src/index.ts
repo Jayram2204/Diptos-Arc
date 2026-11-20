@@ -583,14 +583,97 @@ export class DiptosClient {
     return data.escrow
   }
 
-  async createEscrowLink(params: CreateEscrowParams) {
-    const res = await fetch(`${this.apiBaseUrl}/api/escrows`, {
+  async createEscrowLink(params: CreateEscrowParams): Promise<
+    EscrowRecord & {
+      escrow: EscrowRecord
+      txIntent: {
+        chainId: 5042002
+        to: Address | null
+        valueWei: string
+        calldata: Hex
+      }
+      checkoutPath: string
+      shareUrl: string
+    }
+  > {
+    const title = params.title.trim()
+    const scope = params.scope.trim()
+    const amountUsdc = Number(params.amountUsdc)
+    const deadlineHours = Math.max(0.03, Math.min(720, Number(params.deadlineHours ?? 24)))
+    const mode: EscrowMode = params.mode === 'agent' ? 'agent' : 'human'
+    const payee: Address =
+      params.payee && /^0x[0-9a-fA-F]{40}$/.test(params.payee.trim())
+        ? (params.payee.trim() as Address)
+        : ('0x742d35Cc6634C0532925a3b844Bc454e4438f44e' as Address)
+    const tecdLambda = Number.isFinite(Number(params.tecdLambda))
+      ? Math.min(2.0, Math.max(0.05, Number(params.tecdLambda)))
+      : 0.35
+
+    const randHex = Array.from({ length: 10 }, () => Math.floor(Math.random() * 16).toString(16)).join('')
+    const slug = `esc_${randHex}`
+    const escrowIdBytes32 = toEscrowBytes32(slug)
+    const now = Date.now()
+    const deadlineMs = now + Math.round(deadlineHours * 3600 * 1000)
+    const deadlineUnix = Math.floor(deadlineMs / 1000)
+    const tecdLambdaBps = Math.round(tecdLambda * 10_000)
+
+    const calldata = encodeFunctionData({
+      abi: DIPTOS_ESCROW_ABI,
+      functionName: 'createEscrowLink',
+      args: [escrowIdBytes32, payee, BigInt(deadlineUnix), BigInt(tecdLambdaBps), mode === 'agent'],
+    })
+
+    const qs = new URLSearchParams({
+      title,
+      scope,
+      amount: String(amountUsdc),
+      hours: String(deadlineHours),
+      mode,
+      payee,
+      lambda: String(Number(tecdLambda.toFixed(4))),
+    })
+    const checkoutPath = `/pay/${escrowIdBytes32}?${qs.toString()}`
+    const shareUrl = `https://app.diptos.xyz${checkoutPath}`
+
+    const escrow: EscrowRecord = {
+      id: escrowIdBytes32,
+      escrowIdBytes32,
+      title,
+      scope,
+      amountUsdc,
+      deadline: new Date(deadlineMs).toISOString(),
+      deadlineUnix,
+      deadlineHours,
+      mode,
+      payee,
+      tecdLambda: Number(tecdLambda.toFixed(4)),
+      tecdLambdaBps,
+      status: 'created',
+      createdAt: new Date(now).toISOString(),
+      onChain: false,
+    }
+
+    const txIntent = {
+      chainId: 5042002 as const,
+      to: this.escrowContract ?? null,
+      valueWei: parseEther(String(amountUsdc)).toString(),
+      calldata,
+    }
+
+    // Fire-and-forget notification to API endpoint without blocking instant link generation
+    void fetch(`${this.apiBaseUrl}/api/escrows`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
-    })
-    if (!res.ok) throw new Error(`createEscrowLink failed (${res.status}): ${await res.text()}`)
-    return res.json()
+    }).catch(() => {})
+
+    return {
+      ...escrow,
+      escrow,
+      txIntent,
+      checkoutPath,
+      shareUrl,
+    }
   }
 
   async getLiveGeminiRisk(): Promise<GeminiRiskResult> {
