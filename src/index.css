@@ -149,6 +149,84 @@
   border: 1px solid rgba(244, 242, 236, 0.1);
 }
 
+/* Kinetic Settlement Flywheel Keyframes (GPU transform & opacity only) */
+@keyframes flywheel-spin-lock {
+  0% {
+    transform: scale(0.72) rotate(0deg);
+  }
+  62% {
+    transform: scale(1) rotate(540deg);
+  }
+  100% {
+    transform: scale(1) rotate(720deg);
+  }
+}
+
+@keyframes flywheel-burst-flare {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  35% {
+    opacity: 0.9;
+    transform: scale(1.12);
+  }
+  70% {
+    opacity: 0.55;
+    transform: scale(1.25);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.32);
+  }
+}
+
+@keyframes flywheel-shockwave {
+  0% {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  25% {
+    opacity: 0.75;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.75);
+  }
+}
+
+@keyframes flywheel-inline-spin {
+  0% {
+    transform: scale(0.92) rotate(0deg);
+  }
+  65% {
+    transform: scale(1.06) rotate(560deg);
+  }
+  100% {
+    transform: scale(1) rotate(720deg);
+  }
+}
+
+.animate-flywheel-spin {
+  animation: flywheel-spin-lock 1.05s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-flywheel-burst {
+  animation: flywheel-burst-flare 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-flywheel-shockwave {
+  animation: flywheel-shockwave 0.48s cubic-bezier(0.22, 1, 0.36, 1) 0.65s forwards;
+}
+
+.animate-flywheel-inline {
+  animation: flywheel-inline-spin 0.72s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-flywheel-inline-shockwave {
+  animation: flywheel-shockwave 0.52s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rwa-reveal {
     opacity: 1 !important;
