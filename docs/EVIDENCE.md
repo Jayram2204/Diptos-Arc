@@ -72,15 +72,18 @@ Observed output:
 ```text
 @diptos/sdk@1.0.0
 Tarball Contents:
+dist/index.cjs
+dist/index.cjs.map
+dist/index.d.cts
 dist/index.d.ts
 dist/index.js
+dist/index.js.map
+LICENSE
 package.json
 README.md
-src/index.ts
-tsconfig.json
 ```
 - `packages/sdk/package.json` contains zero `workspace:*` specifiers (`peerDependencies: { "viem": "^2.0.0" }`).
-- Currently emits ESM (`dist/index.js`) and TypeScript declarations (`dist/index.d.ts`); CJS (`dist/index.cjs`) is not yet emitted.
+- Built via `tsup` (`packages/sdk/tsup.config.ts`) emitting dual ESM (`dist/index.js`), CJS (`dist/index.cjs`), and TypeScript declarations (`dist/index.d.ts`, `dist/index.d.cts`) with `"files": ["dist", "README.md"]`.
 
 ---
 

@@ -43,7 +43,7 @@
 | **Smart Contracts (`DiptosEscrow` + `DiptosRegistry`)** | **Demonstrated** (Foundry) / **Intended** (Live Arc Broadcast) | 15/15 unit & fuzz tests pass (`forge test -vvv`) | Broadcast `contracts/script/DeployArc.s.sol` with a funded Arc Testnet key and update `VITE_ESCROW_CONTRACT_ADDRESS` & `VITE_REGISTRY_CONTRACT_ADDRESS`. |
 | **Consumer Checkout & Live UI (`src/`)** | **Demonstrated** | `pnpm build:all` passes; Lenis smooth scroll, SVG TECD simulator, live Arc RPC telemetry | Requires live contract addresses and Vercel env vars for end-to-end mainnet-like settlement. |
 | **Stateless Serverless API (`server/` + `api/[[...route]].ts`)** | **Demonstrated** | Deployed on Vercel Functions; zero `fs.writeFileSync` state storage | Requires `XAI_API_KEY`, `GROK_ORACLE_PRIVATE_KEY`, `ELEVENLABS_API_KEY`, and `QUICKNODE_WEBHOOK_SECRET` in Vercel settings. |
-| **`@diptos/sdk` (`packages/sdk/`)** | **Demonstrated** (ESM + `.d.ts`) | `pnpm --filter @diptos/sdk pack --dry-run` passes with zero `workspace:*` leaks | Add CJS (`dist/index.cjs`) build target and `"files"` allowlist before publishing to npm. |
+| **`@diptos/sdk` (`packages/sdk/`)** | **Demonstrated** (ESM + CJS + `.d.ts`) | `pnpm --filter @diptos/sdk build` (`tsup`) & `pack --dry-run` pass with `"files": ["dist", "README.md"]` and zero `workspace:*` leaks | Ready for npm publish when desired. |
 | **Broader Commercial / Invoice Workflows** | **Potential** | N/A | Exploratory extension of canonical hash + TECD primitives; not built in this repo. |
 
 ---
