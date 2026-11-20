@@ -14,7 +14,7 @@ import { ABIS } from '@/config/abis'
 import { ARC_CHAIN_ID, ARC_NATIVE_DECIMALS, type ContractKey, contractAddress } from '@/config/protocol'
 import { arcTestnet, publicClient } from '@/lib/chain'
 
-export type WalletId = 'metamask' | 'coinbase' | 'judge'
+export type WalletId = 'metamask' | 'coinbase'
 export type TxKind = 'Fund Escrow' | 'Settle Escrow' | 'Claim Timeout Refund' | 'Claim Faucet'
 
 export interface TxRequest {
@@ -42,6 +42,7 @@ interface Eip6963Detail {
 
 interface WalletContextValue {
   address: Address | null
+  isConnected: boolean
   walletName: string | null
   walletChainId: number | null
   connecting: WalletId | null
@@ -63,8 +64,8 @@ export function useWallet() {
   return ctx
 }
 
-const LAST_WALLET_KEY = 'diptos.arc.wallet.v3'
-const JUDGE_WALLET_ADDRESS: Address = '0x344d7adf93542C6c27a11bb53A2d7C9d909D9f34'
+const NO_WALLET_MSG =
+  'No EVM wallet extension detected — open in Chrome/Brave with MetaMask or Rabby to sign Arc Testnet transactions.'
 
 const errMsg = (e: unknown) => {
   const be = e as BaseError & { code?: number }
@@ -81,9 +82,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [balanceUsdc, setBalanceUsdc] = useState<string | null>(null)
   const [txStage, setTxStage] = useState<{ kind: TxKind; stage: 'switch' | 'sign' | 'mining' } | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [isJudgeMode, setIsJudgeMode] = useState(false)
   const provider = useRef<EIP1193Provider | null>(null)
 
+  // Purge any legacy auto-connect / burner wallet keys from localStorage on mount
+  useEffect(() => {
+    try {
+      localStorage.removeItem('diptos.wallet.v1')
+      localStorage.removeItem('diptos.arc.wallet.v2')
+      localStorage.removeItem('diptos.arc.wallet.v3')
+    } catch {
+      // ignore storage errors
+    }
+  }, [])
+
+  // EIP-6963 provider discovery (passive discovery only — never auto-connects)
   useEffect(() => {
     const onAnnounce = (e: Event) => {
       const d = (e as CustomEvent<Eip6963Detail>).detail
@@ -97,6 +109,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const resolveInjectedProvider = useCallback((): { provider: EIP1193Provider; name: string } | null => {
     if (eip6963['io.metamask']) return { provider: eip6963['io.metamask'].provider, name: 'MetaMask' }
     if (eip6963['io.rabby']) return { provider: eip6963['io.rabby'].provider, name: 'Rabby Wallet' }
+    if (eip6963['com.coinbase.wallet']) {
+      return { provider: eip6963['com.coinbase.wallet'].provider, name: 'Coinbase Wallet' }
+    }
     if (eip6963['app.phantom']) return { provider: eip6963['app.phantom'].provider, name: 'Phantom' }
     if (eip6963['me.rainbow']) return { provider: eip6963['me.rainbow'].provider, name: 'Rainbow' }
     const firstEip6963 = Object.values(eip6963)[0]
@@ -106,27 +121,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       window as unknown as {
         ethereum?: EIP1193Provider & {
           isMetaMask?: boolean
+          isRabby?: boolean
           isCoinbaseWallet?: boolean
-          providers?: (EIP1193Provider & { isMetaMask?: boolean })[]
+          providers?: (EIP1193Provider & { isMetaMask?: boolean; isRabby?: boolean })[]
         }
       }
     ).ethereum
 
     if (winEth?.providers?.length) {
-      const mm = winEth.providers.find((p) => p.isMetaMask) ?? winEth.providers[0]
-      return { provider: mm, name: 'MetaMask' }
+      const preferred = winEth.providers.find((p) => p.isRabby || p.isMetaMask) ?? winEth.providers[0]
+      return { provider: preferred, name: preferred.isRabby ? 'Rabby Wallet' : 'MetaMask' }
     }
-    if (winEth) {
-      return { provider: winEth, name: winEth.isMetaMask ? 'MetaMask' : 'Browser Wallet' }
+    if (winEth && typeof winEth.request === 'function') {
+      const name = winEth.isRabby ? 'Rabby Wallet' : winEth.isMetaMask ? 'MetaMask' : 'Browser Wallet'
+      return { provider: winEth, name }
     }
     return null
   }, [eip6963])
-
-  const coinbaseInjected =
-    eip6963['com.coinbase.wallet']?.provider ??
-    ((window as unknown as { ethereum?: EIP1193Provider & { isCoinbaseWallet?: boolean } }).ethereum?.isCoinbaseWallet
-      ? (window as unknown as { ethereum: EIP1193Provider }).ethereum
-      : null)
 
   const refreshBalance = useCallback(() => {
     if (!address) {
@@ -149,7 +160,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [refreshBalance])
 
   const switchToArc = useCallback(async (p: EIP1193Provider) => {
-    const hexId = numberToHex(ARC_CHAIN_ID)
+    const hexId = numberToHex(ARC_CHAIN_ID) // 0x4cef52 (5042002)
     try {
       await p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hexId }] })
     } catch (e) {
@@ -175,36 +186,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const attach = useCallback((p: EIP1193Provider) => {
-    const onAccounts = (accs: string[]) => setAddress(accs[0] ? getAddress(accs[0]) : null)
+    const onAccounts = (accs: string[]) => {
+      if (!accs?.[0]) {
+        provider.current = null
+        setAddress(null)
+        setWalletName(null)
+        setBalanceUsdc(null)
+      } else {
+        setAddress(getAddress(accs[0]))
+      }
+    }
     const onChain = (id: string) => setWalletChainId(Number(id))
     p.on?.('accountsChanged', onAccounts as never)
     p.on?.('chainChanged', onChain as never)
-  }, [])
-
-  const finishConnect = useCallback(
-    async (p: EIP1193Provider, name: string, interactive: boolean) => {
-      const accounts = (await p.request({
-        method: interactive ? 'eth_requestAccounts' : 'eth_accounts',
-      } as never)) as string[]
-      if (!accounts?.[0]) return false
-      provider.current = p
-      setIsJudgeMode(false)
-      setAddress(getAddress(accounts[0]))
-      setWalletName(name)
-      setWalletChainId(Number(await p.request({ method: 'eth_chainId' })))
-      attach(p)
-      return true
-    },
-    [attach],
-  )
-
-  const connectJudgeWallet = useCallback(async () => {
-    provider.current = null
-    setIsJudgeMode(true)
-    setAddress(JUDGE_WALLET_ADDRESS)
-    setWalletName('Arc Testnet Judge Wallet')
-    setWalletChainId(ARC_CHAIN_ID)
-    localStorage.setItem(LAST_WALLET_KEY, 'judge')
   }, [])
 
   const connect = useCallback(
@@ -212,112 +206,55 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setError(null)
       setConnecting(id)
       try {
-        if (id === 'judge') {
-          await connectJudgeWallet()
+        const detected = resolveInjectedProvider()
+        if (!detected) {
+          setError(NO_WALLET_MSG)
           return
         }
 
-        if (id === 'metamask') {
-          const detected = resolveInjectedProvider()
-          if (!detected) {
-            // In browsers without an injected wallet extension (e.g. IDE preview / Safari),
-            // connect seamlessly to the live funded Arc Testnet Judge Wallet so 1-click testing works!
-            await connectJudgeWallet()
-            return
-          }
-          const ok = await finishConnect(detected.provider, detected.name, true)
-          if (ok) {
-            localStorage.setItem(LAST_WALLET_KEY, 'metamask')
-            await switchToArc(detected.provider).catch(() => {})
-          }
+        const accounts = (await detected.provider.request({
+          method: 'eth_requestAccounts',
+        } as never)) as string[]
+
+        if (!accounts?.[0]) {
+          setError('No wallet account authorized.')
           return
         }
 
-        // Coinbase Wallet
-        let p = coinbaseInjected
-        if (!p) {
-          const { createCoinbaseWalletSDK } = await import('@coinbase/wallet-sdk')
-          const sdk = createCoinbaseWalletSDK({
-            appName: 'Diptos on Arc',
-            appChainIds: [ARC_CHAIN_ID],
-          })
-          p = sdk.getProvider() as unknown as EIP1193Provider
-        }
-        const ok = await finishConnect(p, 'Coinbase Wallet', true)
-        if (ok) {
-          localStorage.setItem(LAST_WALLET_KEY, 'coinbase')
-          await switchToArc(p).catch(() => {})
-        }
+        provider.current = detected.provider
+        setAddress(getAddress(accounts[0]))
+        setWalletName(detected.name)
+        const currentChainHex = (await detected.provider.request({ method: 'eth_chainId' })) as string
+        setWalletChainId(Number(currentChainHex))
+        attach(detected.provider)
+
+        await switchToArc(detected.provider).catch(() => {})
       } catch (e) {
         setError(errMsg(e))
       } finally {
         setConnecting(null)
       }
     },
-    [resolveInjectedProvider, coinbaseInjected, finishConnect, switchToArc, connectJudgeWallet],
+    [resolveInjectedProvider, attach, switchToArc],
   )
-
-  useEffect(() => {
-    const last = localStorage.getItem(LAST_WALLET_KEY) as WalletId | null
-    if (address || !last) return
-    if (last === 'judge') {
-      void connectJudgeWallet()
-      return
-    }
-    if (last === 'metamask') {
-      const detected = resolveInjectedProvider()
-      if (detected) finishConnect(detected.provider, detected.name, false).catch(() => {})
-    } else if (last === 'coinbase' && coinbaseInjected) {
-      finishConnect(coinbaseInjected, 'Coinbase Wallet', false).catch(() => {})
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolveInjectedProvider, coinbaseInjected])
 
   const disconnect = useCallback(() => {
     provider.current = null
-    setIsJudgeMode(false)
-    localStorage.removeItem(LAST_WALLET_KEY)
     setAddress(null)
     setWalletName(null)
     setWalletChainId(null)
     setBalanceUsdc(null)
+    setError(null)
   }, [])
 
   const execute = useCallback(
     async (req: TxRequest): Promise<Receipt | null> => {
       setError(null)
       try {
-        if (!address) throw new Error('Connect a wallet on Arc Testnet first.')
-
-        // Judge Wallet mode: execute real on-chain transaction via funded Arc Testnet server relayer
-        if (isJudgeMode || !provider.current) {
-          setTxStage({ kind: req.kind, stage: 'mining' })
-          const res = await fetch('/api/wallet/relay', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              functionName: req.functionName,
-              args: req.args.map((a) => (typeof a === 'bigint' ? a.toString() : a)),
-              valueWei: req.value ? req.value.toString() : '0',
-            }),
-          })
-          const data = await res.json().catch(() => ({}))
-          if (!res.ok) {
-            throw new Error(data?.error || `Arc relay failed (${res.status})`)
-          }
-          refreshBalance()
-          return {
-            kind: req.kind,
-            hash: data.hash as Hex,
-            blockNumber: String(data.blockNumber),
-            gasUsed: String(data.gasUsed),
-            status: data.status === 'reverted' ? 'reverted' : 'success',
-            from: (data.from as Address) ?? address,
-            at: Date.now(),
-          }
-        }
-
         const p = provider.current
+        if (!p || !address) {
+          throw new Error('Connect your EVM wallet on Arc Testnet first.')
+        }
         if (walletChainId !== ARC_CHAIN_ID) {
           setTxStage({ kind: req.kind, stage: 'switch' })
           await switchToArc(p)
@@ -354,13 +291,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setTxStage(null)
       }
     },
-    [address, isJudgeMode, walletChainId, switchToArc, refreshBalance],
+    [address, walletChainId, switchToArc, refreshBalance],
   )
 
   return (
     <WalletCtx.Provider
       value={{
         address,
+        isConnected: Boolean(address && provider.current),
         walletName,
         walletChainId,
         connecting,

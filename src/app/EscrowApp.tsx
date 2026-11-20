@@ -199,19 +199,19 @@ function EscrowAppInner() {
       </header>
 
       {/* Main Content Container */}
-      <main className="mx-auto max-w-[1320px] px-6 py-8">
+      <main className="mx-auto max-w-[1320px] px-6 py-5">
         {tab === 'create' ? (
-          <div className="animate-fade-up grid grid-cols-1 items-stretch gap-6 lg:grid-cols-12">
+          <div className="animate-fade-up grid grid-cols-1 items-stretch gap-5 lg:grid-cols-12">
             {/* Left Card (7 cols): Balanced Compact Form */}
             <form
               onSubmit={handleSubmit}
-              className="flex flex-col justify-between rounded-xl border border-white/[0.08] bg-[#111318] p-7 lg:col-span-7"
+              className="flex flex-col justify-between rounded-xl border border-white/[0.08] bg-[#111318] p-6 lg:col-span-7"
             >
               <div>
-                <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
+                <div className="flex items-center justify-between border-b border-white/[0.08] pb-3.5">
                   <div>
                     <p className="rwa-hud text-secondary">PROGRAMMABLE ESCROW COMPOSER</p>
-                    <h1 className="mt-1 text-[20px] font-semibold text-[#F4F2EC]">
+                    <h1 className="mt-1 text-[19px] font-semibold text-[#F4F2EC]">
                       Create Non-Custodial USDC Escrow Link
                     </h1>
                   </div>
@@ -220,7 +220,7 @@ function EscrowAppInner() {
                   </span>
                 </div>
 
-                <div className="mt-5 space-y-4">
+                <div className="mt-4 space-y-3.5">
                   {/* Row 1: Execution Mode */}
                   <div>
                     <span className="block font-mono text-[10.5px] uppercase tracking-[0.1em] text-paper/90">
@@ -333,7 +333,7 @@ function EscrowAppInner() {
               </div>
 
               {/* Footer Action */}
-              <div className="mt-6 border-t border-white/[0.08] pt-5">
+              <div className="mt-5 border-t border-white/[0.08] pt-4">
                 {error && (
                   <p className="mb-3 rounded-lg border border-crimson/35 bg-crimson/10 px-3 py-2 font-mono text-[11.5px] text-crimson">
                     {error}
@@ -346,7 +346,7 @@ function EscrowAppInner() {
             </form>
 
             {/* Right Card (5 cols): Equal-Height Live Settlement & Risk Preview */}
-            <aside className="flex flex-col justify-between rounded-xl border border-white/[0.08] bg-[#111318] p-7 lg:col-span-5">
+            <aside className="flex flex-col justify-between rounded-xl border border-white/[0.08] bg-[#111318] p-6 lg:col-span-5">
               <div>
                 <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
                   <span className="rwa-hud text-paper/90">LIVE SETTLEMENT PREVIEW</span>

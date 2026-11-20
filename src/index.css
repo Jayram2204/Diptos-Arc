@@ -1,21 +1,20 @@
 @import 'tailwindcss';
 
 :root {
-  --bg-black: #090a0d;
+  --bg-black: #000000;
   --bg-navy-depth: #020664;
-  --bg-surface: #111318;
-  --bg-elevated: #161922;
+  --bg-surface: #0a0c12;
   --bg-paper-section: #f4f2ec;
 
   --text-paper: #f4f2ec;
-  --text-muted: rgba(244, 242, 236, 0.58);
-  --text-ink: #090a0d;
+  --text-muted: rgba(244, 242, 236, 0.62);
+  --text-ink: #07080c;
 
   --accent-lime: #c8ff00;
   --accent-emerald: #10b981;
   --accent-crimson: #ef4444;
 
-  --border-paper: rgba(255, 255, 255, 0.08);
+  --border-paper: rgba(244, 242, 236, 0.1);
   --ease-rwa: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -23,30 +22,30 @@
   --font-sans: 'Archivo', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
 
-  /* Restrained institutional palette */
-  --color-canvas: #090a0d;
-  --color-black: #090a0d;
+  /* Exact rwa.inc palette tokens + backward-compatible aliases */
+  --color-canvas: #000000;
+  --color-black: #000000;
   --color-navy-depth: #020664;
-  --color-surface: #111318;
-  --color-elevated: #161922;
+  --color-surface: #0a0c12;
+  --color-elevated: #0f121a;
   --color-paper: #f4f2ec;
-  --color-ink: #090a0d;
+  --color-ink: #07080c;
 
   --color-primary: #f4f2ec;
-  --color-secondary: rgba(244, 242, 236, 0.58);
+  --color-secondary: rgba(244, 242, 236, 0.62);
   --color-lime: #c8ff00;
-  --color-gold: #f4f2ec;
+  --color-gold: #c8ff00;
   --color-emerald: #10b981;
   --color-crimson: #ef4444;
 
-  --animate-fade-up: fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
-  --animate-pulse-dot: pulse-dot 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-  --animate-marquee: rwa-marquee 36s linear infinite;
+  --animate-fade-up: fade-up 0.85s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-pulse-dot: pulse-dot 2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  --animate-marquee: rwa-marquee 32s linear infinite;
 
   @keyframes fade-up {
     from {
       opacity: 0;
-      transform: translateY(12px);
+      transform: translateY(20px);
     }
     to {
       opacity: 1;
@@ -56,10 +55,10 @@
   @keyframes pulse-dot {
     0% {
       transform: scale(1);
-      opacity: 0.65;
+      opacity: 0.7;
     }
     100% {
-      transform: scale(2.4);
+      transform: scale(2.8);
       opacity: 0;
     }
   }
@@ -77,7 +76,7 @@
   html {
     background: var(--bg-black);
     color-scheme: dark;
-    scroll-padding-top: 80px;
+    scroll-padding-top: 84px;
   }
   body {
     background: var(--bg-black);
@@ -94,14 +93,14 @@
   h3,
   h4 {
     font-family: var(--font-sans);
-    font-variation-settings: 'wdth' 118;
+    font-variation-settings: 'wdth' 122;
     font-weight: 600;
-    letter-spacing: -0.028em;
-    line-height: 1.05;
+    letter-spacing: -0.03em;
+    line-height: 1.02;
   }
   ::selection {
-    background: rgba(244, 242, 236, 0.22);
-    color: #ffffff;
+    background: var(--accent-lime);
+    color: var(--text-ink);
   }
   input[type='number']::-webkit-inner-spin-button,
   input[type='number']::-webkit-outer-spin-button {
@@ -109,21 +108,21 @@
     margin: 0;
   }
   input[type='range'] {
-    accent-color: #f4f2ec;
+    accent-color: var(--accent-lime);
   }
 }
 
 .rwa-display {
   font-family: 'Archivo', sans-serif;
-  font-variation-settings: 'wdth' 118;
+  font-variation-settings: 'wdth' 122;
   font-weight: 600;
-  letter-spacing: -0.028em;
-  line-height: 1.05;
+  letter-spacing: -0.03em;
+  line-height: 1.02;
 }
 
 .rwa-hud {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
@@ -131,10 +130,10 @@
 
 .rwa-reveal {
   opacity: 0;
-  transform: translateY(16px);
+  transform: translateY(24px);
   transition:
-    opacity 0.7s var(--ease-rwa),
-    transform 0.75s var(--ease-rwa);
+    opacity 0.9s var(--ease-rwa),
+    transform 0.95s var(--ease-rwa);
   will-change: opacity, transform;
 }
 
@@ -144,8 +143,10 @@
 }
 
 .rwa-depth-card {
-  background: var(--bg-surface);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(120% 90% at 85% 0%, rgba(2, 6, 100, 0.34), transparent 62%),
+    var(--bg-surface);
+  border: 1px solid rgba(244, 242, 236, 0.1);
 }
 
 @media (prefers-reduced-motion: reduce) {
