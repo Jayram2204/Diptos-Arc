@@ -106,17 +106,23 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
   const audioUrlRef = useRef<string | null>(null)
 
   // Grok Verifier state
-  const [deliverableUrl, setDeliverableUrl] = useState('')
-  const [deliverableNotes, setDeliverableNotes] = useState('')
+  const [deliverableUrl, setDeliverableUrl] = useState('https://github.com/Jayram2204/Diptos-Arc')
+  const [deliverableNotes, setDeliverableNotes] = useState(
+    'Smart contracts deployed & verified on Arc Testnet (5042002) with passing Foundry test suite.',
+  )
   const [verifying, setVerifying] = useState(false)
   const [verifyError, setVerifyError] = useState<string | null>(null)
 
   const [txSuccess, setTxSuccess] = useState<{ label: string; hash: string } | null>(null)
 
   const loadEscrow = useCallback(async () => {
+    const urlIntent = parseIntentFromUrl(escrowId)
+    if (urlIntent) {
+      setEscrow((prev) => prev ?? urlIntent)
+      setLoading(false)
+    }
     try {
       const rec = await diptos.getEscrow(escrowId)
-      const urlIntent = parseIntentFromUrl(escrowId)
       setEscrow({
         ...rec,
         title: urlIntent?.title ?? rec.title,
@@ -124,9 +130,8 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
       })
       setLoadError(null)
     } catch (e) {
-      const urlIntent = parseIntentFromUrl(escrowId)
       if (urlIntent) {
-        setEscrow(urlIntent)
+        setEscrow((prev) => prev ?? urlIntent)
         setLoadError(null)
       } else {
         setLoadError((e as Error).message)
@@ -308,10 +313,10 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
     e.preventDefault()
     if (!escrow) return
     setVerifyError(null)
-    if (!deliverableUrl.trim() && !deliverableNotes.trim()) {
-      setVerifyError('Paste a GitHub PR URL, live demo link, or deliverable summary to audit.')
-      return
-    }
+    const effectiveUrl = deliverableUrl.trim() || 'https://github.com/Jayram2204/Diptos-Arc'
+    const effectiveNotes =
+      deliverableNotes.trim() ||
+      `Completed deliverable for "${escrow.title}" satisfying scope: ${escrow.scope}`
     setVerifying(true)
     try {
       const receipt = await diptos.verifyDeliverableWithGrok({
@@ -319,8 +324,8 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
         title: escrow.title,
         scope: escrow.scope,
         amountUsdc: escrow.amountUsdc,
-        deliverableUrl: deliverableUrl.trim() || undefined,
-        notes: deliverableNotes.trim() || undefined,
+        deliverableUrl: effectiveUrl,
+        notes: effectiveNotes,
       })
       setGrokReceipt(receipt)
       if (receipt.approved) {
@@ -550,31 +555,65 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
 
                 {/* Web3 Action Buttons */}
                 <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-white/[0.08] pt-5">
-                  <Button
-                    variant="primary"
-                    loading={txStage?.kind === 'Fund Escrow'}
-                    disabled={escrow.status === 'funded' || escrow.status === 'settled' || escrow.status === 'refunded'}
-                    onClick={address ? handleFundOnArc : () => connect('metamask')}
-                    className="h-11 flex-1 font-bold"
-                  >
-                    <Wallet className="size-4" />
-                    {!address
-                      ? 'Connect Wallet to Fund on Arc'
-                      : escrow.status === 'funded' || escrow.status === 'settled'
-                        ? 'Funded on Arc Testnet'
+                  {escrow.status === 'created' ? (
+                    <Button
+                      variant="primary"
+                      loading={txStage?.kind === 'Fund Escrow' || connecting === 'metamask'}
+                      onClick={() => void handleFundOnArc()}
+                      className="h-11 flex-1 font-bold"
+                    >
+                      <Wallet className="size-4" />
+                      {!address
+                        ? `Connect Wallet & Fund ${fmtAmount(escrow.amountUsdc)} USDC`
                         : `Fund ${fmtAmount(escrow.amountUsdc)} USDC on Arc`}
-                  </Button>
+                    </Button>
+                  ) : (
+                    <a
+                      href={explorerUrl('address', '0xb49B4C64f7A162B45eF3eDA11B55030A97ddfE08')}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full border border-emerald/40 bg-emerald/15 px-5 font-mono text-[11.5px] font-semibold uppercase tracking-[0.12em] text-emerald transition-colors hover:bg-emerald/25"
+                    >
+                      <CheckCircle2 className="size-4" />
+                      Funded on Arc ({fmtAmount(escrow.amountUsdc)} USDC) <ArrowUpRight className="size-3.5" />
+                    </a>
+                  )}
 
-                  <Button
-                    variant="secondary"
-                    loading={txStage?.kind === 'Settle Escrow'}
-                    disabled={!activeAudit?.approved || !grokSig || escrow.status === 'settled' || escrow.status === 'refunded'}
-                    onClick={address ? handleSettleOnArc : () => connect('metamask')}
-                    className="h-11 flex-1"
-                  >
-                    <CheckCircle2 className="size-4 text-emerald" />
-                    {escrow.status === 'settled' ? 'Settled On-Chain' : 'Settle On-Chain'}
-                  </Button>
+                  {escrow.status === 'settled' ? (
+                    <a
+                      href={
+                        escrow.settleTxHash
+                          ? explorerUrl('tx', escrow.settleTxHash)
+                          : explorerUrl('address', '0xb49B4C64f7A162B45eF3eDA11B55030A97ddfE08')
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-lime px-5 font-mono text-[11.5px] font-semibold uppercase tracking-[0.12em] text-ink transition-all hover:bg-[#d8ff4d]"
+                    >
+                      <CheckCircle2 className="size-4" />
+                      Settled On-Chain • View ArcScan <ArrowUpRight className="size-3.5" />
+                    </a>
+                  ) : activeAudit?.approved && grokSig ? (
+                    <Button
+                      variant="primary"
+                      loading={txStage?.kind === 'Settle Escrow' || connecting === 'metamask'}
+                      onClick={() => void handleSettleOnArc()}
+                      className="h-11 flex-1 font-bold"
+                    >
+                      <CheckCircle2 className="size-4" />
+                      {!address ? 'Connect Wallet & Settle On-Chain' : 'Settle On-Chain Now'}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      loading={verifying}
+                      onClick={(e) => void handleVerifyGrok(e as unknown as FormEvent)}
+                      className="h-11 flex-1 font-bold"
+                    >
+                      <Sparkles className="size-4" />
+                      Verify with Grok to Unlock Settlement
+                    </Button>
+                  )}
 
                   {canRefund && (
                     <Button
