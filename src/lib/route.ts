@@ -84,12 +84,16 @@ function parseRoute(): AppRoute {
 
 const ROUTE_EVENT = 'diptos:navigate'
 
-export function navigate(to: string) {
+export function navigate(to: string, newTab = false) {
   if (typeof window === 'undefined') return
+  if (newTab) {
+    window.open(to, '_blank', 'noopener,noreferrer')
+    return
+  }
   if (/^https?:\/\//i.test(to)) {
     const targetUrl = new URL(to)
     if (targetUrl.origin !== window.location.origin) {
-      window.location.assign(to)
+      window.open(to, '_blank', 'noopener,noreferrer')
       return
     }
     window.history.pushState({}, '', `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`)
@@ -99,6 +103,11 @@ export function navigate(to: string) {
     window.history.pushState({}, '', to)
   }
   window.dispatchEvent(new Event(ROUTE_EVENT))
+}
+
+export function openInNewTab(to: string) {
+  if (typeof window === 'undefined') return
+  window.open(to, '_blank', 'noopener,noreferrer')
 }
 
 export function useAppRoute(): AppRoute {

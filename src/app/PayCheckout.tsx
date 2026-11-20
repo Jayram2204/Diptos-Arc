@@ -24,7 +24,7 @@ import { Button, CopyButton, Field, inputCls, PulseDot } from '@/components/ui'
 import { fetchVoiceBriefAudio } from '@/lib/api'
 import { explorerUrl, fmtAmount, shortHex } from '@/lib/chain'
 import { useProtocolEvents } from '@/lib/hooks'
-import { getAppUrl, navigate } from '@/lib/route'
+import { getApexUrl, getAppUrl, getSdkUrl } from '@/lib/route'
 import { diptos, type EscrowMode, type EscrowRecord, type GrokMilestoneReceipt } from '@/lib/sdk'
 import { useWallet, WalletProvider } from './wallet'
 
@@ -351,34 +351,52 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
   return (
     <div className="min-h-screen">
       {/* Top Bar */}
-      <header className="sticky top-0 z-50 h-16 border-b border-white/[0.08] bg-[#090A0D]/90 backdrop-blur-md">
-        <div className="mx-auto flex h-full max-w-[1280px] items-center justify-between gap-4 px-4 sm:px-6">
+      <header className="sticky top-0 z-50 h-[68px] border-b border-white/[0.08] bg-[#090A0D]/90 backdrop-blur-md">
+        <div className="mx-auto flex h-full max-w-[1320px] items-center justify-between gap-4 px-6">
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigate(getAppUrl())}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/[0.08] bg-surface px-2.5 font-mono text-[11px] text-secondary transition-colors hover:border-white/[0.18] hover:text-primary"
+            <a
+              href={getApexUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/[0.12] bg-[#111318] px-3 font-mono text-[11px] uppercase tracking-[0.12em] text-secondary transition-all duration-200 hover:-translate-y-[1px] hover:border-white/[0.24] hover:text-primary"
             >
               <ArrowLeft className="size-3.5" />
-              <span className="hidden sm:inline">app.diptos.xyz</span>
-            </button>
+              <span className="hidden sm:inline">diptos.xyz</span>
+            </a>
+            <a
+              href={getAppUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/[0.12] bg-[#111318] px-3 font-mono text-[11px] uppercase tracking-[0.12em] text-secondary transition-all duration-200 hover:-translate-y-[1px] hover:border-white/[0.24] hover:text-primary"
+            >
+              <span>app.diptos.xyz</span>
+              <ArrowUpRight className="size-3" />
+            </a>
             <Wordmark />
-            <span className="hidden items-center gap-2 rounded-md border border-white/[0.08] bg-surface px-2.5 py-1 font-mono text-[11px] text-primary md:inline-flex">
+            <span className="hidden items-center gap-2 rounded-full border border-white/[0.08] bg-[#111318] px-3 py-1 font-mono text-[11px] text-primary md:inline-flex">
               <PulseDot color="bg-emerald" />
               <span>Arc Testnet • 5042002</span>
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
+            <a
+              href={getSdkUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden h-9 items-center gap-1 rounded-full border border-white/15 bg-transparent px-3.5 font-mono text-[11px] uppercase tracking-[0.12em] text-primary transition-all duration-200 hover:-translate-y-[1px] hover:border-white/30 hover:bg-white/[0.06] sm:inline-flex"
+            >
+              SDK <ArrowUpRight className="size-3" />
+            </a>
             {address ? (
-              <div className="flex h-9 items-center gap-2 rounded-lg border border-white/[0.1] bg-surface pl-3 pr-1.5 font-mono text-[12px]">
+              <div className="flex h-9 items-center gap-2 rounded-full border border-white/[0.12] bg-[#111318] pl-3.5 pr-1.5 font-mono text-[12px]">
                 {balanceUsdc !== null && <span className="hidden text-emerald sm:inline">{balanceUsdc} USDC</span>}
-                <span className="rounded bg-elevated px-2 py-0.5 text-primary">{shortHex(address)}</span>
+                <span className="rounded-full bg-[#161922] px-2.5 py-0.5 text-primary">{shortHex(address)}</span>
                 <button
                   type="button"
                   onClick={disconnect}
                   aria-label="Disconnect wallet"
-                  className="grid size-7 place-items-center rounded text-secondary hover:text-primary"
+                  className="grid size-7 place-items-center rounded-full text-secondary hover:text-primary"
                 >
                   <LogOut className="size-3.5" />
                 </button>
@@ -408,9 +426,14 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
             <p className="mt-2 text-[13px] text-secondary">
               {loadError || 'This escrow ID has not been funded on Arc Testnet (5042002) yet.'}
             </p>
-            <Button variant="primary" onClick={() => navigate('/')} className="mt-6 font-bold">
+            <a
+              href={getApexUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-6 inline-flex h-10 items-center justify-center rounded-full bg-[#F4F2EC] px-5 font-mono text-[12px] font-semibold uppercase tracking-[0.12em] text-[#090A0D] transition-all duration-200 hover:-translate-y-[1px] hover:bg-white"
+            >
               Return to diptos.xyz
-            </Button>
+            </a>
           </div>
         ) : (
           <div className="grid items-start gap-6 lg:grid-cols-12">

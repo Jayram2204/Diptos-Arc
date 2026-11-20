@@ -1,8 +1,13 @@
 import { useState } from 'react'
 import { ArrowLeft, ArrowUpRight, Play, Terminal } from 'lucide-react'
 import { Button, CopyButton, PulseDot } from '@/components/ui'
-import { ARC_CHAIN_ID, ARC_RPC_URL, ESCROW_CONTRACT_ADDRESS, REGISTRY_CONTRACT_ADDRESS } from '@/config/protocol'
-import { getApexUrl, getAppUrl, navigate } from '@/lib/route'
+import {
+  ARC_CHAIN_ID,
+  ARC_RPC_URL,
+  ESCROW_CONTRACT_ADDRESS,
+  REGISTRY_CONTRACT_ADDRESS,
+} from '@/config/protocol'
+import { getApexUrl, getAppUrl } from '@/lib/route'
 import { diptos } from '@/lib/sdk'
 
 type SectionId = 'quickstart' | 'agents' | 'tecd' | 'gemini' | 'grok' | 'abis'
@@ -14,6 +19,7 @@ const SECTIONS: {
   title: string
   summary: string
   filename: string
+  paramsNote: string
   code: string
 }[] = [
   {
@@ -24,6 +30,7 @@ const SECTIONS: {
     summary:
       'Install @diptos/sdk and point DiptosClient at Arc Testnet (Chain ID 5042002) with primary + fallback RPCs.',
     filename: 'client.ts',
+    paramsNote: 'Config: rpcUrl, chainId (5042002), escrowAddress, registryAddress',
     code: `import { DiptosClient } from '@diptos/sdk'
 
 export const diptos = new DiptosClient({
@@ -45,6 +52,7 @@ console.log('Arc block:', telemetry.blockNumber, 'latency:', telemetry.latencyMs
     summary:
       'Headless AI agents can originate escrows, build native 18-decimal USDC calldata, verify deliverables via Grok, and settle on-chain.',
     filename: 'agent-guardrail.ts',
+    paramsNote: 'Returns: { escrow, txIntent, checkoutPath, shareUrl }',
     code: `const risk = await diptos.getLiveGeminiRisk()
 const { escrow, shareUrl } = await diptos.createEscrowLink({
   title: 'Audit Solidity TECD invariant bounds',
@@ -73,19 +81,20 @@ console.log('Share checkout:', shareUrl, 'calldata:', fundTx.data)`,
     summary:
       'Evaluate V(t) = V₀ · exp(-λ · (Δt / T)^1.5) locally or directly via DiptosEscrow.previewTECDPayout on Arc Testnet.',
     filename: 'tecd.ts',
-    code: `const local = diptos.calculateTECD({
+    paramsNote: 'Invariant: payeePayout + buyerRebate + protocolFee === principalUsdc',
+    code: `const onChain = await diptos.previewTECDOnChain({
   principalUsdc: 2500,
-  lambda: 0.35,
+  slaWindowSeconds: 24 * 3600,
   delaySeconds: 12 * 3600,
-  totalDurationSeconds: 24 * 3600,
-  gamma: 1.5,
+  lambda: 0.35,
 })
 
 console.log({
-  payeePayoutUsdc: local.payeePayoutUsdc,
-  buyerRebateUsdc: local.buyerRebateUsdc,
-  protocolFeeUsdc: local.protocolFeeUsdc,
-  decayPercent: local.decayPercent,
+  source: onChain.source,
+  payeePayoutUsdc: onChain.payeePayoutUsdc,
+  buyerRebateUsdc: onChain.buyerRebateUsdc,
+  protocolFeeUsdc: onChain.protocolFeeUsdc,
+  decayPercent: onChain.decayPercent,
 })`,
   },
   {
@@ -96,6 +105,7 @@ console.log({
     summary:
       'Pull active contracts from Gemini Prediction Markets to dynamically calibrate TECD decay intensity λ.',
     filename: 'gemini-risk.ts',
+    paramsNote: 'Endpoint: GET /api/risk/gemini -> api.gemini.com',
     code: `const risk = await diptos.getLiveGeminiRisk()
 
 console.log('Volatility index:', risk.volatilityIndex)
@@ -110,12 +120,13 @@ for (const c of risk.contracts) {
     label: 'Grok Verifier',
     title: 'Deliverable Audit & EIP-712 Attestation',
     summary:
-      'Submit a GitHub PR or live URL to Grok AI for structured verification and replay-protected EIP-712 signing.',
+      'Submit a GitHub PR or live URL for structured evidence verification and replay-protected EIP-712 signing.',
     filename: 'grok-verify.ts',
+    paramsNote: 'Domain: DiptosEscrow v2 · Chain ID 5042002 · ReleaseMilestone',
     code: `const audit = await diptos.verifyDeliverableWithGrok({
   escrowId: escrow.escrowIdBytes32,
   scope: escrow.scope,
-  deliverableUrl: 'https://github.com/Jayram2204/Diptos-Arc/pull/1',
+  deliverableUrl: 'https://github.com/Jayram2204/Diptos-Arc',
 })
 
 if (audit.approved && audit.eip712Signature) {
@@ -123,199 +134,233 @@ if (audit.approved && audit.eip712Signature) {
     escrowId: escrow.escrowIdBytes32,
     milestoneIndex: audit.milestoneIndex ?? 0,
     deliverableHash: audit.deliverableHash,
-    nonce: audit.nonce ?? 0,
+    expectedNonce: audit.nonce ?? 0,
     grokSignature: audit.eip712Signature,
   })
-  console.log('Ready to broadcast releaseWithOracle:', releaseTx.data)
+  console.log('Ready to broadcast releaseWithOracle:', releaseTx)
 }`,
   },
   {
     id: 'abis',
     num: '06',
     label: 'Contract ABIs',
-    title: 'DiptosEscrow & DiptosRegistry ABIs',
+    title: 'Direct Viem ABI Exports & Dual Decimals',
     summary:
-      'Import canonical viem ABIs and Arc Testnet chain definitions directly from @diptos/sdk.',
+      'Import typed ABIs and convert between 18-decimal native Arc USDC and 6-decimal ERC-20 USDC.',
     filename: 'abis.ts',
+    paramsNote: 'Exports: DIPTOS_ESCROW_ABI, DIPTOS_REGISTRY_ABI, ARC_TESTNET',
     code: `import {
   ARC_TESTNET,
   DIPTOS_ESCROW_ABI,
   DIPTOS_REGISTRY_ABI,
+  nativeUsdcTo6Decimals,
+  usdc6ToNativeWei,
 } from '@diptos/sdk'
 
-// Chain ID: 5042002 | Native USDC (18 decimals)
-console.log(ARC_TESTNET.id, DIPTOS_ESCROW_ABI.length, DIPTOS_REGISTRY_ABI.length)`,
+const wei = usdc6ToNativeWei(250_000_000n) // 250 USDC -> 250e18 wei
+console.log('Arc Chain ID:', ARC_TESTNET.id, 'Wei:', wei.toString())`,
   },
 ]
 
 export function SdkPortal() {
   const [activeId, setActiveId] = useState<SectionId>('quickstart')
   const [running, setRunning] = useState(false)
-  const [output, setOutput] = useState<string | null>(null)
-  const [runError, setRunError] = useState<string | null>(null)
+  const [output, setOutput] = useState<string>(
+    '// Click "Run Live" to query Arc Testnet (5042002), Gemini Prediction Markets, and the EIP-712 Oracle.',
+  )
 
   const current = SECTIONS.find((s) => s.id === activeId) ?? SECTIONS[0]
 
-  const runLiveConsole = async () => {
+  const runLiveSdk = async () => {
     setRunning(true)
-    setRunError(null)
     try {
-      const [telemetry, geminiRisk, oracle] = await Promise.allSettled([
+      const [telemetry, geminiRisk, oracleStatus, escrows] = await Promise.allSettled([
         diptos.getArcTelemetry(),
         diptos.getLiveGeminiRisk(),
         diptos.getOracleStatus(),
+        diptos.listEscrows(0, 5),
       ])
 
       const payload = {
         executedAt: new Date().toISOString(),
-        package: '@diptos/sdk',
+        package: '@diptos/sdk@1.0.0',
+        section: current.id,
         arcTelemetry:
           telemetry.status === 'fulfilled'
             ? {
                 chainId: telemetry.value.chainId,
-                rpcUrl: ARC_RPC_URL,
+                rpcUrl: telemetry.value.rpcUrl,
                 blockNumber: telemetry.value.blockNumber.toString(),
                 gasPriceWei: telemetry.value.gasPrice.toString(),
                 latencyMs: telemetry.value.latencyMs,
               }
-            : { error: (telemetry.reason as Error)?.message ?? 'RPC unreachable' },
+            : { error: (telemetry.reason as Error)?.message },
+        onChainEscrowsCount: escrows.status === 'fulfilled' ? escrows.value.length : 0,
+        oracleStatus:
+          oracleStatus.status === 'fulfilled'
+            ? {
+                oracleSigner: oracleStatus.value.oracleSigner,
+                verifyingContract: oracleStatus.value.eip712Domain.verifyingContract,
+                latestArcBlock: oracleStatus.value.latestArcBlock,
+              }
+            : { error: (oracleStatus.reason as Error)?.message },
         geminiRisk:
           geminiRisk.status === 'fulfilled'
-            ? geminiRisk.value
-            : { error: (geminiRisk.reason as Error)?.message ?? 'Gemini API unreachable' },
-        oracleStatus:
-          oracle.status === 'fulfilled'
             ? {
-                oracleSigner: oracle.value.oracleSigner,
-                totalAttestationsSigned: oracle.value.totalAttestationsSigned,
-                latestArcBlock: oracle.value.latestArcBlock,
+                volatilityIndex: geminiRisk.value.volatilityIndex,
+                recommendedLambda: geminiRisk.value.recommendedLambda,
+                topContract: geminiRisk.value.contracts[0] ?? null,
               }
-            : { error: (oracle.reason as Error)?.message ?? 'Oracle status unavailable' },
+            : { error: (geminiRisk.reason as Error)?.message },
       }
       setOutput(JSON.stringify(payload, null, 2))
     } catch (e) {
-      setRunError((e as Error).message)
+      setOutput(JSON.stringify({ error: (e as Error).message }, null, 2))
     } finally {
       setRunning(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-black text-paper">
-      {/* Top Bar */}
-      <header className="sticky top-0 z-50 h-[72px] border-b border-paper/10 bg-black/90 backdrop-blur-xl">
-        <div className="mx-auto flex h-full max-w-[1440px] items-center justify-between gap-4 px-5 sm:px-8">
+    <div className="min-h-screen bg-[#090A0D] text-[#F4F2EC]">
+      {/* Header (68px) */}
+      <header className="sticky top-0 z-50 h-[68px] border-b border-white/[0.08] bg-[#090A0D]/90 backdrop-blur-xl">
+        <div className="mx-auto flex h-full max-w-[1360px] items-center justify-between gap-4 px-6">
           <div className="flex items-center gap-4">
-            <button
-              type="button"
-              onClick={() => navigate(getApexUrl())}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-paper/15 px-3 font-mono text-[11px] uppercase tracking-[0.12em] text-secondary transition-colors hover:border-lime hover:text-lime"
+            <a
+              href={getApexUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/15 px-3 font-mono text-[11px] uppercase tracking-[0.12em] text-secondary transition-all duration-200 hover:bg-white/[0.06] hover:text-[#F4F2EC]"
             >
               <ArrowLeft className="size-3.5" />
               diptos.xyz
-            </button>
-            <span className="rwa-display hidden items-baseline text-[18px] text-paper sm:inline-flex">
-              SDK.DIPTOS<span className="ml-0.5 inline-block size-1.5 rounded-full bg-lime" />
+            </a>
+            <span className="rwa-display inline-flex items-baseline text-[17px] text-[#F4F2EC]">
+              SDK.DIPTOS<span className="ml-1 inline-block size-1.5 rounded-full bg-emerald" />
             </span>
-            <span className="hidden items-center gap-2 rounded-full border border-paper/12 bg-surface px-3 py-1 font-mono text-[10.5px] uppercase tracking-[0.12em] text-secondary md:inline-flex">
-              <PulseDot color="bg-lime" /> @DIPTOS/SDK v1.0.0
+            <span className="hidden rounded-full border border-white/[0.08] bg-[#111318] px-3 py-0.5 font-mono text-[10.5px] text-secondary sm:inline-block">
+              @diptos/sdk@1.0.0 · npm
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => navigate(getAppUrl())}
-            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-lime px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-ink transition-colors hover:bg-[#d8ff4d]"
-          >
-            LAUNCH APP <ArrowUpRight className="size-3.5" />
-          </button>
+          <div className="flex items-center gap-2.5">
+            <a
+              href="https://www.npmjs.com/package/@diptos/sdk"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden h-9 items-center gap-1 rounded-full border border-white/15 px-3.5 font-mono text-[11px] uppercase tracking-[0.1em] text-secondary transition-colors hover:bg-white/[0.06] hover:text-[#F4F2EC] sm:inline-flex"
+            >
+              npmjs.com <ArrowUpRight className="size-3.5" />
+            </a>
+            <a
+              href={getAppUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#F4F2EC] px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[#090A0D] transition-all duration-200 hover:bg-white"
+            >
+              Launch App <ArrowUpRight className="size-3.5" />
+            </a>
+          </div>
         </div>
       </header>
 
-      {/* Full-Viewport Developer Portal */}
-      <div className="mx-auto grid max-w-[1440px] lg:grid-cols-[240px_1fr_420px]">
-        {/* Left Rail Navigation */}
-        <aside className="border-b border-paper/10 p-6 lg:min-h-[calc(100vh-72px)] lg:border-b-0 lg:border-r">
-          <p className="rwa-hud text-lime">DOCUMENTATION</p>
-          <ul className="mt-4 grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-1">
-            {SECTIONS.map((s) => (
-              <li key={s.id}>
-                <button
-                  type="button"
-                  onClick={() => setActiveId(s.id)}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left font-mono text-[11.5px] transition-colors ${
-                    activeId === s.id
-                      ? 'bg-lime/12 font-semibold text-lime'
-                      : 'text-secondary hover:bg-surface hover:text-paper'
-                  }`}
-                >
-                  <span className="text-[10px] opacity-70">{s.num}</span>
-                  <span>{s.label}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </aside>
-
-        {/* Center Code Documentation */}
-        <main className="border-b border-paper/10 p-6 sm:p-10 lg:border-b-0 lg:border-r">
-          <p className="rwa-hud text-lime">
-            {current.num} // {current.label}
-          </p>
-          <h1 className="rwa-display mt-3 text-[28px] text-paper sm:text-[34px]">{current.title}</h1>
-          <p className="mt-3 max-w-2xl text-[14px] leading-relaxed text-secondary">{current.summary}</p>
-
-          <div className="mt-8 overflow-hidden rounded-lg border border-paper/12 bg-surface">
-            <div className="flex items-center justify-between border-b border-paper/10 px-4 py-2.5">
-              <span className="font-mono text-[11px] text-secondary">{current.filename}</span>
-              <CopyButton value={current.code} label={`Copy ${current.filename}`} />
+      {/* Symmetrical 12-Column Equal-Height 3-Panel Grid */}
+      <main className="mx-auto max-w-[1360px] px-6 py-8">
+        <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-12">
+          {/* Left Rail (3 cols) */}
+          <aside className="flex flex-col justify-between rounded-xl border border-white/[0.08] bg-[#111318] p-5 lg:col-span-3">
+            <div>
+              <p className="rwa-hud px-2 text-secondary">SDK MODULES</p>
+              <ul className="mt-3 space-y-1">
+                {SECTIONS.map((s) => {
+                  const active = s.id === activeId
+                  return (
+                    <li key={s.id}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveId(s.id)}
+                        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left font-mono text-[11.5px] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                          active
+                            ? 'bg-white/[0.08] font-medium text-[#F4F2EC]'
+                            : 'text-secondary hover:bg-white/[0.03] hover:text-[#F4F2EC]'
+                        }`}
+                      >
+                        <span className="text-[10.5px] text-secondary">{s.num}</span>
+                        <span className="truncate">{s.label}</span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
             </div>
-            <pre className="overflow-x-auto p-5 font-mono text-[12px] leading-relaxed text-paper">
-              <code>{current.code}</code>
-            </pre>
-          </div>
-        </main>
 
-        {/* Right Live @diptos/sdk Execution Console */}
-        <aside className="flex flex-col p-6">
-          <div className="flex items-center justify-between gap-3 border-b border-paper/10 pb-4">
-            <div className="flex items-center gap-2">
-              <Terminal className="size-4 text-lime" />
-              <div>
-                <p className="font-mono text-[12px] font-semibold uppercase tracking-[0.1em] text-paper">
-                  Live SDK Console
-                </p>
-                <p className="font-mono text-[10px] text-secondary">Arc RPC + /api/risk/gemini</p>
+            <div className="mt-6 border-t border-white/[0.08] pt-4">
+              <p className="rwa-hud text-secondary">INSTALL FROM NPM</p>
+              <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-[#090A0D] px-3 py-2">
+                <code className="truncate font-mono text-[11px] text-[#F4F2EC]">
+                  npm i @diptos/sdk viem
+                </code>
+                <CopyButton value="npm install @diptos/sdk viem" label="Copy install command" />
               </div>
             </div>
-            <Button size="sm" variant="primary" loading={running} onClick={runLiveConsole}>
-              {!running && <Play className="size-3.5" />}
-              Run Live
-            </Button>
-          </div>
+          </aside>
 
-          {runError && (
-            <p className="mt-4 rounded-lg border border-crimson/40 bg-crimson/10 px-3 py-2 font-mono text-[11px] text-crimson">
-              {runError}
-            </p>
-          )}
-
-          <div className="mt-4 flex-1 overflow-hidden rounded-lg border border-paper/12 bg-surface">
-            <div className="flex items-center justify-between border-b border-paper/10 px-3.5 py-2">
-              <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-lime">
-                {output ? 'Live JSON Response' : 'Awaiting Execution'}
-              </span>
-              {output && <CopyButton value={output} label="Copy JSON response" />}
+          {/* Center Code Card (5 cols) */}
+          <section className="flex min-h-[540px] flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-[#111318] lg:col-span-5">
+            <div className="flex items-center justify-between border-b border-white/[0.08] px-6 py-4">
+              <div>
+                <p className="font-mono text-[11px] text-secondary">
+                  {current.num} // {current.filename}
+                </p>
+                <h1 className="mt-0.5 text-[16px] font-semibold text-[#F4F2EC]">{current.title}</h1>
+              </div>
+              <CopyButton value={current.code} label="Copy snippet" />
             </div>
-            <pre className="max-h-[540px] overflow-auto p-4 font-mono text-[11px] leading-relaxed text-paper">
-              <code>
-                {output ??
-                  '// Click "Run Live" to execute:\n// 1. diptos.getArcTelemetry()\n// 2. diptos.getLiveGeminiRisk()\n// 3. diptos.getOracleStatus()'}
-              </code>
+
+            <div className="border-b border-white/[0.06] bg-[#090A0D]/40 px-6 py-3 text-[13px] text-secondary">
+              {current.summary}
+            </div>
+
+            <pre className="flex-1 overflow-auto bg-[#090A0D] p-6 font-mono text-[12px] leading-relaxed text-[#F4F2EC]">
+              <code>{current.code}</code>
             </pre>
-          </div>
-        </aside>
-      </div>
+
+            <div className="border-t border-white/[0.08] px-6 py-3 font-mono text-[11px] text-secondary">
+              {current.paramsNote}
+            </div>
+          </section>
+
+          {/* Right Execution Console (4 cols) */}
+          <section className="flex min-h-[540px] flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-[#111318] lg:col-span-4">
+            <div className="flex items-center justify-between border-b border-white/[0.08] px-6 py-4">
+              <div className="flex items-center gap-2">
+                <Terminal className="size-4 text-secondary" />
+                <span className="rwa-hud text-[#F4F2EC]">LIVE SDK CONSOLE</span>
+              </div>
+              <Button size="sm" variant="primary" loading={running} onClick={() => void runLiveSdk()}>
+                <Play className="size-3" /> Run Live
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#090A0D]/40 px-6 py-2.5 font-mono text-[10.5px] text-secondary">
+              <span className="inline-flex items-center gap-1.5">
+                <PulseDot color="bg-emerald" />
+                Arc RPC + Gemini + Oracle
+              </span>
+              <span>Chain 5042002</span>
+            </div>
+
+            <pre className="flex-1 overflow-auto bg-[#090A0D] p-6 font-mono text-[11.5px] leading-relaxed text-emerald">
+              {output}
+            </pre>
+
+            <div className="border-t border-white/[0.08] px-6 py-3 font-mono text-[10.5px] text-secondary">
+              Contracts: {ESCROW_CONTRACT_ADDRESS.slice(0, 10)}… · {REGISTRY_CONTRACT_ADDRESS.slice(0, 10)}…
+            </div>
+          </section>
+        </div>
+      </main>
     </div>
   )
 }

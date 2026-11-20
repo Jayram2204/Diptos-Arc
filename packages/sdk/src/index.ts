@@ -508,6 +508,62 @@ export class DiptosClient {
   }
 
   async listEscrows(offset = 0, limit = 25): Promise<EscrowRecord[]> {
+    if (this.escrowContract) {
+      try {
+        const items = (await this.getPublicClient().readContract({
+          address: this.escrowContract,
+          abi: DIPTOS_ESCROW_ABI,
+          functionName: 'getEscrowsPaginated',
+          args: [BigInt(offset), BigInt(limit)],
+        })) as readonly {
+          escrowId: Hex
+          payer: Address
+          payee: Address
+          amount: bigint
+          deadline: bigint
+          createdAt: bigint
+          fundedAt: bigint
+          lambdaBps: bigint
+          nonce: bigint
+          isAgentMode: boolean
+          status: number
+          deliverableHash: Hex
+        }[]
+        const statusMap: EscrowStatus[] = ['created', 'funded', 'verified', 'settled', 'refunded']
+        return items
+          .filter((v) => v.payer !== '0x0000000000000000000000000000000000000000')
+          .map((v) => {
+            const deadlineUnix = Number(v.deadline)
+            const createdUnix = Number(v.createdAt || v.fundedAt)
+            const deadlineHours =
+              deadlineUnix > createdUnix ? Math.max(1, Math.round((deadlineUnix - createdUnix) / 3600)) : 24
+            const lambdaBps = Number(v.lambdaBps)
+            return {
+              id: v.escrowId,
+              escrowIdBytes32: v.escrowId,
+              title: v.isAgentMode
+                ? `AI Agent Escrow ${v.escrowId.slice(0, 10)}`
+                : `Arc USDC Escrow ${v.escrowId.slice(0, 10)}`,
+              scope: 'On-chain non-custodial escrow settled via Grok EIP-712 Oracle on Arc Testnet (5042002).',
+              amountUsdc: Number(formatEther(v.amount)),
+              deadline: deadlineUnix > 0 ? new Date(deadlineUnix * 1000).toISOString() : new Date().toISOString(),
+              deadlineUnix,
+              deadlineHours,
+              mode: v.isAgentMode ? 'agent' : 'human',
+              payer: v.payer,
+              payee: v.payee,
+              nonce: Number(v.nonce),
+              tecdLambda: Number((lambdaBps / 10_000).toFixed(4)),
+              tecdLambdaBps: lambdaBps,
+              status: statusMap[v.status] ?? 'created',
+              createdAt: createdUnix > 0 ? new Date(createdUnix * 1000).toISOString() : new Date().toISOString(),
+              onChain: true,
+            }
+          })
+      } catch {
+        // Fall through to REST endpoint
+      }
+    }
     const res = await fetch(`${this.apiBaseUrl}/api/escrows?offset=${offset}&limit=${limit}`)
     if (!res.ok) throw new Error(`listEscrows failed (${res.status}): ${await res.text()}`)
     const data = (await res.json()) as { escrows?: EscrowRecord[] }
