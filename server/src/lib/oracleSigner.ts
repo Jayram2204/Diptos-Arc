@@ -30,22 +30,25 @@ export const arcPublicClient = createPublicClient({
   ]),
 })
 
-export function getEscrowContractAddress(): Address | null {
+const LIVE_ARC_ESCROW: Address = '0xb49B4C64f7A162B45eF3eDA11B55030A97ddfE08'
+const LIVE_ARC_REGISTRY: Address = '0xAe046d40bcAb56128D34588e10b6D7F166485bA5'
+
+export function getEscrowContractAddress(): Address {
   const addr = (
     process.env.ARC_ESCROW_CONTRACT_ADDRESS ||
     process.env.VITE_ESCROW_CONTRACT_ADDRESS ||
     ''
   ).trim()
-  return isAddress(addr) ? addr : null
+  return isAddress(addr) ? addr : LIVE_ARC_ESCROW
 }
 
-export function getRegistryContractAddress(): Address | null {
+export function getRegistryContractAddress(): Address {
   const addr = (
     process.env.ARC_REGISTRY_CONTRACT_ADDRESS ||
     process.env.VITE_REGISTRY_CONTRACT_ADDRESS ||
     ''
   ).trim()
-  return isAddress(addr) ? addr : null
+  return isAddress(addr) ? addr : LIVE_ARC_REGISTRY
 }
 
 export function getOracleAccount() {

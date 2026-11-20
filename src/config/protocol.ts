@@ -17,8 +17,8 @@ export interface ContractMeta {
   address: Address
 }
 
-const DEFAULT_ESCROW_ADDRESS: Address = '0x742d35Cc6634C0532925a3b844Bc454e4438f44e'
-const DEFAULT_REGISTRY_ADDRESS: Address = '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed'
+const DEFAULT_ESCROW_ADDRESS: Address = '0xb49B4C64f7A162B45eF3eDA11B55030A97ddfE08'
+const DEFAULT_REGISTRY_ADDRESS: Address = '0xAe046d40bcAb56128D34588e10b6D7F166485bA5'
 
 function resolveAddress(envValue: string | undefined, fallbackAddr: Address): Address {
   const trimmed = envValue?.trim()

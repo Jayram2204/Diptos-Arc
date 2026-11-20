@@ -58,6 +58,12 @@ contract DeployArc {
             );
         }
 
+        // Seed the on-chain DiptosEscrow.faucetMint() pool with 5.0 USDC if balance permits
+        if (deployer.balance >= 6 ether) {
+            (bool ok, ) = payable(address(escrow)).call{value: 5 ether}("");
+            require(ok, "Faucet pool funding failed");
+        }
+
         vm.stopBroadcast();
 
         string memory escrowAddr = vm.toString(address(escrow));
@@ -82,6 +88,6 @@ contract DeployArc {
             "ARC_ESCROW_CONTRACT_ADDRESS=", escrowAddr, "\n",
             "ARC_REGISTRY_CONTRACT_ADDRESS=", registryAddr, "\n"
         );
-        vm.writeFile("../.env.deployed", envOverlay);
+        vm.writeFile("./deployments/.env.deployed", envOverlay);
     }
 }

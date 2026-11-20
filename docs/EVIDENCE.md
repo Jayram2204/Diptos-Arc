@@ -11,10 +11,10 @@ This document records reproducible build, test, and architectural evidence for *
 | Contract | File | Configured Address (`src/config/protocol.ts`) | Status | Explorer Link |
 | :--- | :--- | :--- | :--- | :--- |
 | **ArcUSDC** | Precompile | `0x3600000000000000000000000000000000000000` | Live Arc Testnet native USDC interface | https://testnet.arcscan.app/address/0x3600000000000000000000000000000000000000 |
-| **DiptosEscrow** | `contracts/src/DiptosEscrow.sol` | `VITE_ESCROW_CONTRACT_ADDRESS` (default fallback `0x742d35Cc6634C0532925a3b844Bc454e4438f44e`) | Compiled & tested (15/15 Foundry tests); **awaiting live Arc broadcast via `DeployArc.s.sol`** | https://testnet.arcscan.app |
-| **DiptosRegistry** | `contracts/src/DiptosRegistry.sol` | `VITE_REGISTRY_CONTRACT_ADDRESS` (default fallback `0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed`) | Compiled & tested (15/15 Foundry tests); **awaiting live Arc broadcast via `DeployArc.s.sol`** | https://testnet.arcscan.app |
+| **DiptosEscrow** | `contracts/src/DiptosEscrow.sol` | `0xb49B4C64f7A162B45eF3eDA11B55030A97ddfE08` | **Live & Verified on Arc Testnet** (9,260 bytes bytecode · seeded with 2 live escrows + 5.0 USDC faucet pool) | https://testnet.arcscan.app/address/0xb49B4C64f7A162B45eF3eDA11B55030A97ddfE08 |
+| **DiptosRegistry** | `contracts/src/DiptosRegistry.sol` | `0xAe046d40bcAb56128D34588e10b6D7F166485bA5` | **Live & Verified on Arc Testnet** (1,757 bytes bytecode · linked to `DiptosEscrow`) | https://testnet.arcscan.app/address/0xAe046d40bcAb56128D34588e10b6D7F166485bA5 |
 
-> **Disclosure:** The fallback addresses in `src/config/protocol.ts` and `.env.example` are placeholder EIP-55 addresses used until `contracts/script/DeployArc.s.sol` is broadcast with a funded Arc Testnet `DEPLOYER_PRIVATE_KEY`. `src/site/Registry.tsx` queries `eth_getCode` live and displays `DEPLOYARC.S.SOL READY` whenever a target address has 0 bytes of deployed code.
+> **Deployer & Grok EIP-712 Oracle Signer:** `0x344d7adf93542C6c27a11bb53A2d7C9d909D9f34` (https://testnet.arcscan.app/address/0x344d7adf93542C6c27a11bb53A2d7C9d909D9f34).
 
 ### Broadcast Command (Arc Testnet)
 ```bash

@@ -1,0 +1,9 @@
+{
+  "chainId": 5042002,
+  "network": "Arc Testnet",
+  "rpcUrl": "https://rpc.testnet.arc.network",
+  "fallbackRpcUrl": "https://rpc.solidrpc.io/public/evm/5042002",
+  "explorerUrl": "https://testnet.arcscan.app",
+  "DiptosEscrow": "0xb49B4C64f7A162B45eF3eDA11B55030A97ddfE08",
+  "DiptosRegistry": "0xAe046d40bcAb56128D34588e10b6D7F166485bA5"
+}
