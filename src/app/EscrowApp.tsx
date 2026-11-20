@@ -25,7 +25,7 @@ function formatRemaining(deadlineIso: string, nowMs: number) {
 }
 
 function EscrowAppInner() {
-  const { address, balanceUsdc, connecting, connect, disconnect } = useWallet()
+  const { address, walletName, balanceUsdc, connecting, connect, disconnect, error: walletError } = useWallet()
   const { escrows, loading: escrowsLoading, refresh } = useEscrows(4000)
   const { data: gemini } = useGeminiRisk()
 
@@ -138,7 +138,9 @@ function EscrowAppInner() {
             {address ? (
               <div className="flex h-9 items-center gap-2 rounded-full border border-paper/15 bg-surface pl-3.5 pr-1.5 font-mono text-[11px]">
                 {balanceUsdc !== null && <span className="hidden text-lime sm:inline">{balanceUsdc} USDC</span>}
-                <span className="rounded-full bg-black px-2.5 py-0.5 text-paper">{shortHex(address)}</span>
+                <span className="rounded-full bg-black px-2.5 py-0.5 text-paper" title={walletName ?? undefined}>
+                  {shortHex(address)}
+                </span>
                 <button
                   type="button"
                   onClick={disconnect}
@@ -149,13 +151,20 @@ function EscrowAppInner() {
                 </button>
               </div>
             ) : (
-              <Button size="sm" variant="primary" loading={connecting === 'metamask'} onClick={() => connect('metamask')}>
-                <Wallet className="size-3.5" />
-                Connect Wallet
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="primary" loading={connecting !== null} onClick={() => void connect('metamask')}>
+                  <Wallet className="size-3.5" />
+                  Connect Wallet
+                </Button>
+              </div>
             )}
           </div>
         </div>
+        {walletError && (
+          <div className="border-b border-crimson/30 bg-crimson/10 px-6 py-2 text-center font-mono text-[11.5px] text-crimson">
+            {walletError}
+          </div>
+        )}
       </header>
 
       <main className="mx-auto max-w-[1280px] px-5 py-12 sm:px-8">

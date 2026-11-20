@@ -8,6 +8,7 @@ import { eventsRoute, quicknodeWebhookRoute } from './routes/quicknode.js'
 import { riskGeminiRoute } from './routes/riskGemini.js'
 import { verifyGrokRoute } from './routes/verifyGrok.js'
 import { voiceBriefRoute } from './routes/voiceBrief.js'
+import { walletRelayRoute } from './routes/walletRelay.js'
 
 export const app = new Hono()
 
@@ -41,6 +42,7 @@ function rateLimit(maxRequests: number, windowMs: number) {
 
 app.use('/api/verify/grok', rateLimit(10, 60_000))
 app.use('/api/voice/brief', rateLimit(5, 60_000))
+app.use('/api/wallet/relay', rateLimit(10, 60_000))
 
 app.get('/api/health', async (c) => {
   const oracle = await getOracleStatus()
@@ -73,3 +75,4 @@ app.route('/api/voice/brief', voiceBriefRoute)
 app.route('/api/webhooks/quicknode', quicknodeWebhookRoute)
 app.route('/api/events', eventsRoute)
 app.route('/api/agent', agentGuardrailRoute)
+app.route('/api/wallet', walletRelayRoute)
