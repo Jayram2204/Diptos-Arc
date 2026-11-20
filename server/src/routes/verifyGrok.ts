@@ -10,7 +10,8 @@ export const verifyGrokRoute = new Hono()
 
 const XAI_API_URL = 'https://api.x.ai/v1/chat/completions'
 const ESCROW_VIEW_ABI = parseAbi([
-  'function getEscrowView(bytes32 escrowId) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash))',
+  'function nonces(bytes32 escrowId) view returns (uint256)',
+  'function getEscrowView(bytes32 escrowId) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash, string title, string acceptanceScope))',
 ])
 
 interface EvidenceBundle {
@@ -245,34 +246,34 @@ verifyGrokRoute.post('/', async (c) => {
 
   const escrowIdBytes32 = toEscrowBytes32(escrowIdRaw)
   let onChainAmountUsdc = Number(body.amountUsdc ?? 0)
-  let onChainNonce = Number(body.nonce ?? 0)
-  const title =
-    typeof body.title === 'string' && body.title.trim()
-      ? body.title.trim()
-      : `Arc Escrow ${escrowIdBytes32.slice(0, 10)}`
-  const scope =
-    typeof body.scope === 'string' && body.scope.trim()
-      ? body.scope.trim()
-      : 'Deliverable must match the agreed programmable escrow specification.'
+  let onChainNonce = BigInt(Math.max(0, Number(body.nonce ?? 0)))
+  let title = typeof body.title === 'string' && body.title.trim() ? body.title.trim() : ''
+  let scope = typeof body.scope === 'string' && body.scope.trim() ? body.scope.trim() : ''
 
   const escrowContract = getEscrowContractAddress()
   try {
-    const view = (await arcPublicClient.readContract({
-      address: escrowContract,
-      abi: ESCROW_VIEW_ABI,
-      functionName: 'getEscrowView',
-      args: [escrowIdBytes32],
-    })) as {
-      payer: string
-      amount: bigint
-      nonce: bigint
-    }
+    const [currentNonce, view] = await Promise.all([
+      arcPublicClient.readContract({
+        address: escrowContract,
+        abi: ESCROW_VIEW_ABI,
+        functionName: 'nonces',
+        args: [escrowIdBytes32],
+      }),
+      arcPublicClient.readContract({
+        address: escrowContract,
+        abi: ESCROW_VIEW_ABI,
+        functionName: 'getEscrowView',
+        args: [escrowIdBytes32],
+      }),
+    ])
+    onChainNonce = currentNonce
     if (view && view.payer !== zeroAddress) {
       onChainAmountUsdc = Number(formatEther(view.amount))
-      onChainNonce = Number(view.nonce)
+      if (view.title) title = view.title
+      if (view.acceptanceScope) scope = view.acceptanceScope
     }
   } catch {
-    // Use caller-provided intent parameters if pre-funding
+    // Fallback if nonces read fails
   }
 
   const evidence = await ingestDeepEvidence(deliverableUrl)
@@ -347,11 +348,23 @@ verifyGrokRoute.post('/', async (c) => {
   let oracleSigner: string | undefined
 
   if (result.approved) {
+    // Re-read on-chain nonce right before signing to guarantee 100% parity
+    try {
+      onChainNonce = await arcPublicClient.readContract({
+        address: escrowContract,
+        abi: ESCROW_VIEW_ABI,
+        functionName: 'nonces',
+        args: [escrowIdBytes32],
+      })
+    } catch {
+      // keep existing onChainNonce
+    }
+
     const signed = await signMilestoneReleaseEIP712({
       escrowId: escrowIdBytes32,
       milestoneIndex: BigInt(milestoneIndex),
       deliverableHash,
-      nonce: BigInt(onChainNonce),
+      nonce: onChainNonce,
     })
     if (signed) {
       eip712Signature = signed.signature
@@ -366,7 +379,7 @@ verifyGrokRoute.post('/', async (c) => {
     auditReasoning: result.reasoning,
     grokModel: result.model,
     milestoneIndex,
-    nonce: onChainNonce,
+    nonce: Number(onChainNonce),
     deliverableUrl: deliverableUrl || undefined,
     deliverableHash,
     evidenceHash: deliverableHash,

@@ -11,8 +11,8 @@ This document records reproducible build, test, and architectural evidence for *
 | Contract | File | Configured Address (`src/config/protocol.ts`) | Status | Explorer Link |
 | :--- | :--- | :--- | :--- | :--- |
 | **ArcUSDC** | Precompile | `0x3600000000000000000000000000000000000000` | Live Arc Testnet native USDC interface | https://testnet.arcscan.app/address/0x3600000000000000000000000000000000000000 |
-| **DiptosEscrow** | `contracts/src/DiptosEscrow.sol` | `0xb49B4C64f7A162B45eF3eDA11B55030A97ddfE08` | **Live & Verified on Arc Testnet** (9,260 bytes bytecode · seeded with 2 live escrows + 5.0 USDC faucet pool) | https://testnet.arcscan.app/address/0xb49B4C64f7A162B45eF3eDA11B55030A97ddfE08 |
-| **DiptosRegistry** | `contracts/src/DiptosRegistry.sol` | `0xAe046d40bcAb56128D34588e10b6D7F166485bA5` | **Live & Verified on Arc Testnet** (1,757 bytes bytecode · linked to `DiptosEscrow`) | https://testnet.arcscan.app/address/0xAe046d40bcAb56128D34588e10b6D7F166485bA5 |
+| **DiptosEscrow** | `contracts/src/DiptosEscrow.sol` | `0x601bD8caDf9ba2274E645412C1Fca2dF13a318F5` | **Live & Verified on Arc Testnet** (on-chain `title` & `acceptanceScope`, seeded with 2 live escrows + 2.0 USDC faucet pool) | https://testnet.arcscan.app/address/0x601bD8caDf9ba2274E645412C1Fca2dF13a318F5 |
+| **DiptosRegistry** | `contracts/src/DiptosRegistry.sol` | `0xC831EBFA825d88853625C52d1BD55c456111B004` | **Live & Verified on Arc Testnet** (linked to `DiptosEscrow`) | https://testnet.arcscan.app/address/0xC831EBFA825d88853625C52d1BD55c456111B004 |
 
 > **Deployer & Grok EIP-712 Oracle Signer:** `0x344d7adf93542C6c27a11bb53A2d7C9d909D9f34` (https://testnet.arcscan.app/address/0x344d7adf93542C6c27a11bb53A2d7C9d909D9f34).
 

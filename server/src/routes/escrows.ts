@@ -22,9 +22,9 @@ export const escrowsRoute = new Hono()
 
 const ESCROW_READ_ABI = parseAbi([
   'function getEscrowCount() view returns (uint256)',
-  'function getEscrowsPaginated(uint256 offset, uint256 limit) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash)[])',
-  'function getEscrowView(bytes32 escrowId) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash))',
-  'function createEscrowLink(bytes32 escrowId, address payee, uint256 deadline, uint256 lambdaBps, bool isAgentMode) payable',
+  'function getEscrowsPaginated(uint256 offset, uint256 limit) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash, string title, string acceptanceScope)[])',
+  'function getEscrowView(bytes32 escrowId) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash, string title, string acceptanceScope))',
+  'function createEscrowLink(bytes32 escrowId, address payee, uint256 deadline, uint256 lambdaBps, bool isAgentMode, string title, string acceptanceScope) payable',
 ])
 
 const REGISTRY_STATS_ABI = parseAbi([
@@ -44,6 +44,8 @@ type OnChainEscrowView = {
   isAgentMode: boolean
   status: number
   deliverableHash: Hex
+  title: string
+  acceptanceScope: string
 }
 
 const STATUS_MAP = ['created', 'funded', 'verified', 'settled', 'refunded'] as const
@@ -58,23 +60,23 @@ function mapOnChainView(v: OnChainEscrowView) {
   const deadlineUnix = Number(v.deadline)
   const createdUnix = Number(v.createdAt || v.fundedAt)
   const deadlineHours =
-    deadlineUnix > createdUnix ? Math.max(1, Math.round((deadlineUnix - createdUnix) / 3600)) : 24
+    deadlineUnix > createdUnix
+      ? Math.max(0.03, Number(((deadlineUnix - createdUnix) / 3600).toFixed(2)))
+      : 24
   const amountUsdc = Number(formatEther(v.amount))
   const lambdaBps = Number(v.lambdaBps)
 
   return {
     id: v.escrowId,
     escrowIdBytes32: v.escrowId,
-    title: v.isAgentMode
-      ? `AI Agent Escrow ${v.escrowId.slice(0, 10)}`
-      : `Arc USDC Escrow ${v.escrowId.slice(0, 10)}`,
-    scope: `On-chain non-custodial escrow settled via Grok EIP-712 Oracle on Arc Testnet (5042002).`,
+    title: v.title,
+    scope: v.acceptanceScope,
     amountUsdc,
     amountWei: v.amount.toString(),
-    deadline: deadlineUnix > 0 ? new Date(deadlineUnix * 1000).toISOString() : new Date().toISOString(),
+    deadline: new Date(deadlineUnix * 1000).toISOString(),
     deadlineUnix,
     deadlineHours,
-    createdAt: createdUnix > 0 ? new Date(createdUnix * 1000).toISOString() : new Date().toISOString(),
+    createdAt: new Date(createdUnix * 1000).toISOString(),
     fundedAt: Number(v.fundedAt),
     mode: v.isAgentMode ? ('agent' as const) : ('human' as const),
     payer: v.payer,
@@ -113,7 +115,7 @@ escrowsRoute.get('/', async (c) => {
     ])
 
     const escrows = (items as readonly OnChainEscrowView[])
-      .filter((v) => v.payer !== zeroAddress)
+      .filter((v) => v.payer !== zeroAddress && Number(v.createdAt) > 0)
       .map(mapOnChainView)
 
     return c.json({
@@ -155,8 +157,8 @@ escrowsRoute.get('/:id', async (c) => {
       args: [escrowIdBytes32],
     })) as OnChainEscrowView
 
-    if (!view || view.payer === zeroAddress) {
-      return c.json({ error: 'Escrow not yet funded on Arc Testnet', escrowIdBytes32 }, 404)
+    if (!view || view.payer === zeroAddress || Number(view.createdAt) === 0) {
+      return c.json({ error: 'Escrow not found on Arc Testnet', escrowIdBytes32 }, 404)
     }
 
     const mapped = mapOnChainView(view)
@@ -197,10 +199,6 @@ escrowsRoute.get('/:id', async (c) => {
   }
 })
 
-/**
- * Stateless intent builder: computes deterministic bytes32 escrowId and pre-encoded
- * createEscrowLink calldata without writing any local JSON files.
- */
 escrowsRoute.post('/', async (c) => {
   const body = await c.req.json().catch(() => null)
   if (!body || typeof body !== 'object') {
@@ -236,20 +234,10 @@ escrowsRoute.post('/', async (c) => {
   const calldata = encodeFunctionData({
     abi: ESCROW_READ_ABI,
     functionName: 'createEscrowLink',
-    args: [escrowIdBytes32, payee, BigInt(deadlineUnix), BigInt(tecdLambdaBps), mode === 'agent'],
+    args: [escrowIdBytes32, payee, BigInt(deadlineUnix), BigInt(tecdLambdaBps), mode === 'agent', title, scope],
   })
 
-  const params = new URLSearchParams({
-    title,
-    scope,
-    amount: String(amountUsdc),
-    hours: String(deadlineHours),
-    mode,
-    payee,
-    lambda: String(tecdLambda),
-  })
-
-  const checkoutPath = `/pay/${escrowIdBytes32}?${params.toString()}`
+  const checkoutPath = `/pay/${escrowIdBytes32}`
 
   return c.json(
     {
@@ -277,7 +265,7 @@ escrowsRoute.post('/', async (c) => {
         calldata,
       },
       checkoutPath,
-      shareUrl: `https://diptos.xyz${checkoutPath}`,
+      shareUrl: `https://app.diptos.xyz${checkoutPath}`,
     },
     201,
   )

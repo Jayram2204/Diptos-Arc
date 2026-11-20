@@ -237,7 +237,7 @@ export function SdkPortal() {
               recommendedLambda: gemini.recommendedLambda,
               activeMarkets: gemini.contracts.length,
             },
-            grokOracleSigner: oracle?.oracleSigner ?? '0x344d7adf93542C6c27a11bb53A2d7C9d909D9f34',
+            grokOracleSigner: oracle?.oracleSigner ?? null,
             onChainEscrowsCount: escrows.length,
             tecdSimulation2500Usdc4hLate: {
               payeePayoutUsdc: tecd.payeePayoutUsdc,

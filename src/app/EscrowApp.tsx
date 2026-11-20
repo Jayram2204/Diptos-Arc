@@ -15,12 +15,12 @@ import {
   User,
   Wallet,
 } from 'lucide-react'
-import { isAddress } from 'viem'
+import { encodePacked, isAddress, keccak256, parseEther } from 'viem'
 import { Button, CopyButton, Field, inputCls, PulseDot } from '@/components/ui'
 import { explorerUrl, fmtAmount, shortHex } from '@/lib/chain'
 import { useEscrows, useGeminiRisk } from '@/lib/hooks'
 import { getApexUrl, getPayUrl, getSdkUrl, navigate } from '@/lib/route'
-import { diptos, type EscrowMode, type EscrowRecord } from '@/lib/sdk'
+import { type EscrowMode } from '@/lib/sdk'
 import { useWallet, WalletProvider } from './wallet'
 
 const SLA_PRESETS = [
@@ -52,14 +52,13 @@ function EscrowDashboardInner() {
   const [tab, setTab] = useState<'create' | 'list'>('create')
   const [title, setTitle] = useState('')
   const [scope, setScope] = useState('')
-  const [amountInput, setAmountInput] = useState('1250')
+  const [amountInput, setAmountInput] = useState('0.05')
   const [deadlineHours, setDeadlineHours] = useState<number>(24)
   const [mode, setMode] = useState<EscrowMode>('human')
   const [payeeInput, setPayeeInput] = useState('0x742d35Cc6634C0532925a3b844Bc454e4438f44e')
 
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-  const [createdEscrow, setCreatedEscrow] = useState<EscrowRecord | null>(null)
   const [faucetTxHash, setFaucetTxHash] = useState<string | null>(null)
   const [nowMs, setNowMs] = useState(() => Date.now())
 
@@ -78,12 +77,14 @@ function EscrowDashboardInner() {
     setFormError(null)
     clearError()
 
+    const cleanTitle = title.trim()
+    const cleanScope = scope.trim()
     const amount = Number(amountInput)
-    if (!title.trim() || title.trim().length < 3) {
+    if (!cleanTitle || cleanTitle.length < 3) {
       setFormError('Enter a deliverable title (at least 3 characters).')
       return
     }
-    if (!scope.trim() || scope.trim().length < 8) {
+    if (!cleanScope || cleanScope.length < 8) {
       setFormError('Describe the acceptance criteria so Grok AI can audit it.')
       return
     }
@@ -92,25 +93,48 @@ function EscrowDashboardInner() {
       return
     }
     const cleanPayee = payeeInput.trim()
-    if (cleanPayee && !isAddress(cleanPayee)) {
+    if (!cleanPayee || !isAddress(cleanPayee)) {
       setFormError('Payee must be a valid 0x Ethereum/Arc address.')
       return
     }
 
     setSubmitting(true)
     try {
-      const res = await diptos.createEscrowLink({
-        title: title.trim(),
-        scope: scope.trim(),
-        amountUsdc: amount,
-        deadlineHours,
-        mode,
-        payee: (cleanPayee || undefined) as `0x${string}` | undefined,
-        tecdLambda: liveLambda,
+      let activeUser = address
+      if (!activeUser) {
+        activeUser = await connect('metamask')
+        if (!activeUser) {
+          setSubmitting(false)
+          return
+        }
+      }
+
+      const escrowId = keccak256(
+        encodePacked(['address', 'string', 'uint256'], [activeUser, cleanTitle, BigInt(Date.now())]),
+      )
+      const deadlineUnix = Math.floor(Date.now() / 1000) + Math.max(120, Math.round(deadlineHours * 3600))
+      const lambdaBps = Math.round(liveLambda * 10_000)
+
+      const rc = await execute({
+        kind: 'Create Escrow',
+        contract: 'DiptosEscrow',
+        functionName: 'createEscrowLink',
+        args: [
+          escrowId,
+          cleanPayee,
+          BigInt(deadlineUnix),
+          BigInt(lambdaBps),
+          mode === 'agent',
+          cleanTitle,
+          cleanScope,
+        ],
+        value: parseEther(String(amount)),
       })
-      const record = res.escrow ?? res
-      setCreatedEscrow(record)
-      navigate(buildShareLink(record))
+
+      if (rc && rc.status === 'success') {
+        await refresh()
+        navigate(`/pay/${escrowId}`)
+      }
     } catch (err) {
       setFormError((err as Error).message)
     } finally {
@@ -124,26 +148,12 @@ function EscrowDashboardInner() {
     const rc = await execute({
       kind: 'Claim Faucet',
       contract: 'DiptosEscrow',
-      functionName: 'claimTestnetFaucet',
+      functionName: 'faucetMint',
       args: [],
     })
     if (rc && rc.status === 'success') {
       setFaucetTxHash(rc.hash)
     }
-  }
-
-  const buildShareLink = (esc: EscrowRecord) => {
-    const base = getPayUrl(esc.id)
-    const params = new URLSearchParams({
-      title: esc.title,
-      scope: esc.scope,
-      amount: String(esc.amountUsdc),
-      hours: String(esc.deadlineHours),
-      mode: esc.mode,
-      payee: esc.payee,
-      lambda: String(esc.tecdLambda),
-    })
-    return `${base}?${params.toString()}`
   }
 
   return (
@@ -209,7 +219,7 @@ function EscrowDashboardInner() {
               size="sm"
               variant="secondary"
               loading={txStage?.kind === 'Claim Faucet'}
-              onClick={address ? handleClaimTestnetFaucet : () => connect('metamask')}
+              onClick={handleClaimTestnetFaucet}
               className="hidden lg:inline-flex"
             >
               <Droplets className="size-3.5 text-lime" />
@@ -230,7 +240,7 @@ function EscrowDashboardInner() {
                 </button>
               </div>
             ) : (
-              <Button size="sm" variant="primary" loading={connecting === 'metamask'} onClick={() => connect('metamask')}>
+              <Button size="sm" variant="primary" loading={connecting === 'metamask'} onClick={() => void connect('metamask')}>
                 <Wallet className="size-3.5" />
                 Connect Wallet
               </Button>
@@ -281,9 +291,16 @@ function EscrowDashboardInner() {
               </div>
             )}
             {walletError && (
-              <p className="mt-2 rounded-2xl border border-crimson/35 bg-crimson/10 px-4 py-2.5 font-mono text-[11.5px] text-crimson">
-                {walletError}
-              </p>
+              <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl border border-crimson/35 bg-crimson/10 px-4 py-3 font-mono text-[12px] text-crimson">
+                <span>{walletError}</span>
+                <button
+                  type="button"
+                  onClick={clearError}
+                  className="shrink-0 rounded-full border border-crimson/30 px-2.5 py-0.5 text-[10px] uppercase hover:bg-crimson/20"
+                >
+                  Dismiss
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -296,7 +313,7 @@ function EscrowDashboardInner() {
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-paper/10 pb-4">
                   <div>
                     <p className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-lime">
-                      01 // ESCROW LINK ORIGINATION
+                      01 // ON-CHAIN ESCROW ORIGINATION
                     </p>
                     <h1 className="rwa-display mt-1 text-[22px] uppercase text-paper sm:text-[26px]">
                       CREATE USDC ESCROW LINK
@@ -350,7 +367,7 @@ function EscrowDashboardInner() {
                   </div>
 
                   {/* Row 2: Deliverable Title */}
-                  <Field label="Deliverable Title">
+                  <Field label="Deliverable Title (Stored On-Chain)">
                     <input
                       type="text"
                       value={title}
@@ -360,8 +377,8 @@ function EscrowDashboardInner() {
                     />
                   </Field>
 
-                  {/* Row 3: Acceptance Criteria / Grok Audit Scope (rows={2} compact textarea) */}
-                  <Field label="Acceptance Criteria / Grok Audit Scope" hint="Audited via POST /api/verify/grok">
+                  {/* Row 3: Acceptance Criteria / Grok Audit Scope */}
+                  <Field label="Acceptance Criteria / Grok Audit Scope (Stored On-Chain)" hint="Audited via POST /api/verify/grok">
                     <textarea
                       rows={2}
                       value={scope}
@@ -378,7 +395,7 @@ function EscrowDashboardInner() {
                         <input
                           type="number"
                           step="any"
-                          min="0.01"
+                          min="0.001"
                           value={amountInput}
                           onChange={(e) => setAmountInput(e.target.value)}
                           className={`${inputCls} pr-14 font-mono`}
@@ -426,6 +443,18 @@ function EscrowDashboardInner() {
                       {formError}
                     </p>
                   )}
+
+                  {txStage?.kind === 'Create Escrow' && (
+                    <p className="font-mono text-[11.5px] text-lime">
+                      {txStage.stage === 'switch'
+                        ? 'Switching wallet to Arc Testnet (5042002)…'
+                        : txStage.stage === 'simulate'
+                          ? 'Simulating DiptosEscrow.createEscrowLink on Arc Testnet…'
+                          : txStage.stage === 'sign'
+                            ? 'Awaiting wallet signature to lock native USDC…'
+                            : 'Confirming sub-second finality on Arc Testnet…'}
+                    </p>
+                  )}
                 </form>
               </div>
 
@@ -436,34 +465,11 @@ function EscrowDashboardInner() {
                   form="escrow-create-form"
                   variant="primary"
                   size="lg"
-                  loading={submitting}
+                  loading={submitting || txStage?.kind === 'Create Escrow'}
                   className="w-full"
                 >
                   Generate Escrow Link <ArrowRight className="size-4" />
                 </Button>
-
-                {createdEscrow && (
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-lime/35 bg-elevated px-4 py-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-lime">
-                        ✓ ESCROW LINK READY ({shortHex(createdEscrow.escrowIdBytes32, 8, 6)})
-                      </p>
-                      <p className="mt-0.5 truncate font-mono text-[11.5px] text-paper">
-                        {buildShareLink(createdEscrow)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <CopyButton value={buildShareLink(createdEscrow)} label="Copy shareable link" />
-                      <Button
-                        size="sm"
-                        variant="primary"
-                        onClick={() => navigate(buildShareLink(createdEscrow))}
-                      >
-                        Open Checkout <ArrowRight className="size-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -504,9 +510,7 @@ function EscrowDashboardInner() {
                   </div>
                   <div className="flex items-center justify-between py-3">
                     <dt className="text-secondary">Checkout Endpoint</dt>
-                    <dd className="text-secondary">
-                      app.diptos.xyz/pay/{createdEscrow ? createdEscrow.id.slice(0, 12) : ':id'}
-                    </dd>
+                    <dd className="text-secondary">app.diptos.xyz/pay/:id</dd>
                   </div>
                 </dl>
               </div>
@@ -546,7 +550,7 @@ function EscrowDashboardInner() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => navigate(buildShareLink(esc))}
+                          onClick={() => navigate(`/pay/${esc.escrowIdBytes32}`)}
                           className="inline-flex shrink-0 items-center gap-1 rounded-full border border-paper/15 bg-surface px-3 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-paper transition-colors hover:border-lime hover:text-lime"
                         >
                           Open Checkout <ArrowRight className="size-3" />
@@ -556,7 +560,7 @@ function EscrowDashboardInner() {
                   })}
                   {escrows.length === 0 && (
                     <p className="rounded-xl border border-paper/10 bg-black/45 px-3.5 py-3 font-mono text-[11px] text-secondary">
-                      Syncing deployed genesis escrows from Arc Testnet (5042002)…
+                      Syncing deployed escrows from Arc Testnet (5042002)…
                     </p>
                   )}
                 </div>
@@ -598,6 +602,7 @@ function EscrowDashboardInner() {
               <div className="mt-6 grid items-stretch gap-5 md:grid-cols-2">
                 {escrows.map((escrow) => {
                   const rem = formatRemaining(escrow.deadline, nowMs)
+                  const shareUrl = getPayUrl(escrow.escrowIdBytes32)
                   return (
                     <article
                       key={escrow.id}
@@ -622,7 +627,9 @@ function EscrowDashboardInner() {
                         </div>
 
                         <h3 className="mt-3.5 text-[18px] font-semibold text-paper">{escrow.title}</h3>
-                        <p className="mt-1.5 line-clamp-2 text-[13px] text-secondary">{escrow.scope}</p>
+                        <p className="mt-1.5 line-clamp-2 whitespace-pre-wrap text-[13px] text-secondary">
+                          {escrow.scope}
+                        </p>
                       </div>
 
                       <div>
@@ -654,14 +661,12 @@ function EscrowDashboardInner() {
                         </dl>
 
                         <div className="mt-4 flex items-center justify-between gap-2">
-                          <button
-                            type="button"
-                            onClick={() => navigator.clipboard?.writeText(buildShareLink(escrow))}
-                            className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-secondary transition-colors hover:text-lime"
+                          <CopyButton value={shareUrl} label="Copy checkout link" />
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={() => navigate(`/pay/${escrow.escrowIdBytes32}`)}
                           >
-                            <Copy className="size-3" /> Copy Link
-                          </button>
-                          <Button size="sm" variant="primary" onClick={() => navigate(buildShareLink(escrow))}>
                             Open Checkout <ArrowRight className="size-3.5" />
                           </Button>
                         </div>

@@ -6,6 +6,7 @@ import {DiptosRegistry} from "../src/DiptosRegistry.sol";
 
 interface Vm {
     function envUint(string calldata) external returns (uint256);
+    function envOr(string calldata, uint256) external returns (uint256);
     function envOr(string calldata, address) external returns (address);
     function addr(uint256) external returns (address);
     function startBroadcast(uint256) external;
@@ -23,7 +24,8 @@ contract DeployArc {
     function run() external returns (DiptosRegistry registry, DiptosEscrow escrow) {
         uint256 deployerKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         address deployer = vm.addr(deployerKey);
-        address oracleSigner = vm.envOr("GROK_ORACLE_SIGNER_ADDRESS", deployer);
+        uint256 oracleKey = vm.envOr("GROK_ORACLE_PRIVATE_KEY", deployerKey);
+        address oracleSigner = vm.addr(oracleKey);
         address treasury = vm.envOr("TREASURY_ADDRESS", deployer);
         address genesisPayee = vm.envOr("GENESIS_PAYEE_ADDRESS", oracleSigner);
 
@@ -33,7 +35,7 @@ contract DeployArc {
         escrow = new DiptosEscrow(oracleSigner, treasury, address(registry));
         registry.setEscrowContract(address(escrow));
 
-        // Seed 2 real initial on-chain escrows (0.02 USDC AI Agent Code Audit + 0.05 USDC Design System Sprint)
+        // Seed 2 real initial on-chain escrows with full on-chain title & acceptanceScope
         if (deployer.balance >= 0.08 ether) {
             bytes32 agentAuditId = keccak256(
                 abi.encodePacked("diptos:arc:5042002:genesis-agent-audit", address(escrow))
@@ -43,7 +45,9 @@ contract DeployArc {
                 genesisPayee,
                 block.timestamp + 24 hours,
                 3200,
-                true
+                true,
+                "Arc Native USDC Smart Contract Audit & EIP-712 Verifier",
+                "1. Verify DiptosEscrow & DiptosRegistry bytecode on ArcScan (5042002)\n2. Pass 100% of Foundry fuzz & invariant tests for WAD TECD math"
             );
 
             bytes32 designSprintId = keccak256(
@@ -54,13 +58,15 @@ contract DeployArc {
                 genesisPayee,
                 block.timestamp + 72 hours,
                 2500,
-                false
+                false,
+                "Institutional Checkout Room & @diptos/sdk Integration",
+                "1. Deliver non-custodial USDC checkout on app.diptos.xyz/pay/:id\n2. Integrate live Gemini Prediction Markets risk lambda & ElevenLabs audio brief"
             );
         }
 
-        // Seed the on-chain DiptosEscrow.faucetMint() pool with 5.0 USDC if balance permits
-        if (deployer.balance >= 6 ether) {
-            (bool ok, ) = payable(address(escrow)).call{value: 5 ether}("");
+        // Seed the on-chain DiptosEscrow.faucetMint() pool with 2.0 USDC if balance permits
+        if (deployer.balance >= 4 ether) {
+            (bool ok, ) = payable(address(escrow)).call{value: 2 ether}("");
             require(ok, "Faucet pool funding failed");
         }
 

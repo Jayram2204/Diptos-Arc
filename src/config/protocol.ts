@@ -17,12 +17,20 @@ export interface ContractMeta {
   address: Address
 }
 
-const DEFAULT_ESCROW_ADDRESS: Address = '0xb49B4C64f7A162B45eF3eDA11B55030A97ddfE08'
-const DEFAULT_REGISTRY_ADDRESS: Address = '0xAe046d40bcAb56128D34588e10b6D7F166485bA5'
+const DEFAULT_ESCROW_ADDRESS: Address = '0x601bD8caDf9ba2274E645412C1Fca2dF13a318F5'
+const DEFAULT_REGISTRY_ADDRESS: Address = '0xC831EBFA825d88853625C52d1BD55c456111B004'
+
+const LEGACY_ADDRESSES = new Set([
+  '0xb49b4c64f7a162b45ef3eda11b55030a97ddfe08',
+  '0xae046d40bcab56128d34588e10b6d7f166485ba5',
+])
 
 function resolveAddress(envValue: string | undefined, fallbackAddr: Address): Address {
   const trimmed = envValue?.trim()
-  return trimmed && isAddress(trimmed) ? trimmed : fallbackAddr
+  if (!trimmed || !isAddress(trimmed) || LEGACY_ADDRESSES.has(trimmed.toLowerCase())) {
+    return fallbackAddr
+  }
+  return trimmed
 }
 
 export const ESCROW_CONTRACT_ADDRESS: Address = resolveAddress(
@@ -40,7 +48,7 @@ export const CONTRACTS: ContractMeta[] = [
   {
     key: 'DiptosEscrow',
     file: 'DiptosEscrow.sol',
-    role: 'Non-custodial native 18-dec USDC escrow, EIP-712 Grok oracle release & WAD TECD decay',
+    role: 'Non-custodial native 18-dec USDC escrow, on-chain metadata, EIP-712 Grok oracle release & WAD TECD decay',
     standard: 'DvP + TECD',
     address: ESCROW_CONTRACT_ADDRESS,
   },

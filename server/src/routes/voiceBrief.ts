@@ -5,9 +5,11 @@ import { fetchLiveGeminiRisk } from './riskGemini.js'
 
 export const voiceBriefRoute = new Hono()
 
-const DEFAULT_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'
+// Sarah (EXAVITQu4vr4xnSDxMaL) is a default premade voice supported on all ElevenLabs plans (including free tier)
+const FREE_PREMADE_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'
+
 const ESCROW_VIEW_ABI = parseAbi([
-  'function getEscrowView(bytes32 escrowId) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash))',
+  'function getEscrowView(bytes32 escrowId) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash, string title, string acceptanceScope))',
 ])
 
 function toEscrowBytes32(rawId: string): Hex {
@@ -39,7 +41,7 @@ voiceBriefRoute.post('/', async (c) => {
     let amountUsdc = Number(body?.amountUsdc ?? 0)
     let lambda = Number(body?.tecdLambda ?? 0.35)
     let modeLabel = body?.mode === 'agent' ? 'autonomous AI agent' : 'human freelancer'
-    const title = typeof body?.title === 'string' && body.title.trim() ? body.title.trim() : escrowIdRaw.slice(0, 14)
+    let title = typeof body?.title === 'string' && body.title.trim() ? body.title.trim() : escrowIdRaw.slice(0, 14)
 
     if (escrowContract) {
       try {
@@ -53,14 +55,16 @@ voiceBriefRoute.post('/', async (c) => {
           amount: bigint
           lambdaBps: bigint
           isAgentMode: boolean
+          title: string
         }
         if (view && view.payer !== zeroAddress) {
           amountUsdc = Number(formatEther(view.amount))
           lambda = Number(view.lambdaBps) / 10_000
           modeLabel = view.isAgentMode ? 'autonomous AI agent' : 'human freelancer'
+          if (view.title) title = view.title
         }
       } catch {
-        // Use caller-provided intent fields when pre-funding
+        // Use caller-provided fields
       }
     }
 
@@ -79,11 +83,10 @@ voiceBriefRoute.post('/', async (c) => {
   }
 
   const script = `${dealClause}${macroClause}`
-  const voiceId = process.env.ELEVENLABS_VOICE_ID?.trim() || DEFAULT_VOICE_ID
-  const modelId = process.env.ELEVENLABS_MODEL_ID?.trim() || 'eleven_turbo_v2_5'
+  const modelId = 'eleven_flash_v2_5'
 
   try {
-    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    let res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${FREE_PREMADE_VOICE_ID}`, {
       method: 'POST',
       headers: {
         'xi-api-key': apiKey,

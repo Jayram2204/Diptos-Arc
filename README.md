@@ -40,7 +40,7 @@
 
 | Component | Status | Code & Test Evidence | Residual Trust / Remaining Work |
 | :--- | :--- | :--- | :--- |
-| **Smart Contracts (`DiptosEscrow` + `DiptosRegistry`)** | **Demonstrated** (Live on Arc Testnet `5042002` + 15/15 Foundry tests) | `DiptosEscrow`: `0xb49B4C64f7A162B45eF3eDA11B55030A97ddfE08` · `DiptosRegistry`: `0xAe046d40bcAb56128D34588e10b6D7F166485bA5` (`forge test -vvv`) | Live on Arc Testnet with 2 seeded escrows and 5.0 USDC on-chain faucet pool. |
+| **Smart Contracts (`DiptosEscrow` + `DiptosRegistry`)** | **Demonstrated** (Live on Arc Testnet `5042002` + 17/17 Foundry tests) | `DiptosEscrow`: `0x601bD8caDf9ba2274E645412C1Fca2dF13a318F5` · `DiptosRegistry`: `0xC831EBFA825d88853625C52d1BD55c456111B004` (`forge test -vvv`) | Live on Arc Testnet with on-chain `title` & `acceptanceScope`, 2 seeded escrows, and 2.0 USDC on-chain faucet pool. |
 | **Consumer Checkout & Live UI (`src/`)** | **Demonstrated** | `pnpm build:all` passes; Lenis smooth scroll, SVG TECD simulator, live Arc RPC telemetry | Requires live contract addresses and Vercel env vars for end-to-end mainnet-like settlement. |
 | **Stateless Serverless API (`server/` + `api/[[...route]].ts`)** | **Demonstrated** | Deployed on Vercel Functions; zero `fs.writeFileSync` state storage | Requires `XAI_API_KEY`, `GROK_ORACLE_PRIVATE_KEY`, `ELEVENLABS_API_KEY`, and `QUICKNODE_WEBHOOK_SECRET` in Vercel settings. |
 | **`@diptos/sdk` (`packages/sdk/`)** | **Demonstrated** (Published on npm: `@diptos/sdk@1.0.0`) | Live at `https://www.npmjs.com/package/@diptos/sdk` (`dist/index.js`, `dist/index.cjs`, `dist/index.d.ts` via `tsup`) | Installable via `pnpm add @diptos/sdk` or `npm install @diptos/sdk`. |
@@ -113,8 +113,8 @@ pnpm build:all
 - **Verification & Evidence Log:** [docs/EVIDENCE.md](docs/EVIDENCE.md)
 - **TypeScript SDK Documentation:** [packages/sdk/README.md](packages/sdk/README.md)
 - **Arc Testnet Explorer:** https://testnet.arcscan.app
-- **DiptosEscrow Contract (Arc Testnet):** https://testnet.arcscan.app/address/0xb49B4C64f7A162B45eF3eDA11B55030A97ddfE08
-- **DiptosRegistry Contract (Arc Testnet):** https://testnet.arcscan.app/address/0xAe046d40bcAb56128D34588e10b6D7F166485bA5
+- **DiptosEscrow Contract (Arc Testnet):** https://testnet.arcscan.app/address/0x601bD8caDf9ba2274E645412C1Fca2dF13a318F5
+- **DiptosRegistry Contract (Arc Testnet):** https://testnet.arcscan.app/address/0xC831EBFA825d88853625C52d1BD55c456111B004
 - **ArcUSDC Precompile:** https://testnet.arcscan.app/address/0x3600000000000000000000000000000000000000
 
 ---
@@ -123,6 +123,6 @@ pnpm build:all
 
 1. **Off-Chain Auditing vs. On-Chain Enforcement:** Grok deliverable auditing (`server/src/routes/verifyGrok.ts`) and Gemini risk fetching (`server/src/routes/riskGemini.ts`) execute off-chain on the application server. Fund custody, TECD decay math, EIP-712 signature verification, anti-double-spend checks, and permissionless timeout refunds are enforced on-chain by `DiptosEscrow.sol` and `DiptosRegistry.sol`.
 2. **Oracle Key Authorization Scope:** A valid EIP-712 signature proves authorization by the configured `GROK_ORACLE_SIGNER` key, not cryptographic proof of off-chain deliverable truth. If the oracle or payee stalls past `deadline + gracePeriod`, payers retain permissionless recovery of `100%` of locked funds via `claimTimeoutRefund`.
-3. **Live Arc Testnet Deployment:** `DiptosEscrow` (`0xb49B4C64f7A162B45eF3eDA11B55030A97ddfE08`) and `DiptosRegistry` (`0xAe046d40bcAb56128D34588e10b6D7F166485bA5`) are deployed on Arc Testnet (`Chain ID: 5042002`) with live `eth_getCode` verification, 2 initial funded escrows, and a 5.0 USDC on-chain faucet reserve.
+3. **Live Arc Testnet Deployment:** `DiptosEscrow` (`0x601bD8caDf9ba2274E645412C1Fca2dF13a318F5`) and `DiptosRegistry` (`0xC831EBFA825d88853625C52d1BD55c456111B004`) are deployed on Arc Testnet (`Chain ID: 5042002`) with live `eth_getCode` verification, on-chain `title` & `acceptanceScope` storage, 2 initial funded escrows, and a 2.0 USDC on-chain faucet reserve.
 4. **Serverless Webhook Ephemerality:** QuickNode webhook pushes stored in the in-memory `webhookBuffer` reset on Vercel serverless cold starts; `GET /api/events` compensates by querying authoritative `viem` `getLogs` directly from Arc Testnet ordered by `blockNumber` descending.
 5. **Unaudited Testnet Software:** Smart contracts have not undergone an independent third-party security audit and are intended for Arc Testnet demonstration only.

@@ -13,6 +13,7 @@ interface Vm {
     function stopPrank() external;
     function warp(uint256) external;
     function expectRevert(bytes4) external;
+    function expectRevert(bytes calldata) external;
 }
 
 contract DiptosEscrowTest {
@@ -46,6 +47,65 @@ contract DiptosEscrowTest {
         bytes32 digest = escrow.computeReleaseDigest(escrowId, milestoneIndex, deliverableHash, nonce);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signingKey, digest);
         return abi.encodePacked(r, s, v);
+    }
+
+    function test_VerifyAndReleaseWithEIP712Oracle() public {
+        bytes32 id = keccak256("escrow-verify-eip712-oracle");
+        uint256 deadline = block.timestamp + 24 hours;
+
+        vm.prank(payer);
+        escrow.createEscrowLink{value: 10 ether}(
+            id,
+            payee,
+            deadline,
+            3500,
+            true,
+            "AI Agent RWA Audit",
+            "Verify EIP-712 ReleaseEscrow signature and settle 99.5% on Arc Testnet"
+        );
+
+        DiptosEscrow.EscrowView memory beforeView = escrow.getEscrowView(id);
+        assert(uint8(beforeView.status) == uint8(DiptosEscrow.MilestoneStatus.FUNDED));
+        assert(keccak256(bytes(beforeView.title)) == keccak256(bytes("AI Agent RWA Audit")));
+        assert(escrow.nonces(id) == 0);
+
+        bytes32 delHash = keccak256("github:Jayram2204/Diptos-Arc#commit-1");
+        uint256 currentNonce = escrow.nonces(id);
+        bytes32 digest = escrow.computeReleaseDigest(id, delHash, currentNonce);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(oracleKey, digest);
+        bytes memory sig = abi.encodePacked(r, s, v);
+
+        escrow.releaseWithOracle(id, 0, delHash, currentNonce, sig);
+
+        DiptosEscrow.EscrowView memory afterView = escrow.getEscrowView(id);
+        assert(uint8(afterView.status) == uint8(DiptosEscrow.MilestoneStatus.SETTLED));
+        assert(escrow.nonces(id) == 1);
+        assert(payee.balance == 9.95 ether);
+        assert(treasury.balance == 0.05 ether);
+    }
+
+    function test_ReleaseByPayerDirectApproval() public {
+        bytes32 id = keccak256("escrow-payer-direct-release");
+        uint256 deadline = block.timestamp + 24 hours;
+
+        vm.prank(payer);
+        escrow.createEscrowLink{value: 4 ether}(
+            id,
+            payee,
+            deadline,
+            2500,
+            false,
+            "Frontend Sprint",
+            "Deliver checkout UI"
+        );
+
+        vm.prank(payer);
+        escrow.releaseByPayer(id);
+
+        DiptosEscrow.EscrowView memory afterView = escrow.getEscrowView(id);
+        assert(uint8(afterView.status) == uint8(DiptosEscrow.MilestoneStatus.SETTLED));
+        assert(payee.balance == 3.98 ether);
+        assert(treasury.balance == 0.02 ether);
     }
 
     function test_SingleShotOnTimeRelease() public {
@@ -116,19 +176,15 @@ contract DiptosEscrowTest {
         uint256 amount = 100 ether;
         uint256 window = 24 hours;
 
-        // Bound to realistic protocol ranges
         uint256 d1 = delaySeconds % (14 days);
-        uint256 d2 = d1 + 600; // +10 minutes later
-        uint256 lam = 100 + (lambdaBps % 19_900); // 1% to 200% lambda
+        uint256 d2 = d1 + 600;
+        uint256 lam = 100 + (lambdaBps % 19_900);
 
         (uint256 p1, uint256 r1, uint256 f1, ) = escrow.calculateTECD(amount, d1, window, lam);
         (uint256 p2, uint256 r2, uint256 f2, ) = escrow.calculateTECD(amount, d2, window, lam);
 
-        // Conservation: zero wei dust lost or created
         assert(p1 + r1 + f1 == amount);
         assert(p2 + r2 + f2 == amount);
-
-        // Monotonicity: larger delay => payeePayout <= previous, buyerRebate >= previous
         assert(p2 <= p1);
         assert(r2 >= r1);
     }
@@ -158,9 +214,13 @@ contract DiptosEscrowTest {
         bytes memory sig = _signEIP712(oracleKey, id, 0, delHash, 0);
         escrow.releaseWithOracle(id, 0, delHash, 0, sig);
 
-        // Replaying the exact same signature / nonce 0 must revert with InvalidNonce()
-        vm.expectRevert(DiptosEscrow.InvalidNonce.selector);
+        // Replaying milestone 0 after settlement reverts with AlreadySettled()
+        vm.expectRevert(DiptosEscrow.AlreadySettled.selector);
         escrow.releaseWithOracle(id, 0, delHash, 0, sig);
+
+        // Using stale nonce 0 on milestone 1 reverts with InvalidNonce(1, 0)
+        vm.expectRevert(abi.encodeWithSelector(DiptosEscrow.InvalidNonce.selector, 1, 0));
+        escrow.releaseWithOracle(id, 1, delHash, 0, sig);
     }
 
     function test_RevertOnWrongOracleSigner() public {
@@ -171,7 +231,10 @@ contract DiptosEscrowTest {
         bytes32 delHash = keccak256("forged");
         bytes memory rogueSig = _signEIP712(rogueKey, id, 0, delHash, 0);
 
-        vm.expectRevert(DiptosEscrow.InvalidOracleSignature.selector);
+        address rogueAddr = vm.addr(rogueKey);
+        vm.expectRevert(
+            abi.encodeWithSelector(DiptosEscrow.InvalidOracleSignature.selector, rogueAddr, oracleSigner)
+        );
         escrow.releaseWithOracle(id, 0, delHash, 0, rogueSig);
     }
 
@@ -194,7 +257,6 @@ contract DiptosEscrowTest {
         vm.prank(payer);
         escrow.createEscrowLink{value: 5 ether}(id, payee, deadline, 3000, false);
 
-        // Advance past deadline + 24h grace period
         vm.warp(deadline + 24 hours + 1);
         uint256 beforeBal = payer.balance;
 
@@ -211,7 +273,6 @@ contract DiptosEscrowTest {
         vm.prank(payer);
         escrow.createEscrowLink{value: 5 ether}(id, payee, deadline, 3000, false);
 
-        // Only 1 hour past deadline (still inside 24h grace period)
         vm.warp(deadline + 1 hours);
 
         vm.prank(payer);
@@ -244,7 +305,7 @@ contract DiptosEscrowTest {
 
         vm.prank(payer);
         escrow.createEscrowLink{value: 3 ether}(id2, payee, d2, 3000, false);
-        vm.warp(d2 + 3600); // 1 hour late
+        vm.warp(d2 + 3600);
         bytes memory sig2 = _signEIP712(oracleKey, id2, 0, keccak256("late"), 0);
         escrow.releaseWithOracle(id2, 0, keccak256("late"), 0, sig2);
 
@@ -274,20 +335,20 @@ contract DiptosEscrowTest {
         bytes32 id3 = keccak256("enum-3");
 
         vm.startPrank(payer);
-        escrow.createEscrowLink{value: 1 ether}(id1, payee, block.timestamp + 24 hours, 3000, false);
-        escrow.createEscrowLink{value: 2 ether}(id2, payee, block.timestamp + 48 hours, 3500, true);
-        escrow.createEscrowLink{value: 3 ether}(id3, payee, block.timestamp + 72 hours, 4000, false);
+        escrow.createEscrowLink{value: 1 ether}(id1, payee, block.timestamp + 24 hours, 3000, false, "Deal 1", "Scope 1");
+        escrow.createEscrowLink{value: 2 ether}(id2, payee, block.timestamp + 48 hours, 3500, true, "Deal 2", "Scope 2");
+        escrow.createEscrowLink{value: 3 ether}(id3, payee, block.timestamp + 72 hours, 4000, false, "Deal 3", "Scope 3");
         vm.stopPrank();
 
         assert(escrow.getEscrowCount() == 3);
         assert(escrow.getUserEscrowIds(payer).length == 3);
         assert(escrow.getUserEscrowIds(payee).length == 3);
 
-        // Newest-first pagination
         DiptosEscrow.EscrowView[] memory page1 = escrow.getEscrowsPaginated(0, 2);
         assert(page1.length == 2);
         assert(page1[0].escrowId == id3);
         assert(page1[0].amount == 3 ether);
+        assert(keccak256(bytes(page1[0].title)) == keccak256(bytes("Deal 3")));
         assert(page1[1].escrowId == id2);
 
         DiptosEscrow.EscrowView[] memory page2 = escrow.getEscrowsPaginated(2, 5);

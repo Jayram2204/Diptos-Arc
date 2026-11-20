@@ -6,6 +6,7 @@ import {
   type Hex,
   http,
   isAddress,
+  parseAbi,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 
@@ -30,8 +31,13 @@ export const arcPublicClient = createPublicClient({
   ]),
 })
 
-const LIVE_ARC_ESCROW: Address = '0xb49B4C64f7A162B45eF3eDA11B55030A97ddfE08'
-const LIVE_ARC_REGISTRY: Address = '0xAe046d40bcAb56128D34588e10b6D7F166485bA5'
+const LIVE_ARC_ESCROW: Address = '0x601bD8caDf9ba2274E645412C1Fca2dF13a318F5'
+const LIVE_ARC_REGISTRY: Address = '0xC831EBFA825d88853625C52d1BD55c456111B004'
+
+const LEGACY_ADDRESSES = new Set([
+  '0xb49b4c64f7a162b45ef3eda11b55030a97ddfe08',
+  '0xae046d40bcab56128d34588e10b6d7f166485ba5',
+])
 
 export function getEscrowContractAddress(): Address {
   const addr = (
@@ -39,7 +45,10 @@ export function getEscrowContractAddress(): Address {
     process.env.VITE_ESCROW_CONTRACT_ADDRESS ||
     ''
   ).trim()
-  return isAddress(addr) ? addr : LIVE_ARC_ESCROW
+  if (!addr || !isAddress(addr) || LEGACY_ADDRESSES.has(addr.toLowerCase())) {
+    return LIVE_ARC_ESCROW
+  }
+  return addr
 }
 
 export function getRegistryContractAddress(): Address {
@@ -48,28 +57,29 @@ export function getRegistryContractAddress(): Address {
     process.env.VITE_REGISTRY_CONTRACT_ADDRESS ||
     ''
   ).trim()
-  return isAddress(addr) ? addr : LIVE_ARC_REGISTRY
+  if (!addr || !isAddress(addr) || LEGACY_ADDRESSES.has(addr.toLowerCase())) {
+    return LIVE_ARC_REGISTRY
+  }
+  return addr
 }
 
 export function getOracleAccount() {
-  const pk = process.env.GROK_ORACLE_PRIVATE_KEY?.trim()
+  const pk = (process.env.GROK_ORACLE_PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY || '').trim()
   if (!pk || !/^0x[0-9a-fA-F]{64}$/.test(pk)) return null
   return privateKeyToAccount(pk as Hex)
 }
 
-export const RELEASE_MILESTONE_TYPES = {
-  ReleaseMilestone: [
+export const RELEASE_ESCROW_TYPES = {
+  ReleaseEscrow: [
     { name: 'escrowId', type: 'bytes32' },
-    { name: 'milestoneIndex', type: 'uint256' },
     { name: 'deliverableHash', type: 'bytes32' },
     { name: 'nonce', type: 'uint256' },
-    { name: 'chainId', type: 'uint256' },
   ],
 } as const
 
 export interface SignMilestoneInput {
   escrowId: Hex
-  milestoneIndex: bigint
+  milestoneIndex?: bigint
   deliverableHash: Hex
   nonce: bigint
 }
@@ -86,18 +96,16 @@ export async function signMilestoneReleaseEIP712(
   const signature = await account.signTypedData({
     domain: {
       name: 'DiptosEscrow',
-      version: '2',
+      version: '1',
       chainId: ARC_CHAIN_ID,
       verifyingContract,
     },
-    types: RELEASE_MILESTONE_TYPES,
-    primaryType: 'ReleaseMilestone',
+    types: RELEASE_ESCROW_TYPES,
+    primaryType: 'ReleaseEscrow',
     message: {
       escrowId: input.escrowId,
-      milestoneIndex: input.milestoneIndex,
       deliverableHash: input.deliverableHash,
       nonce: input.nonce,
-      chainId: BigInt(ARC_CHAIN_ID),
     },
   })
 
@@ -105,28 +113,52 @@ export async function signMilestoneReleaseEIP712(
   return { signature, oracleSigner: account.address }
 }
 
+const ORACLE_SIGNER_ABI = parseAbi(['function oracleSigner() view returns (address)'])
+
 export async function getOracleStatus() {
   const account = getOracleAccount()
+  const escrowContract = getEscrowContractAddress()
   let latestArcBlock: number | null = null
+  let onChainOracleSigner: Address | null = null
   let rpcError: string | null = null
 
   try {
-    const num = await arcPublicClient.getBlockNumber()
+    const [num, onChainSigner] = await Promise.all([
+      arcPublicClient.getBlockNumber(),
+      arcPublicClient
+        .readContract({
+          address: escrowContract,
+          abi: ORACLE_SIGNER_ABI,
+          functionName: 'oracleSigner',
+        })
+        .catch(() => null),
+    ])
     latestArcBlock = Number(num)
+    onChainOracleSigner = onChainSigner as Address | null
   } catch (e) {
     rpcError = (e as Error).message.split('\n')[0]
   }
+
+  const signerAddress = account?.address ?? null
+  const matches = Boolean(
+    signerAddress &&
+      onChainOracleSigner &&
+      signerAddress.toLowerCase() === onChainOracleSigner.toLowerCase(),
+  )
 
   return {
     chainId: ARC_CHAIN_ID,
     network: 'Arc Testnet',
     rpcUrl: ARC_RPC_PRIMARY,
-    oracleSigner: account?.address ?? null,
+    signerAddress,
+    onChainOracleSigner,
+    matches,
+    oracleSigner: signerAddress ?? onChainOracleSigner,
     eip712Domain: {
       name: 'DiptosEscrow',
-      version: '2',
+      version: '1',
       chainId: ARC_CHAIN_ID,
-      verifyingContract: getEscrowContractAddress(),
+      verifyingContract: escrowContract,
     },
     latestArcBlock,
     rpcError,

@@ -80,7 +80,7 @@ export function useEscrows(pollMs = 4000) {
 
   const refresh = useCallback(async () => {
     try {
-      const list = await diptos.listEscrows()
+      const list = await diptos.listEscrows(0, 20)
       setEscrows(list)
       setError(null)
     } catch (e) {
@@ -91,9 +91,19 @@ export function useEscrows(pollMs = 4000) {
   }, [])
 
   useEffect(() => {
-    refresh()
-    const t = setInterval(refresh, pollMs)
-    return () => clearInterval(t)
+    void refresh()
+    const onFocus = () => void refresh()
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void refresh()
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+    const t = setInterval(() => void refresh(), pollMs)
+    return () => {
+      clearInterval(t)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [refresh, pollMs])
 
   return { escrows, loading, error, refresh }

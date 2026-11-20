@@ -50,15 +50,37 @@ export const usdc6ToNativeWei = (usdc6: bigint): bigint => usdc6 * NATIVE_TO_ERC
 
 export const DIPTOS_ESCROW_ABI = parseAbi([
   'function protocolFeeBps() view returns (uint256)',
+  'function oracleSigner() view returns (address)',
+  'function nonces(bytes32 escrowId) view returns (uint256)',
   'function getEscrowCount() view returns (uint256)',
-  'function getEscrowsPaginated(uint256 offset, uint256 limit) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash)[])',
-  'function getEscrowView(bytes32 escrowId) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash))',
+  'function getEscrowsPaginated(uint256 offset, uint256 limit) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash, string title, string acceptanceScope)[])',
+  'function getEscrowView(bytes32 escrowId) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash, string title, string acceptanceScope))',
+  'function getEscrow(bytes32 escrowId) view returns ((bytes32 escrowId, address payer, address payee, uint256 amount, uint256 deadline, uint256 createdAt, uint256 fundedAt, uint256 lambdaBps, uint256 nonce, bool isAgentMode, uint8 status, bytes32 deliverableHash, string title, string acceptanceScope))',
+  'function createEscrowLink(bytes32 escrowId, address payee, uint256 deadline, uint256 lambdaBps, bool isAgentMode, string title, string acceptanceScope) payable',
   'function createEscrowLink(bytes32 escrowId, address payee, uint256 deadline, uint256 lambdaBps, bool isAgentMode) payable',
   'function createMultiMilestoneEscrow(bytes32 escrowId, address payee, uint256[] amounts, uint256[] deadlines, uint256 lambdaBps, bool isAgentMode) payable',
   'function releaseWithOracle(bytes32 escrowId, uint256 milestoneIndex, bytes32 deliverableHash, uint256 expectedNonce, bytes grokSignature)',
+  'function releaseWithOracle(bytes32 escrowId, bytes32 deliverableHash, uint256 expectedNonce, bytes grokSignature)',
+  'function releaseByPayer(bytes32 escrowId)',
   'function claimTimeoutRefund(bytes32 escrowId)',
   'function mutualCancel(bytes32 escrowId)',
+  'function faucetMint()',
+  'function claimTestnetFaucet()',
   'function previewTECDPayout(uint256 amount, uint256 deadline, uint256 simulatedTimestamp, uint256 lambdaBps) view returns (uint256 payeePayout, uint256 payerRebate, uint256 protocolFee, uint256 decayBps)',
+  'error Unauthorized()',
+  'error InvalidParameters()',
+  'error InvalidMilestoneIndex()',
+  'error MilestoneNotFunded()',
+  'error EscrowNotFunded()',
+  'error AlreadySettled()',
+  'error InvalidNonce(uint256 expected, uint256 provided)',
+  'error InvalidOracleSignature(address recovered, address expected)',
+  'error ZeroPayout()',
+  'error TimeoutNotReached()',
+  'error NothingToRefund()',
+  'error TransferFailed()',
+  'error FaucetCooldown()',
+  'error FaucetEmpty()',
 ])
 
 export const DIPTOS_REGISTRY_ABI = parseAbi([
@@ -395,6 +417,8 @@ export class DiptosClient {
     deadlineUnix: number
     lambdaBps: number
     isAgentMode: boolean
+    title?: string
+    scope?: string
   }): BuiltTxPayload {
     const to = this.escrowContract ?? '0x0000000000000000000000000000000000000000'
     const args = [
@@ -403,6 +427,8 @@ export class DiptosClient {
       BigInt(params.deadlineUnix),
       BigInt(params.lambdaBps),
       params.isAgentMode,
+      params.title ?? '',
+      params.scope ?? '',
     ] as const
     const data = encodeFunctionData({
       abi: DIPTOS_ESCROW_ABI,
@@ -528,25 +554,27 @@ export class DiptosClient {
           isAgentMode: boolean
           status: number
           deliverableHash: Hex
+          title: string
+          acceptanceScope: string
         }[]
         const statusMap: EscrowStatus[] = ['created', 'funded', 'verified', 'settled', 'refunded']
         return items
-          .filter((v) => v.payer !== '0x0000000000000000000000000000000000000000')
+          .filter((v) => v.payer !== '0x0000000000000000000000000000000000000000' && Number(v.createdAt) > 0)
           .map((v) => {
             const deadlineUnix = Number(v.deadline)
             const createdUnix = Number(v.createdAt || v.fundedAt)
             const deadlineHours =
-              deadlineUnix > createdUnix ? Math.max(1, Math.round((deadlineUnix - createdUnix) / 3600)) : 24
+              deadlineUnix > createdUnix
+                ? Math.max(0.03, Number(((deadlineUnix - createdUnix) / 3600).toFixed(2)))
+                : 24
             const lambdaBps = Number(v.lambdaBps)
             return {
               id: v.escrowId,
               escrowIdBytes32: v.escrowId,
-              title: v.isAgentMode
-                ? `AI Agent Escrow ${v.escrowId.slice(0, 10)}`
-                : `Arc USDC Escrow ${v.escrowId.slice(0, 10)}`,
-              scope: 'On-chain non-custodial escrow settled via Grok EIP-712 Oracle on Arc Testnet (5042002).',
+              title: v.title,
+              scope: v.acceptanceScope,
               amountUsdc: Number(formatEther(v.amount)),
-              deadline: deadlineUnix > 0 ? new Date(deadlineUnix * 1000).toISOString() : new Date().toISOString(),
+              deadline: new Date(deadlineUnix * 1000).toISOString(),
               deadlineUnix,
               deadlineHours,
               mode: v.isAgentMode ? 'agent' : 'human',
@@ -556,7 +584,7 @@ export class DiptosClient {
               tecdLambda: Number((lambdaBps / 10_000).toFixed(4)),
               tecdLambdaBps: lambdaBps,
               status: statusMap[v.status] ?? 'created',
-              createdAt: createdUnix > 0 ? new Date(createdUnix * 1000).toISOString() : new Date().toISOString(),
+              createdAt: new Date(createdUnix * 1000).toISOString(),
               onChain: true,
             }
           })
@@ -578,58 +606,55 @@ export class DiptosClient {
 
   async getEscrow(escrowId: string): Promise<EscrowRecord> {
     if (this.escrowContract) {
-      try {
-        const escrowIdBytes32 = toEscrowBytes32(escrowId)
-        const v = (await this.getPublicClient().readContract({
-          address: this.escrowContract,
-          abi: DIPTOS_ESCROW_ABI,
-          functionName: 'getEscrowView',
-          args: [escrowIdBytes32],
-        })) as {
-          escrowId: Hex
-          payer: Address
-          payee: Address
-          amount: bigint
-          deadline: bigint
-          createdAt: bigint
-          fundedAt: bigint
-          lambdaBps: bigint
-          nonce: bigint
-          isAgentMode: boolean
-          status: number
-          deliverableHash: Hex
-        }
-        if (v && v.payer !== '0x0000000000000000000000000000000000000000') {
-          const statusMap: EscrowStatus[] = ['created', 'funded', 'verified', 'settled', 'refunded']
-          const deadlineUnix = Number(v.deadline)
-          const createdUnix = Number(v.createdAt || v.fundedAt)
-          const deadlineHours =
-            deadlineUnix > createdUnix ? Math.max(1, Math.round((deadlineUnix - createdUnix) / 3600)) : 24
-          const lambdaBps = Number(v.lambdaBps)
-          return {
-            id: v.escrowId,
-            escrowIdBytes32: v.escrowId,
-            title: v.isAgentMode
-              ? `AI Agent Escrow ${v.escrowId.slice(0, 10)}`
-              : `Arc USDC Escrow ${v.escrowId.slice(0, 10)}`,
-            scope: 'On-chain non-custodial escrow settled via Grok EIP-712 Oracle on Arc Testnet (5042002).',
-            amountUsdc: Number(formatEther(v.amount)),
-            deadline: deadlineUnix > 0 ? new Date(deadlineUnix * 1000).toISOString() : new Date().toISOString(),
-            deadlineUnix,
-            deadlineHours,
-            mode: v.isAgentMode ? 'agent' : 'human',
-            payer: v.payer,
-            payee: v.payee,
-            nonce: Number(v.nonce),
-            tecdLambda: Number((lambdaBps / 10_000).toFixed(4)),
-            tecdLambdaBps: lambdaBps,
-            status: statusMap[v.status] ?? 'created',
-            createdAt: createdUnix > 0 ? new Date(createdUnix * 1000).toISOString() : new Date().toISOString(),
-            onChain: true,
-          }
-        }
-      } catch {
-        // Fall through to REST API
+      const escrowIdBytes32 = toEscrowBytes32(escrowId)
+      const v = (await this.getPublicClient().readContract({
+        address: this.escrowContract,
+        abi: DIPTOS_ESCROW_ABI,
+        functionName: 'getEscrowView',
+        args: [escrowIdBytes32],
+      })) as {
+        escrowId: Hex
+        payer: Address
+        payee: Address
+        amount: bigint
+        deadline: bigint
+        createdAt: bigint
+        fundedAt: bigint
+        lambdaBps: bigint
+        nonce: bigint
+        isAgentMode: boolean
+        status: number
+        deliverableHash: Hex
+        title: string
+        acceptanceScope: string
+      }
+      if (!v || v.payer === '0x0000000000000000000000000000000000000000' || Number(v.createdAt) === 0) {
+        throw new Error('Escrow not found on Arc Testnet (5042002).')
+      }
+      const statusMap: EscrowStatus[] = ['created', 'funded', 'verified', 'settled', 'refunded']
+      const deadlineUnix = Number(v.deadline)
+      const createdUnix = Number(v.createdAt || v.fundedAt)
+      const deadlineHours =
+        deadlineUnix > createdUnix ? Math.max(0.03, Number(((deadlineUnix - createdUnix) / 3600).toFixed(2))) : 24
+      const lambdaBps = Number(v.lambdaBps)
+      return {
+        id: v.escrowId,
+        escrowIdBytes32: v.escrowId,
+        title: v.title,
+        scope: v.acceptanceScope,
+        amountUsdc: Number(formatEther(v.amount)),
+        deadline: new Date(deadlineUnix * 1000).toISOString(),
+        deadlineUnix,
+        deadlineHours,
+        mode: v.isAgentMode ? 'agent' : 'human',
+        payer: v.payer,
+        payee: v.payee,
+        nonce: Number(v.nonce),
+        tecdLambda: Number((lambdaBps / 10_000).toFixed(4)),
+        tecdLambdaBps: lambdaBps,
+        status: statusMap[v.status] ?? 'created',
+        createdAt: new Date(createdUnix * 1000).toISOString(),
+        onChain: true,
       }
     }
     const res = await fetch(`${this.apiBaseUrl}/api/escrows/${encodeURIComponent(escrowId)}`)
@@ -675,7 +700,7 @@ export class DiptosClient {
     const calldata = encodeFunctionData({
       abi: DIPTOS_ESCROW_ABI,
       functionName: 'createEscrowLink',
-      args: [escrowIdBytes32, payee, BigInt(deadlineUnix), BigInt(tecdLambdaBps), mode === 'agent'],
+      args: [escrowIdBytes32, payee, BigInt(deadlineUnix), BigInt(tecdLambdaBps), mode === 'agent', title, scope],
     })
 
     const qs = new URLSearchParams({
