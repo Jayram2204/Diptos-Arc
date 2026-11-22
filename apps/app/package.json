@@ -1,0 +1,12 @@
+{
+  "name": "@diptos/app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Institutional Escrow Lifecycle & Settlement Engine for Diptos Protocol (app.diptos.xyz).",
+  "main": "./src/EscrowEngine.tsx",
+  "exports": {
+    ".": "./src/EscrowEngine.tsx",
+    "./wallet-modal": "./src/WalletModal.tsx"
+  }
+}

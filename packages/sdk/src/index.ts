@@ -43,6 +43,75 @@ export const ARC_TESTNET: Chain = defineChain({
   testnet: true,
 })
 
+export interface DiptosSupportedChain {
+  id: number
+  key: 'arc-testnet' | 'base-sepolia' | 'ethereum-sepolia' | 'arbitrum-sepolia'
+  name: string
+  shortName: string
+  status: 'live' | 'ready'
+  rpcUrl: string
+  explorerUrl: string
+  nativeCurrency: { name: string; symbol: string; decimals: number }
+  escrowContract: Address | null
+  registryContract: Address | null
+  usdcAddress: Address
+}
+
+export const DIPTOS_SUPPORTED_CHAINS: readonly DiptosSupportedChain[] = [
+  {
+    id: 5042002,
+    key: 'arc-testnet',
+    name: 'Arc Testnet',
+    shortName: 'Arc',
+    status: 'live',
+    rpcUrl: ARC_RPC_PRIMARY,
+    explorerUrl: 'https://testnet.arcscan.app',
+    nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
+    escrowContract: '0x601bD8caDf9ba2274E645412C1Fca2dF13a318F5',
+    registryContract: '0xC831EBFA825d88853625C52d1BD55c456111B004',
+    usdcAddress: '0x3600000000000000000000000000000000000000',
+  },
+  {
+    id: 84532,
+    key: 'base-sepolia',
+    name: 'Base Sepolia',
+    shortName: 'Base',
+    status: 'ready',
+    rpcUrl: 'https://sepolia.base.org',
+    explorerUrl: 'https://sepolia.basescan.org',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    escrowContract: null,
+    registryContract: null,
+    usdcAddress: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  },
+  {
+    id: 11155111,
+    key: 'ethereum-sepolia',
+    name: 'Ethereum Sepolia',
+    shortName: 'Sepolia',
+    status: 'ready',
+    rpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com',
+    explorerUrl: 'https://sepolia.etherscan.io',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    escrowContract: null,
+    registryContract: null,
+    usdcAddress: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
+  },
+  {
+    id: 421614,
+    key: 'arbitrum-sepolia',
+    name: 'Arbitrum Sepolia',
+    shortName: 'Arbitrum',
+    status: 'ready',
+    rpcUrl: 'https://sepolia-rollup.arbitrum.io/rpc',
+    explorerUrl: 'https://sepolia.arbiscan.io',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    escrowContract: null,
+    registryContract: null,
+    usdcAddress: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d',
+  },
+] as const
+
 /** Arc Testnet dual-decimal rule: native USDC (18 dec) <-> ERC-20 USDC (6 dec). */
 export const NATIVE_TO_ERC20_SCALE = 10n ** 12n
 export const nativeUsdcTo6Decimals = (nativeWei: bigint): bigint => nativeWei / NATIVE_TO_ERC20_SCALE

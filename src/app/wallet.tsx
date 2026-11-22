@@ -13,6 +13,7 @@ import {
 import { ABIS } from '@/config/abis'
 import { ARC_CHAIN_ID, ARC_NATIVE_DECIMALS, type ContractKey, contractAddress } from '@/config/protocol'
 import { arcTestnet, publicClient } from '@/lib/chain'
+import { getChainDeployment } from '@diptos/contracts'
 
 export type WalletId = 'metamask' | 'coinbase'
 export type TxKind =
@@ -42,8 +43,14 @@ export interface Receipt {
 }
 
 interface Eip6963Detail {
-  info: { rdns: string; name: string; uuid: string }
+  info: { rdns: string; name: string; uuid: string; icon?: string }
   provider: EIP1193Provider
+}
+
+export interface DetectedWallet {
+  rdns: string
+  name: string
+  icon?: string
 }
 
 interface WalletContextValue {
@@ -51,8 +58,10 @@ interface WalletContextValue {
   isConnected: boolean
   walletName: string | null
   walletChainId: number | null
+  detectedWallets: DetectedWallet[]
   connecting: WalletId | null
-  connect: (id?: WalletId) => Promise<Address | null>
+  connect: (id?: WalletId, rdns?: string) => Promise<Address | null>
+  switchNetwork: (chainId: number) => Promise<void>
   disconnect: () => void
   balanceUsdc: string | null
   refreshBalance: () => void
@@ -137,38 +146,47 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('eip6963:announceProvider', onAnnounce)
   }, [])
 
-  const resolveInjectedProvider = useCallback((): { provider: EIP1193Provider; name: string } | null => {
-    if (eip6963['io.metamask']) return { provider: eip6963['io.metamask'].provider, name: 'MetaMask' }
-    if (eip6963['io.rabby']) return { provider: eip6963['io.rabby'].provider, name: 'Rabby Wallet' }
-    if (eip6963['com.coinbase.wallet']) {
-      return { provider: eip6963['com.coinbase.wallet'].provider, name: 'Coinbase Wallet' }
-    }
-    if (eip6963['app.phantom']) return { provider: eip6963['app.phantom'].provider, name: 'Phantom' }
-    if (eip6963['me.rainbow']) return { provider: eip6963['me.rainbow'].provider, name: 'Rainbow' }
-    const firstEip6963 = Object.values(eip6963)[0]
-    if (firstEip6963) return { provider: firstEip6963.provider, name: firstEip6963.info.name || 'Web3 Wallet' }
-
-    const winEth = (
-      window as unknown as {
-        ethereum?: EIP1193Provider & {
-          isMetaMask?: boolean
-          isRabby?: boolean
-          isCoinbaseWallet?: boolean
-          providers?: (EIP1193Provider & { isMetaMask?: boolean; isRabby?: boolean })[]
+  const resolveInjectedProvider = useCallback(
+    (preferredRdns?: string): { provider: EIP1193Provider; name: string } | null => {
+      if (preferredRdns && eip6963[preferredRdns]) {
+        return {
+          provider: eip6963[preferredRdns].provider,
+          name: eip6963[preferredRdns].info.name || 'Web3 Wallet',
         }
       }
-    ).ethereum
+      if (eip6963['io.metamask']) return { provider: eip6963['io.metamask'].provider, name: 'MetaMask' }
+      if (eip6963['io.rabby']) return { provider: eip6963['io.rabby'].provider, name: 'Rabby Wallet' }
+      if (eip6963['com.coinbase.wallet']) {
+        return { provider: eip6963['com.coinbase.wallet'].provider, name: 'Coinbase Wallet' }
+      }
+      if (eip6963['app.phantom']) return { provider: eip6963['app.phantom'].provider, name: 'Phantom' }
+      if (eip6963['me.rainbow']) return { provider: eip6963['me.rainbow'].provider, name: 'Rainbow' }
+      const firstEip6963 = Object.values(eip6963)[0]
+      if (firstEip6963) return { provider: firstEip6963.provider, name: firstEip6963.info.name || 'Web3 Wallet' }
 
-    if (winEth?.providers?.length) {
-      const preferred = winEth.providers.find((p) => p.isRabby || p.isMetaMask) ?? winEth.providers[0]
-      return { provider: preferred, name: preferred.isRabby ? 'Rabby Wallet' : 'MetaMask' }
-    }
-    if (winEth && typeof winEth.request === 'function') {
-      const name = winEth.isRabby ? 'Rabby Wallet' : winEth.isMetaMask ? 'MetaMask' : 'Web3 Wallet'
-      return { provider: winEth, name }
-    }
-    return null
-  }, [eip6963])
+      const winEth = (
+        window as unknown as {
+          ethereum?: EIP1193Provider & {
+            isMetaMask?: boolean
+            isRabby?: boolean
+            isCoinbaseWallet?: boolean
+            providers?: (EIP1193Provider & { isMetaMask?: boolean; isRabby?: boolean })[]
+          }
+        }
+      ).ethereum
+
+      if (winEth?.providers?.length) {
+        const preferred = winEth.providers.find((p) => p.isRabby || p.isMetaMask) ?? winEth.providers[0]
+        return { provider: preferred, name: preferred.isRabby ? 'Rabby Wallet' : 'MetaMask' }
+      }
+      if (winEth && typeof winEth.request === 'function') {
+        const name = winEth.isRabby ? 'Rabby Wallet' : winEth.isMetaMask ? 'MetaMask' : 'Web3 Wallet'
+        return { provider: winEth, name }
+      }
+      return null
+    },
+    [eip6963],
+  )
 
   const refreshBalance = useCallback((targetAddress?: Address | null) => {
     const addr = targetAddress ?? address
@@ -191,22 +209,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     refreshBalance(address)
   }, [address, refreshBalance])
 
-  const switchToArc = useCallback(async (p: EIP1193Provider) => {
-    const hexId = numberToHex(ARC_CHAIN_ID) // 0x4cef52 (5042002)
+  const switchToChain = useCallback(async (p: EIP1193Provider, targetChainId: number) => {
+    const hexId = numberToHex(targetChainId)
+    const chain = getChainDeployment(targetChainId)
     try {
       await p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: hexId }] })
     } catch (e) {
       const code = (e as { code?: number })?.code
-      if (code === 4902 || code === -32603) {
+      if ((code === 4902 || code === -32603) && chain) {
         await p.request({
           method: 'wallet_addEthereumChain',
           params: [
             {
               chainId: hexId,
-              chainName: arcTestnet.name,
-              nativeCurrency: arcTestnet.nativeCurrency,
-              rpcUrls: [...arcTestnet.rpcUrls.default.http],
-              blockExplorerUrls: [arcTestnet.blockExplorers.default.url],
+              chainName: chain.name,
+              nativeCurrency: chain.nativeCurrency,
+              rpcUrls: [...chain.rpcUrls],
+              blockExplorerUrls: [chain.explorerUrl],
             },
           ],
         })
@@ -214,8 +233,35 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         throw e
       }
     }
-    setWalletChainId(ARC_CHAIN_ID)
+    setWalletChainId(targetChainId)
   }, [])
+
+  const switchToArc = useCallback(
+    async (p: EIP1193Provider) => {
+      await switchToChain(p, ARC_CHAIN_ID)
+    },
+    [switchToChain],
+  )
+
+  const switchNetwork = useCallback(
+    async (targetChainId: number) => {
+      setError(null)
+      const p = provider.current
+      if (!p) {
+        setError('Connect a wallet first to switch networks.')
+        return
+      }
+      try {
+        await switchToChain(p, targetChainId)
+        if (targetChainId === ARC_CHAIN_ID) {
+          refreshBalance(address)
+        }
+      } catch (e) {
+        setError(decodeRevertError(e))
+      }
+    },
+    [switchToChain, refreshBalance, address],
+  )
 
   const attach = useCallback((p: EIP1193Provider) => {
     const onAccounts = (accs: string[]) => {
@@ -235,11 +281,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const connect = useCallback(
-    async (id: WalletId = 'metamask'): Promise<Address | null> => {
+    async (id: WalletId = 'metamask', rdns?: string): Promise<Address | null> => {
       setError(null)
       setConnecting(id)
       try {
-        const detected = resolveInjectedProvider()
+        const detected = resolveInjectedProvider(rdns)
         if (!detected) {
           setError(NO_WEB3_WALLET_MSG)
           return null
@@ -350,6 +396,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [address, walletChainId, connect, switchToArc, refreshBalance],
   )
 
+  const detectedWallets: DetectedWallet[] = Object.values(eip6963).map((d) => ({
+    rdns: d.info.rdns,
+    name: d.info.name,
+    icon: d.info.icon,
+  }))
+
   return (
     <WalletCtx.Provider
       value={{
@@ -357,8 +409,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         isConnected: Boolean(address && provider.current),
         walletName,
         walletChainId,
+        detectedWallets,
         connecting,
         connect,
+        switchNetwork,
         disconnect,
         balanceUsdc,
         refreshBalance: () => refreshBalance(address),

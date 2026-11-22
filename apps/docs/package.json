@@ -1,0 +1,11 @@
+{
+  "name": "@diptos/docs",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Institutional developer documentation portal for Diptos Protocol (sdk.diptos.xyz).",
+  "main": "./src/DocsPortal.tsx",
+  "exports": {
+    ".": "./src/DocsPortal.tsx"
+  }
+}

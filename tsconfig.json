@@ -8,7 +8,10 @@
     "moduleResolution": "bundler",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@diptos/contracts": ["./packages/contracts/deployments.ts"],
+      "@diptos/app/*": ["./apps/app/src/*"],
+      "@diptos/docs/*": ["./apps/docs/src/*"]
     },
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
@@ -19,5 +22,5 @@
     "strict": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "apps", "packages/contracts/deployments.ts", "vite.config.ts"]
 }

@@ -1,0 +1,16 @@
+{
+  "name": "@diptos/contracts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-chain Solidity escrow & registry contracts, ABIs, and verified deployment manifests for Diptos Protocol.",
+  "main": "./deployments.ts",
+  "exports": {
+    ".": "./deployments.ts",
+    "./deployments.json": "./deployments.json"
+  },
+  "scripts": {
+    "test": "cd ../../contracts && forge test -vvv",
+    "build": "cd ../../contracts && forge build"
+  }
+}
