@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 
-const STORAGE_KEY = 'diptos_flywheel_played'
-
 /**
  * Custom Precision SVG Settlement Wheel — Crisp White (#FFFFFF) for dark institutional surfaces:
  * - Outer concentric precision rings
@@ -184,32 +182,21 @@ export function KineticFlywheel() {
     if (typeof window === 'undefined') return false
     try {
       if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return false
-      return sessionStorage.getItem(STORAGE_KEY) !== '1'
+      return true
     } catch {
-      return false
+      return true
     }
   })
   const [locked, setLocked] = useState(false)
   const [exiting, setExiting] = useState(false)
 
   const dismissNow = useCallback(() => {
-    try {
-      sessionStorage.setItem(STORAGE_KEY, '1')
-    } catch {
-      // ignore storage errors
-    }
     setExiting(true)
     setVisible(false)
   }, [])
 
   useEffect(() => {
     if (!visible) return
-
-    try {
-      sessionStorage.setItem(STORAGE_KEY, '1')
-    } catch {
-      // ignore storage errors
-    }
 
     const tLock = window.setTimeout(() => setLocked(true), 1350)
     const tExit = window.setTimeout(() => setExiting(true), 2100)
