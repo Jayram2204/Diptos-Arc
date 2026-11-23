@@ -208,15 +208,15 @@
 }
 
 .animate-flywheel-spin {
-  animation: flywheel-spin-lock 1.05s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: flywheel-spin-lock 1.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .animate-flywheel-burst {
-  animation: flywheel-burst-flare 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: flywheel-burst-flare 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .animate-flywheel-shockwave {
-  animation: flywheel-shockwave 0.48s cubic-bezier(0.22, 1, 0.36, 1) 0.65s forwards;
+  animation: flywheel-shockwave 0.65s cubic-bezier(0.22, 1, 0.36, 1) 1.35s forwards;
 }
 
 .animate-flywheel-inline {

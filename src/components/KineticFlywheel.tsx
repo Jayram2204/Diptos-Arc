@@ -211,11 +211,11 @@ export function KineticFlywheel() {
       // ignore storage errors
     }
 
-    const tLock = window.setTimeout(() => setLocked(true), 620)
-    const tExit = window.setTimeout(() => setExiting(true), 1000)
-    const tDone = window.setTimeout(() => setVisible(false), 1350)
-    // Hard 1.5s unconditional failsafe so overlay can never freeze
-    const tFailsafe = window.setTimeout(() => setVisible(false), 1500)
+    const tLock = window.setTimeout(() => setLocked(true), 1350)
+    const tExit = window.setTimeout(() => setExiting(true), 2100)
+    const tDone = window.setTimeout(() => setVisible(false), 2500)
+    // Hard 2.65s unconditional failsafe so overlay can never freeze
+    const tFailsafe = window.setTimeout(() => setVisible(false), 2650)
 
     return () => {
       window.clearTimeout(tLock)
@@ -231,7 +231,7 @@ export function KineticFlywheel() {
     <div
       role="status"
       aria-label="Initializing Diptos Settlement Engine"
-      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#000000] text-[#F4F2EC] transition-transform duration-[350ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${
+      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#000000] text-[#F4F2EC] transition-transform duration-[400ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${
         exiting ? 'pointer-events-none -translate-y-full' : 'translate-y-0'
       }`}
     >
