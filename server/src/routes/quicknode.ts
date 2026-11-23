@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import crypto from 'node:crypto'
-import { parseAbiItem } from 'viem'
+import { decodeEventLog, formatEther, type Hex, parseAbiItem } from 'viem'
 import { arcPublicClient, getEscrowContractAddress } from '../lib/oracleSigner.js'
 
 export interface StreamEvent {
@@ -132,10 +132,96 @@ quicknodeWebhookRoute.post('/', async (c) => {
 
 export const eventsRoute = new Hono()
 
+// Cached historical ArcScan Blockscout backfill so the ticker is immediately populated with real txs
+let historicalCache: { fetchedAt: number; events: StreamEvent[] } | null = null
+const HISTORICAL_TTL_MS = 30_000
+
+async function fetchHistoricalArcLogs(escrowContract: string): Promise<StreamEvent[]> {
+  if (historicalCache && Date.now() - historicalCache.fetchedAt < HISTORICAL_TTL_MS) {
+    return historicalCache.events
+  }
+
+  const results: StreamEvent[] = []
+  try {
+    const res = await fetch(
+      `https://testnet.arcscan.app/api/v2/addresses/${escrowContract}/logs`,
+      { signal: AbortSignal.timeout(5000) },
+    )
+    if (res.ok) {
+      const json = (await res.json()) as {
+        items?: Array<{
+          block_number?: number
+          index?: number
+          transaction_hash?: string
+          data?: string
+          topics?: Array<string | null>
+          decoded?: { method_call?: string; parameters?: Array<{ name: string; value: string }> }
+        }>
+      }
+
+      for (const item of json.items ?? []) {
+        const blockNumber = Number(item.block_number ?? 0)
+        const logIndex = Number(item.index ?? 0)
+        const txHash = item.transaction_hash
+        const topics = (item.topics ?? []).filter((t): t is string => typeof t === 'string' && t.startsWith('0x'))
+        let eventName: StreamEvent['eventName'] | null = null
+        let escrowId: string | undefined
+        let summary = ''
+
+        if (topics.length > 0 && typeof item.data === 'string' && item.data.startsWith('0x')) {
+          try {
+            const decoded = decodeEventLog({
+              abi: ESCROW_LOG_EVENTS,
+              data: item.data as Hex,
+              topics: topics as [Hex, ...Hex[]],
+              strict: false,
+            })
+            eventName = decoded.eventName as StreamEvent['eventName']
+            const args = (decoded.args ?? {}) as Record<string, unknown>
+            if (typeof args.escrowId === 'string') escrowId = args.escrowId
+
+            if (eventName === 'EscrowCreated' && typeof args.amount === 'bigint') {
+              summary = `Escrow locked (${Number(formatEther(args.amount)).toFixed(2)} USDC) on Arc #${blockNumber}`
+            } else if (eventName === 'MilestoneSettled' && typeof args.payeePayout === 'bigint') {
+              summary = `Atomic DvP settled (${Number(formatEther(args.payeePayout)).toFixed(4)} USDC) on Arc #${blockNumber}`
+            } else if (eventName === 'TECDPenaltyApplied' && typeof args.payerRebate === 'bigint') {
+              summary = `TECD automatic rebate (${Number(formatEther(args.payerRebate)).toFixed(4)} USDC) on Arc #${blockNumber}`
+            } else if (eventName === 'TimeoutRefunded' && typeof args.refundedAmount === 'bigint') {
+              summary = `Timeout refund (${Number(formatEther(args.refundedAmount)).toFixed(4)} USDC) on Arc #${blockNumber}`
+            }
+          } catch {
+            // Non-escrow log (e.g. FaucetDispensed) — skip
+          }
+        }
+
+        if (eventName) {
+          results.push({
+            id: `arc_hist_${blockNumber}_${logIndex}`,
+            source: 'arc-rpc',
+            eventName,
+            chainId: 5042002,
+            blockNumber,
+            logIndex,
+            txHash,
+            escrowId,
+            summary: summary || `${eventName} confirmed on Arc Testnet #${blockNumber}`,
+            receivedAt: new Date().toISOString(),
+          })
+        }
+      }
+    }
+  } catch {
+    // Fallback to live RPC logs below
+  }
+
+  historicalCache = { fetchedAt: Date.now(), events: results }
+  return results
+}
+
 /**
- * Stateless GET /api/events: queries live EscrowCreated, MilestoneSettled, TECDPenaltyApplied,
- * and TimeoutRefunded logs from Arc Testnet ordered by blockNumber desc (not timestamp),
- * merged with incoming QuickNode Streams webhook payloads.
+ * Stateless GET /api/events: backfills real historical EscrowCreated, MilestoneSettled,
+ * TECDPenaltyApplied, and TimeoutRefunded logs from Arc Testnet (5042002), merged with
+ * live getLogs and incoming QuickNode Streams webhook payloads.
  */
 eventsRoute.get('/', async (c) => {
   const limit = Math.min(50, Math.max(1, Number(c.req.query('limit') ?? 25)))
@@ -149,10 +235,18 @@ eventsRoute.get('/', async (c) => {
 
   let latestBlock = 0
   if (escrowContract) {
+    // 1. Backfill full historical contract events via ArcScan logs API
+    const historical = await fetchHistoricalArcLogs(escrowContract)
+    for (const evt of historical) {
+      const key = evt.txHash ? `${evt.txHash}:${evt.logIndex}` : evt.id
+      if (!merged.has(key)) merged.set(key, evt)
+    }
+
+    // 2. Overlay latest live RPC logs for sub-second freshness
     try {
       const head = await arcPublicClient.getBlockNumber()
       latestBlock = Number(head)
-      const fromBlock = head > 2500n ? head - 2500n : 0n
+      const fromBlock = head > 5000n ? head - 5000n : 0n
       const logs = await arcPublicClient.getLogs({
         address: escrowContract,
         events: ESCROW_LOG_EVENTS,
@@ -185,7 +279,7 @@ eventsRoute.get('/', async (c) => {
         }
       }
     } catch {
-      // Return whatever QuickNode webhook events are available
+      // Return historical + webhook events
     }
   }
 

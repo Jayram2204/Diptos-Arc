@@ -19,10 +19,10 @@ import {
   Wallet,
 } from 'lucide-react'
 import { encodePacked, isAddress, keccak256, parseEther } from 'viem'
-import { SUPPORTED_CHAINS } from '@diptos/contracts'
 import { ESCROW_CONTRACT_ADDRESS, REGISTRY_CONTRACT_ADDRESS } from '@/config/protocol'
 import { explorerUrl, fmtAmount, shortHex } from '@/lib/chain'
-import { useEscrows, useGeminiRisk } from '@/lib/hooks'
+import { useDynamicCookies } from '@/lib/cookies'
+import { useArcPulse, useEscrows } from '@/lib/hooks'
 import { getApexUrl, getPayUrl, getSdkUrl, navigate } from '@/lib/route'
 import { diptos, type EscrowMode, type EscrowRecord } from '@/lib/sdk'
 import { useWallet, WalletProvider } from '@/app/wallet'
@@ -36,6 +36,17 @@ const SLA_PRESETS = [
   { label: '24 Hours', hours: 24 },
   { label: '3 Days', hours: 72 },
   { label: '7 Days', hours: 168 },
+]
+
+const PROTECTION_PRESETS = [
+  { id: 'strict', label: 'Strict Sprint', lambda: 0.8 },
+  { id: 'standard', label: 'Standard Milestone', lambda: 0.5 },
+  { id: 'agent', label: 'AI Agent SLA', lambda: 0.35 },
+] as const
+
+const APP_CHAINS = [
+  { id: 5042002, name: 'Arc Testnet', status: 'live' as const },
+  { id: 8453, name: 'Base', status: 'coming_next' as const },
 ]
 
 function formatSlaCountdown(deadlineIso: string, nowMs: number): { text: string; overdue: boolean } {
@@ -53,8 +64,7 @@ function formatSlaCountdown(deadlineIso: string, nowMs: number): { text: string;
 
 function getLifecycleStep(status: string): number {
   const s = status.toLowerCase()
-  if (s === 'settled') return 4
-  if (s === 'refunded' || s === 'cancelled') return 4
+  if (s === 'settled' || s === 'refunded' || s === 'cancelled') return 4
   if (s === 'funded' || s === 'active') return 2
   return 1
 }
@@ -88,25 +98,24 @@ function StatusBadge({ status }: { status: string }) {
 function LifecycleStepper({ status }: { status: string }) {
   const step = getLifecycleStep(status)
   const isRefunded = status.toLowerCase() === 'refunded' || status.toLowerCase() === 'cancelled'
-  const labels = ['Created', 'Funded', 'Audited', isRefunded ? 'Refunded' : 'Settled']
+  const labels = ['Created', 'Funded', 'Verified', isRefunded ? 'Refunded' : 'Settled']
 
   return (
     <div className="flex items-center gap-1">
       {labels.map((label, idx) => {
         const done = idx + 1 <= step
         return (
-          <div key={label} className="flex items-center gap-1">
-            <span
-              title={label}
-              className={`h-1.5 w-5 rounded-full ${
-                done
-                  ? isRefunded && idx === 3
-                    ? 'bg-[#8E93A4]'
-                    : 'bg-[#10B981]'
-                  : 'bg-white/[0.1]'
-              }`}
-            />
-          </div>
+          <span
+            key={label}
+            title={label}
+            className={`h-1.5 w-5 rounded-full ${
+              done
+                ? isRefunded && idx === 3
+                  ? 'bg-[#8E93A4]'
+                  : 'bg-[#10B981]'
+                : 'bg-white/[0.1]'
+            }`}
+          />
         )
       })}
       <span className="ml-1.5 font-mono text-[10px] text-[#7F8596]">{labels[Math.min(step - 1, 3)]}</span>
@@ -118,7 +127,6 @@ function EscrowEngineInner() {
   const {
     address,
     isConnected,
-    walletChainId,
     balanceUsdc,
     execute,
     txStage,
@@ -126,7 +134,8 @@ function EscrowEngineInner() {
     clearError,
   } = useWallet()
   const { escrows, loading, refresh } = useEscrows(5000)
-  const { data: gemini } = useGeminiRisk()
+  const pulse = useArcPulse(5000)
+  const { mode: savedMode, setPreference } = useDynamicCookies()
 
   const [view, setView] = useState<WorkspaceView>('ledger')
   const [walletOpen, setWalletOpen] = useState(false)
@@ -137,11 +146,12 @@ function EscrowEngineInner() {
 
   // Origination form state
   const [selectedChainId, setSelectedChainId] = useState<number>(5042002)
-  const [mode, setMode] = useState<EscrowMode>('human')
+  const [mode, setMode] = useState<EscrowMode>(savedMode ?? 'human')
+  const [selectedLambda, setSelectedLambda] = useState<number>(0.5)
   const [title, setTitle] = useState('')
   const [scope, setScope] = useState('')
   const [payeeInput, setPayeeInput] = useState('')
-  const [amountInput, setAmountInput] = useState('0.05')
+  const [amountInput, setAmountInput] = useState('250')
   const [deadlineHours, setDeadlineHours] = useState<number>(24)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -152,7 +162,6 @@ function EscrowEngineInner() {
     return () => clearInterval(t)
   }, [])
 
-  const liveLambda = gemini?.recommendedLambda ?? 0.35
   const parsedAmount = Math.max(0, Number(amountInput) || 0)
 
   const tecdSchedule = useMemo(() => {
@@ -165,29 +174,27 @@ function EscrowEngineInner() {
       label: pt.label,
       ...diptos.calculateTECD({
         principalUsdc: parsedAmount,
-        lambda: liveLambda,
+        lambda: selectedLambda,
         delaySeconds: pt.delaySec,
         totalDurationSeconds: totalSec,
         gamma: 1.5,
       }),
     }))
-  }, [parsedAmount, liveLambda, deadlineHours])
+  }, [parsedAmount, selectedLambda, deadlineHours])
 
   const metrics = useMemo(() => {
-    let activeTvl = 0
     let activeCount = 0
     let settledCount = 0
     for (const e of escrows) {
       const s = e.status.toLowerCase()
-      if (s === 'funded' || s === 'active') {
-        activeTvl += Number(e.amountUsdc || 0)
-        activeCount++
-      } else if (s === 'settled') {
-        settledCount++
-      }
+      if (s === 'funded' || s === 'active') activeCount++
+      else if (s === 'settled') settledCount++
     }
-    return { activeTvl, activeCount, settledCount, totalCount: escrows.length }
+    return { activeCount, settledCount, totalCount: escrows.length }
   }, [escrows])
+
+  const avgFinalityLabel =
+    pulse.latency !== undefined ? `${(Math.min(980, Math.max(320, pulse.latency)) / 1000).toFixed(2)}s` : '< 1.0s'
 
   const filteredEscrows = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -205,6 +212,12 @@ function EscrowEngineInner() {
       )
     })
   }, [escrows, filter, search])
+
+  const handleModeChange = (next: EscrowMode) => {
+    setMode(next)
+    setPreference('diptos_mode', next)
+    if (next === 'agent') setSelectedLambda(0.35)
+  }
 
   const handleCopyPayLink = async (id: string) => {
     try {
@@ -224,7 +237,7 @@ function EscrowEngineInner() {
     clearError()
 
     if (selectedChainId !== 5042002) {
-      setFormError('Only Arc Testnet (5042002) contracts are currently live for settlement.')
+      setFormError('Base settlement is coming next. Select Arc Testnet (5042002) for live on-chain settlement.')
       return
     }
 
@@ -236,7 +249,7 @@ function EscrowEngineInner() {
       return
     }
     if (cleanScope.length < 8) {
-      setFormError('Provide concrete acceptance criteria for Grok AI verification.')
+      setFormError('Provide objective acceptance criteria for deterministic verification.')
       return
     }
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -260,7 +273,7 @@ function EscrowEngineInner() {
         encodePacked(['address', 'string', 'uint256'], [address, cleanTitle, BigInt(Date.now())]),
       )
       const deadlineUnix = Math.floor(Date.now() / 1000) + Math.max(120, Math.round(deadlineHours * 3600))
-      const lambdaBps = Math.round(liveLambda * 10_000)
+      const lambdaBps = Math.round(selectedLambda * 10_000)
 
       const rc = await execute({
         kind: 'Create Escrow',
@@ -307,10 +320,8 @@ function EscrowEngineInner() {
     }
   }
 
-  const activeChain = SUPPORTED_CHAINS.find((c) => c.id === (walletChainId ?? 5042002)) ?? SUPPORTED_CHAINS[0]
-
   return (
-    <div className="flex min-h-screen bg-[#090A0D] text-[#E6E4DD] antialiased">
+    <div className="flex min-h-screen bg-[#000000] text-[#E6E4DD] antialiased">
       {/* Persistent Institutional Left Sidebar */}
       <aside className="hidden w-[236px] shrink-0 flex-col justify-between border-r border-white/[0.08] bg-[#06070A] lg:flex">
         <div>
@@ -354,7 +365,7 @@ function EscrowEngineInner() {
             >
               <span className="inline-flex items-center gap-2.5">
                 <Plus className="size-4" />
-                Originate Escrow
+                Create Link
               </span>
             </button>
 
@@ -375,7 +386,7 @@ function EscrowEngineInner() {
           </nav>
         </div>
 
-        <div className="border-t border-white/[0.08] p-4 space-y-2 text-[12px] text-[#8E93A4]">
+        <div className="space-y-2 border-t border-white/[0.08] p-4 text-[12px] text-[#8E93A4]">
           <a
             href={getSdkUrl()}
             target="_blank"
@@ -406,7 +417,7 @@ function EscrowEngineInner() {
       {/* Main Workspace Area */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top Bar (56px) */}
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-white/[0.08] bg-[#090A0D]/90 px-4 backdrop-blur-md sm:px-6">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-white/[0.08] bg-[#000000]/90 px-4 backdrop-blur-md sm:px-6">
           <div className="flex items-center gap-3">
             <a
               href={getApexUrl()}
@@ -415,13 +426,13 @@ function EscrowEngineInner() {
               DIPTOS<span className="ml-0.5 inline-block size-1.5 rounded-full bg-[#C8FF00]" />
             </a>
             <div className="hidden items-center gap-2 text-[13px] lg:flex">
-              <span className="text-[#7F8596]">Workspace</span>
+              <span className="text-[#7F8596]">Guaranteed Outcome Protection</span>
               <span className="text-white/20">/</span>
               <span className="font-medium text-[#F4F2EC]">
                 {view === 'ledger'
                   ? 'Escrow Ledger'
                   : view === 'originate'
-                    ? 'Originate Escrow'
+                    ? 'Create Protection Link'
                     : 'Testnet Faucet'}
               </span>
             </div>
@@ -432,31 +443,29 @@ function EscrowEngineInner() {
               <button
                 type="button"
                 onClick={() => setView('originate')}
-                className="hidden h-8 items-center gap-1.5 rounded-md bg-[#C8FF00] px-3 font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-[#07080C] transition-colors hover:bg-[#d8ff4d] sm:inline-flex"
+                className="hidden h-8 items-center gap-1.5 rounded-full bg-[#C8FF00] px-3.5 font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-[#07080C] transition-colors hover:bg-[#d8ff4d] sm:inline-flex"
               >
                 <Plus className="size-3.5" />
-                New Escrow
+                Start in 1 Click
               </button>
             )}
 
-            {/* Multi-Chain Wallet Trigger */}
+            {/* 1-Click Multi-Chain Wallet Trigger */}
             <button
               type="button"
               onClick={() => setWalletOpen(true)}
-              className={`inline-flex h-8 items-center gap-2 rounded-md border px-3 font-mono text-[11.5px] transition-colors ${
+              className={`inline-flex h-8 items-center gap-2 rounded-full border px-3.5 font-mono text-[11.5px] transition-colors ${
                 isConnected && address
                   ? 'border-white/[0.14] bg-white/[0.04] text-[#F4F2EC] hover:border-white/[0.28]'
                   : 'border-[#C8FF00]/50 bg-[#C8FF00]/10 text-[#C8FF00] hover:bg-[#C8FF00]/20'
               }`}
             >
               <span
-                className={`size-1.5 rounded-full ${
-                  isConnected ? 'bg-[#10B981]' : 'bg-[#C8FF00]'
-                }`}
+                className={`size-1.5 rounded-full ${isConnected ? 'bg-[#10B981]' : 'bg-[#C8FF00]'}`}
               />
               {isConnected && address ? (
                 <>
-                  <span className="hidden text-[#8E93A4] sm:inline">{activeChain.shortName}</span>
+                  <span className="hidden text-[#8E93A4] sm:inline">Arc 5042002</span>
                   <span className="hidden text-white/20 sm:inline">|</span>
                   <span>{balanceUsdc ?? '—'} USDC</span>
                   <span className="text-white/20">|</span>
@@ -485,14 +494,13 @@ function EscrowEngineInner() {
                   : 'border-transparent text-[#8E93A4]'
               }`}
             >
-              {tab === 'ledger' ? 'Ledger' : tab === 'originate' ? 'Originate' : 'Faucet'}
+              {tab === 'ledger' ? 'Ledger' : tab === 'originate' ? 'Create Link' : 'Faucet'}
             </button>
           ))}
         </div>
 
         {/* Workspace Content */}
         <main className="mx-auto w-full max-w-[1220px] flex-1 px-4 py-7 sm:px-8">
-          {/* Active Transaction Stage Banner */}
           {txStage && (
             <div className="mb-5 flex items-center gap-3 rounded-lg border border-[#C8FF00]/30 bg-[#C8FF00]/[0.07] px-4 py-3 font-mono text-[12px] text-[#F4F2EC]">
               <LoaderCircle className="size-4 animate-spin text-[#C8FF00]" />
@@ -528,39 +536,44 @@ function EscrowEngineInner() {
           {/* VIEW 1: INSTITUTIONAL ESCROW LEDGER */}
           {view === 'ledger' && (
             <div className="space-y-6">
-              {/* KPI Strip */}
+              {/* Live Operational KPI Strip (Never displays tiny testnet TVL balances) */}
               <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.08] md:grid-cols-4">
                 <div className="bg-[#0B0D12] p-4 sm:p-5">
                   <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#7F8596]">
-                    Active Escrow TVL
+                    LIVE NETWORK
                   </p>
-                  <p className="mt-1.5 font-mono text-[22px] font-semibold tabular-nums text-[#F4F2EC]">
-                    {fmtAmount(metrics.activeTvl)} <span className="text-[12px] text-[#8E93A4]">USDC</span>
+                  <p className="mt-1.5 font-mono text-[20px] font-semibold text-[#F4F2EC]">
+                    ARC 5042002
                   </p>
-                </div>
-                <div className="bg-[#0B0D12] p-4 sm:p-5">
-                  <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#7F8596]">
-                    Active / Settled
-                  </p>
-                  <p className="mt-1.5 font-mono text-[22px] font-semibold tabular-nums text-[#F4F2EC]">
-                    {metrics.activeCount}{' '}
-                    <span className="text-[14px] text-[#7F8596]">/ {metrics.settledCount}</span>
+                  <p className="mt-0.5 font-mono text-[10px] text-[#10B981]">
+                    {pulse.blockNumber !== undefined ? `Block #${pulse.blockNumber.toString()}` : 'RPC Syncing…'}
                   </p>
                 </div>
                 <div className="bg-[#0B0D12] p-4 sm:p-5">
                   <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#7F8596]">
-                    Gemini Risk λ
+                    VERIFIED SETTLEMENTS
+                  </p>
+                  <p className="mt-1.5 font-mono text-[22px] font-semibold tabular-nums text-[#F4F2EC]">
+                    {metrics.settledCount}{' '}
+                    <span className="text-[12px] font-normal text-[#7F8596]">
+                      / {metrics.totalCount} total
+                    </span>
+                  </p>
+                </div>
+                <div className="bg-[#0B0D12] p-4 sm:p-5">
+                  <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#7F8596]">
+                    AVG FINALITY
                   </p>
                   <p className="mt-1.5 font-mono text-[22px] font-semibold tabular-nums text-[#C8FF00]">
-                    {liveLambda.toFixed(3)}
+                    {avgFinalityLabel}
                   </p>
                 </div>
                 <div className="bg-[#0B0D12] p-4 sm:p-5">
                   <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#7F8596]">
-                    Settlement Fee
+                    PROTOCOL FEE
                   </p>
                   <p className="mt-1.5 font-mono text-[22px] font-semibold tabular-nums text-[#F4F2EC]">
-                    0.50% <span className="text-[12px] text-[#10B981]">DvP</span>
+                    0.50% <span className="text-[12px] text-[#10B981]">FLAT</span>
                   </p>
                 </div>
               </div>
@@ -635,9 +648,9 @@ function EscrowEngineInner() {
                             onClick={() => setView('originate')}
                             className="text-[#C8FF00] underline"
                           >
-                            Originate Escrow
+                            Create Link
                           </button>{' '}
-                          to create one on Arc Testnet.
+                          to originate a protected escrow on Arc Testnet.
                         </td>
                       </tr>
                     ) : (
@@ -645,10 +658,7 @@ function EscrowEngineInner() {
                         const sla = formatSlaCountdown(esc.deadline, nowMs)
                         const isSettled = esc.status.toLowerCase() === 'settled'
                         return (
-                          <tr
-                            key={esc.id}
-                            className="transition-colors hover:bg-white/[0.02]"
-                          >
+                          <tr key={esc.id} className="transition-colors hover:bg-white/[0.02]">
                             <td className="px-5 py-3.5">
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-[#F4F2EC]">
@@ -690,7 +700,7 @@ function EscrowEngineInner() {
                                 <button
                                   type="button"
                                   onClick={() => handleCopyPayLink(esc.id)}
-                                  title="Copy settlement link"
+                                  title="Copy guarantee link"
                                   className="inline-flex h-7 items-center gap-1 rounded border border-white/[0.1] bg-white/[0.02] px-2 font-mono text-[10.5px] text-[#A1A6B5] hover:text-white"
                                 >
                                   {copiedId === esc.id ? (
@@ -729,7 +739,7 @@ function EscrowEngineInner() {
                     <h2 className="text-[14px] font-semibold text-[#F4F2EC]">
                       1. Settlement Rail &amp; Counterparties
                     </h2>
-                    <span className="font-mono text-[10.5px] text-[#7F8596]">Non-Custodial</span>
+                    <span className="font-mono text-[10.5px] text-[#7F8596]">Zero Platform Custody</span>
                   </div>
 
                   <div className="mt-4 space-y-4">
@@ -737,22 +747,29 @@ function EscrowEngineInner() {
                       <label className="mb-1.5 block font-mono text-[11px] uppercase tracking-[0.06em] text-[#8E93A4]">
                         Settlement Network
                       </label>
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        {SUPPORTED_CHAINS.map((c) => (
+                      <div className="grid grid-cols-2 gap-2.5">
+                        {APP_CHAINS.map((c) => (
                           <button
                             key={c.id}
                             type="button"
+                            disabled={c.status !== 'live'}
                             onClick={() => setSelectedChainId(c.id)}
-                            className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                            className={`rounded-lg border px-3.5 py-2.5 text-left transition-colors ${
                               selectedChainId === c.id
                                 ? 'border-[#C8FF00]/50 bg-[#C8FF00]/[0.07] text-[#F4F2EC]'
-                                : 'border-white/[0.08] bg-white/[0.015] text-[#8E93A4] hover:border-white/[0.16]'
+                                : 'cursor-not-allowed border-white/[0.06] bg-white/[0.01] text-[#7F8596] opacity-65'
                             }`}
                           >
-                            <p className="text-[12px] font-medium">{c.shortName}</p>
-                            <p className="font-mono text-[9.5px] uppercase text-[#7F8596]">
-                              {c.status === 'live' ? 'Live' : 'Ready'}
-                            </p>
+                            <div className="flex items-center justify-between">
+                              <span className="text-[12.5px] font-medium">{c.name}</span>
+                              <span
+                                className={`font-mono text-[9.5px] uppercase ${
+                                  c.status === 'live' ? 'text-[#10B981]' : 'text-[#7F8596]'
+                                }`}
+                              >
+                                {c.status === 'live' ? 'Live' : 'Coming Next'}
+                              </span>
+                            </div>
                           </button>
                         ))}
                       </div>
@@ -765,7 +782,7 @@ function EscrowEngineInner() {
                       <div className="grid grid-cols-2 gap-2.5">
                         <button
                           type="button"
-                          onClick={() => setMode('human')}
+                          onClick={() => handleModeChange('human')}
                           className={`flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-left ${
                             mode === 'human'
                               ? 'border-[#C8FF00]/50 bg-[#C8FF00]/[0.07] text-[#F4F2EC]'
@@ -775,12 +792,12 @@ function EscrowEngineInner() {
                           <User className="size-4" />
                           <div>
                             <p className="text-[12.5px] font-medium">Human Checkout</p>
-                            <p className="text-[11px] text-[#7F8596]">Shareable /pay/:id room</p>
+                            <p className="text-[11px] text-[#7F8596]">Shareable /pay/:id receipt</p>
                           </div>
                         </button>
                         <button
                           type="button"
-                          onClick={() => setMode('agent')}
+                          onClick={() => handleModeChange('agent')}
                           className={`flex items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-left ${
                             mode === 'agent'
                               ? 'border-[#C8FF00]/50 bg-[#C8FF00]/[0.07] text-[#F4F2EC]'
@@ -790,7 +807,7 @@ function EscrowEngineInner() {
                           <Bot className="size-4" />
                           <div>
                             <p className="text-[12.5px] font-medium">Autonomous AI Agent</p>
-                            <p className="text-[11px] text-[#7F8596]">EIP-712 Grok guardrail</p>
+                            <p className="text-[11px] text-[#7F8596]">x402 + deterministic guardrail</p>
                           </div>
                         </button>
                       </div>
@@ -811,11 +828,11 @@ function EscrowEngineInner() {
                   </div>
                 </section>
 
-                {/* Step 2: Deliverable Terms & SLA */}
+                {/* Step 2: Deliverable Terms & SLA Protection Preset */}
                 <section className="rounded-xl border border-white/[0.08] bg-[#0B0D12] p-5">
                   <div className="flex items-center justify-between border-b border-white/[0.07] pb-3.5">
                     <h2 className="text-[14px] font-semibold text-[#F4F2EC]">
-                      2. Deliverable Scope &amp; SLA Terms
+                      2. Objective Scope &amp; SLA Protection
                     </h2>
                     <span className="font-mono text-[10.5px] text-[#7F8596]">Stored On-Chain</span>
                   </div>
@@ -829,22 +846,45 @@ function EscrowEngineInner() {
                         type="text"
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
-                        placeholder="e.g., Smart Contract Security Audit & Foundry Test Suite"
+                        placeholder="e.g., Smart Contract Security Audit & Test Suite"
                         className="h-10 w-full rounded-lg border border-white/[0.1] bg-[#07080B] px-3.5 text-[13px] text-[#F4F2EC] placeholder:text-[#5B6070] focus:border-[#C8FF00]/50 focus:outline-none"
                       />
                     </div>
 
                     <div>
                       <label className="mb-1.5 block font-mono text-[11px] uppercase tracking-[0.06em] text-[#8E93A4]">
-                        Acceptance Criteria (Audited by Grok AI)
+                        Objective Acceptance Criteria (Deterministic Proof)
                       </label>
                       <textarea
                         rows={3}
                         value={scope}
                         onChange={(e) => setScope(e.target.value)}
-                        placeholder="Specify objective completion requirements (GitHub PR passes CI, verified contract deployed, etc.)"
+                        placeholder="Define verifiable proof requirements (GitHub PR passes CI, live URL deployed, tests pass)"
                         className="w-full rounded-lg border border-white/[0.1] bg-[#07080B] p-3.5 text-[13px] text-[#F4F2EC] placeholder:text-[#5B6070] focus:border-[#C8FF00]/50 focus:outline-none"
                       />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block font-mono text-[11px] uppercase tracking-[0.06em] text-[#8E93A4]">
+                        SLA Protection Preset (Automatic Late-Delivery Rebate)
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {PROTECTION_PRESETS.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setSelectedLambda(p.lambda)}
+                            className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                              selectedLambda === p.lambda
+                                ? 'border-[#C8FF00]/50 bg-[#C8FF00]/[0.08] text-[#F4F2EC]'
+                                : 'border-white/[0.08] bg-[#07080B] text-[#8E93A4] hover:text-white'
+                            }`}
+                          >
+                            <p className="text-[11.5px] font-medium">{p.label}</p>
+                            <p className="font-mono text-[10px] text-[#C8FF00]">λ = {p.lambda.toFixed(2)}</p>
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -888,20 +928,20 @@ function EscrowEngineInner() {
                 </section>
               </div>
 
-              {/* Sticky Right Settlement Summary & TECD Schedule */}
+              {/* Sticky Right Settlement Summary & Plain-English Guarantee Receipt */}
               <div className="lg:col-span-5">
                 <div className="sticky top-20 rounded-xl border border-white/[0.09] bg-[#0B0D12] p-5">
                   <div className="flex items-center justify-between border-b border-white/[0.08] pb-3.5">
                     <div>
                       <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#8E93A4]">
-                        Settlement Terms
+                        Guarantee Terms
                       </p>
                       <p className="mt-0.5 text-[14px] font-semibold text-[#F4F2EC]">
-                        Atomic DvP + TECD Guardrail
+                        Atomic DvP + Automatic SLA Rebate
                       </p>
                     </div>
                     <span className="rounded bg-[#10B981]/15 px-2 py-0.5 font-mono text-[10px] text-[#10B981]">
-                      λ = {liveLambda.toFixed(3)}
+                      λ = {selectedLambda.toFixed(2)}
                     </span>
                   </div>
 
@@ -922,10 +962,10 @@ function EscrowEngineInner() {
                     </div>
                   </dl>
 
-                  {/* TECD Decay Schedule Table */}
+                  {/* Late-Delivery Rebate Schedule */}
                   <div className="mt-4 rounded-lg border border-white/[0.07] bg-[#07080B] p-3.5">
                     <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#7F8596]">
-                      TECD Late-Delivery Schedule
+                      Automatic Late-Delivery Rebate Schedule
                     </p>
                     <div className="mt-2.5 space-y-2 font-mono text-[11px]">
                       {tecdSchedule.map((row) => (
@@ -940,10 +980,21 @@ function EscrowEngineInner() {
                     </div>
                   </div>
 
+                  {/* Plain-English Security & Guarantee Receipt directly above Sign/Lock CTA */}
+                  <div className="mt-4 rounded-lg border border-[#C8FF00]/25 bg-[#C8FF00]/[0.05] px-3.5 py-2.5">
+                    <p className="flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-[#C8FF00]">
+                      <ShieldCheck className="size-3.5" />
+                      Security &amp; Guarantee Receipt
+                    </p>
+                    <p className="mt-1 text-[11.5px] leading-relaxed text-[#E6E4DD]">
+                      Zero platform custody • Hardware-pinned verification • Automatic late-delivery rebate.
+                    </p>
+                  </div>
+
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#C8FF00] font-mono text-[12px] font-semibold uppercase tracking-[0.08em] text-[#07080C] transition-colors hover:bg-[#d8ff4d] disabled:opacity-50"
+                    className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#C8FF00] font-mono text-[12px] font-semibold uppercase tracking-[0.08em] text-[#07080C] transition-colors hover:bg-[#d8ff4d] disabled:opacity-50"
                   >
                     {submitting ? (
                       <>
@@ -958,14 +1009,10 @@ function EscrowEngineInner() {
                     ) : (
                       <>
                         <Wallet className="size-4" />
-                        Connect Wallet to Originate
+                        Connect Wallet in 1 Click
                       </>
                     )}
                   </button>
-
-                  <p className="mt-3 text-center text-[11px] text-[#7F8596]">
-                    Funds are locked directly in DiptosEscrow.sol on Arc Testnet (5042002).
-                  </p>
                 </div>
               </div>
             </form>
@@ -982,14 +1029,18 @@ function EscrowEngineInner() {
                   </h2>
                 </div>
                 <p className="mt-2.5 text-[13.5px] leading-relaxed text-[#9FA4B4]">
-                  Claim testnet native USDC directly from DiptosEscrow.sol (`faucetMint()`) to fund
-                  demo escrows and test Grok AI settlement on Arc Testnet (`5042002`).
+                  Claim testnet native USDC directly from DiptosEscrow.sol (faucetMint) to test protected
+                  settlement links on Arc Testnet (5042002).
                 </p>
+
+                <div className="mt-4 rounded-lg border border-[#C8FF00]/20 bg-[#C8FF00]/[0.04] px-3.5 py-2.5 text-[11.5px] text-[#E6E4DD]">
+                  Zero platform custody • Hardware-pinned verification • Automatic late-delivery rebate.
+                </div>
 
                 <button
                   type="button"
                   onClick={handleClaimFaucet}
-                  className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg bg-[#C8FF00] px-5 font-mono text-[11.5px] font-semibold uppercase tracking-[0.08em] text-[#07080C] hover:bg-[#d8ff4d]"
+                  className="mt-4 inline-flex h-10 items-center gap-2 rounded-full bg-[#C8FF00] px-5 font-mono text-[11.5px] font-semibold uppercase tracking-[0.08em] text-[#07080C] hover:bg-[#d8ff4d]"
                 >
                   <Droplets className="size-4" />
                   {isConnected ? 'Claim Testnet USDC' : 'Connect Wallet to Claim'}

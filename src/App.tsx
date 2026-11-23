@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
+import { CookieConsentPill } from '@/components/CookieConsentPill'
 import { Gateway } from '@/site/Gateway'
 import { useAppRoute } from '@/lib/route'
 
@@ -31,27 +32,41 @@ export default function App() {
 
   if (route.view === 'pay' && route.escrowId) {
     return (
-      <Suspense fallback={<div className="min-h-screen bg-black" />}>
-        <PayCheckout escrowId={route.escrowId} />
-      </Suspense>
+      <>
+        <Suspense fallback={<div className="min-h-screen bg-black" />}>
+          <PayCheckout escrowId={route.escrowId} />
+        </Suspense>
+        <CookieConsentPill />
+      </>
     )
   }
 
   if (route.view === 'app') {
     return (
-      <Suspense fallback={<div className="min-h-screen bg-black" />}>
-        <EscrowApp />
-      </Suspense>
+      <>
+        <Suspense fallback={<div className="min-h-screen bg-black" />}>
+          <EscrowApp />
+        </Suspense>
+        <CookieConsentPill />
+      </>
     )
   }
 
   if (route.view === 'sdk') {
     return (
-      <Suspense fallback={<div className="min-h-screen bg-black" />}>
-        <SdkPortal />
-      </Suspense>
+      <>
+        <Suspense fallback={<div className="min-h-screen bg-black" />}>
+          <SdkPortal />
+        </Suspense>
+        <CookieConsentPill />
+      </>
     )
   }
 
-  return <Gateway />
+  return (
+    <>
+      <Gateway />
+      <CookieConsentPill />
+    </>
+  )
 }

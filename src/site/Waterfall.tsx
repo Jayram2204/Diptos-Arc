@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { Check, ShieldCheck } from 'lucide-react'
 import { formatEther, parseUnits } from 'viem'
 import { fmtAmount } from '@/lib/chain'
-import { useGeminiRisk } from '@/lib/hooks'
 import { diptos } from '@/lib/sdk'
 
 interface TECDDisplay {
@@ -13,20 +12,55 @@ interface TECDDisplay {
   source: 'arc-eth-call' | 'sdk-wad'
 }
 
-export function Waterfall() {
-  const { data: gemini, loading: geminiLoading, error: geminiError, refresh: refreshGemini } = useGeminiRisk()
+interface SlaPreset {
+  id: 'strict' | 'standard' | 'agent'
+  name: string
+  lambda: number
+  windowHours: number
+  summary: string
+}
 
+const SLA_PRESETS: SlaPreset[] = [
+  {
+    id: 'strict',
+    name: 'Strict Sprint',
+    lambda: 0.8,
+    windowHours: 24,
+    summary: 'Steep late-delivery rebate curve for time-critical launches and urgent audits.',
+  },
+  {
+    id: 'standard',
+    name: 'Standard Milestone',
+    lambda: 0.5,
+    windowHours: 72,
+    summary: 'Balanced buyer protection for freelance design, engineering, and contract sprints.',
+  },
+  {
+    id: 'agent',
+    name: 'AI Agent SLA',
+    lambda: 0.35,
+    windowHours: 12,
+    summary: 'Smooth continuous rebate calibrated for autonomous agent tasks and x402 API jobs.',
+  },
+]
+
+export function Waterfall() {
   const [amountUsdc, setAmountUsdc] = useState(5000)
   const [slaWindowHours, setSlaWindowHours] = useState(24)
   const [delayHours, setDelayHours] = useState(12)
-  const [manualLambda, setManualLambda] = useState<number | null>(null)
+  const [effectiveLambda, setEffectiveLambda] = useState(0.5)
+  const [activePreset, setActivePreset] = useState<string>('standard')
 
-  const effectiveLambda = manualLambda ?? gemini?.recommendedLambda ?? 0.35
+  const applyPreset = (preset: SlaPreset) => {
+    setActivePreset(preset.id)
+    setEffectiveLambda(preset.lambda)
+    setSlaWindowHours(preset.windowHours)
+  }
 
   const [result, setResult] = useState<TECDDisplay>(() => {
     const local = diptos.calculateTECD({
       principalUsdc: 5000,
-      lambda: 0.35,
+      lambda: 0.5,
       delaySeconds: 12 * 3600,
       totalDurationSeconds: 24 * 3600,
       gamma: 1.5,
@@ -122,27 +156,27 @@ export function Waterfall() {
   return (
     <section id="tecd-risk" className="mx-auto max-w-[1280px] border-t border-paper/12 px-6 py-20 lg:px-8">
       <div className="max-w-2xl">
-        <p className="rwa-hud text-lime">03 // TECD RISK &amp; GEMINI ORACLE</p>
+        <p className="rwa-hud text-lime">03 // LATE-DELIVERY MATH</p>
         <h2 className="rwa-display mt-3 text-[28px] text-paper sm:text-[38px]">
-          EXPONENTIAL LATENCY DECAY. LIVE MACRO CALIBRATION.
+          AUTOMATIC BUYER REBATE. ZERO DISPUTES.
         </h2>
       </div>
 
-      {/* Symmetrical 12-Column Equal-Height 2-Card Grid with Royal Navy Depth Cards */}
+      {/* Symmetrical 12-Column Equal-Height 2-Card Grid */}
       <div className="mt-10 grid grid-cols-1 items-stretch gap-6 lg:grid-cols-12">
-        {/* Left Card (7 cols): Acid Lime SVG Decay Curve + 0h->72h Slider */}
+        {/* Left Card (7 cols): Live On-Chain previewTECDPayout() Decay Curve */}
         <div className="rwa-depth-card flex flex-col justify-between rounded-2xl p-7 lg:col-span-7">
           <div>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-secondary">
-                V(t) = V₀ · e^(−{effectiveLambda.toFixed(3)} · ({delayHours}/{slaWindowHours})^1.5)
+                V(t) = V₀ · e^(−{effectiveLambda.toFixed(2)} · ({delayHours}/{slaWindowHours})^1.5)
               </p>
               <span
                 className={`font-mono text-[11px] uppercase tracking-[0.12em] ${
                   delayHours === 0 ? 'text-emerald' : 'text-crimson'
                 }`}
               >
-                {delayHours === 0 ? 'ON-TIME // 0% DECAY' : `LATE +${delayHours}H // -${result.decayPercent.toFixed(1)}%`}
+                {delayHours === 0 ? 'ON-TIME // 0% REBATE' : `LATE +${delayHours}H // -${result.decayPercent.toFixed(1)}%`}
               </span>
             </div>
 
@@ -182,21 +216,27 @@ export function Waterfall() {
                   min={1}
                   max={720}
                   value={slaWindowHours}
-                  onChange={(e) => setSlaWindowHours(Math.max(1, Number(e.target.value) || 1))}
+                  onChange={(e) => {
+                    setActivePreset('custom')
+                    setSlaWindowHours(Math.max(1, Number(e.target.value) || 1))
+                  }}
                   className="mt-1.5 h-9 w-full border-b border-paper/20 bg-transparent font-mono text-[14px] text-paper outline-none focus:border-lime"
                 />
               </label>
               <label className="block">
                 <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-secondary">
-                  LAMBDA λ {manualLambda === null && gemini ? '(LIVE)' : ''}
+                  CUSTOM λ
                 </span>
                 <input
                   type="number"
-                  step="0.01"
+                  step="0.05"
                   min={0.05}
                   max={2}
-                  value={Number(effectiveLambda.toFixed(3))}
-                  onChange={(e) => setManualLambda(Math.max(0.05, Math.min(2, Number(e.target.value) || 0.05)))}
+                  value={Number(effectiveLambda.toFixed(2))}
+                  onChange={(e) => {
+                    setActivePreset('custom')
+                    setEffectiveLambda(Math.max(0.05, Math.min(2, Number(e.target.value) || 0.05)))
+                  }}
                   className="mt-1.5 h-9 w-full border-b border-paper/20 bg-transparent font-mono text-[14px] text-lime outline-none focus:border-lime"
                 />
               </label>
@@ -226,7 +266,7 @@ export function Waterfall() {
               <p className="mt-1 text-[18px] font-semibold text-emerald">{fmtAmount(result.payeePayoutUsdc)} USDC</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase text-secondary">BUYER REBATE</p>
+              <p className="text-[10px] uppercase text-secondary">AUTO BUYER REBATE</p>
               <p className="mt-1 text-[18px] font-semibold text-crimson">{fmtAmount(result.buyerRebateUsdc)} USDC</p>
             </div>
             <div>
@@ -236,75 +276,58 @@ export function Waterfall() {
           </div>
         </div>
 
-        {/* Right Card (5 cols): Live Gemini Prediction Markets Probability Rows */}
+        {/* Right Card (5 cols): Interactive SLA Protection Presets driving live previewTECDPayout() */}
         <div className="rwa-depth-card flex flex-col justify-between rounded-2xl p-7 lg:col-span-5">
           <div>
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3 border-b border-paper/10 pb-4">
               <div>
                 <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-lime">
-                  GEMINI PREDICTION MARKETS
+                  SLA PROTECTION PRESETS
                 </p>
-                <p className="mt-0.5 font-mono text-[11px] text-secondary">GET /api/risk/gemini</p>
+                <p className="mt-0.5 font-mono text-[11px] text-secondary">
+                  DiptosEscrow.previewTECDPayout()
+                </p>
               </div>
-              <button
-                type="button"
-                onClick={() => void refreshGemini()}
-                disabled={geminiLoading}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-paper/15 px-3 font-mono text-[10.5px] uppercase tracking-[0.1em] text-secondary hover:border-lime hover:text-lime"
-              >
-                <RefreshCw className={`size-3 ${geminiLoading ? 'animate-spin' : ''}`} />
-                SYNC
-              </button>
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald/35 bg-emerald/10 px-2.5 py-0.5 font-mono text-[10px] text-emerald">
+                <ShieldCheck className="size-3" />
+                {result.source === 'arc-eth-call' ? 'ARC ETH_CALL' : 'WAD PARITY'}
+              </span>
             </div>
 
-            {gemini ? (
-              <>
-                <div className="mt-5 grid grid-cols-2 gap-4 border-y border-paper/10 py-4 font-mono">
-                  <div>
-                    <p className="text-[10px] uppercase text-secondary">VOLATILITY INDEX</p>
-                    <p className="mt-1 text-[22px] font-semibold text-paper">{gemini.volatilityIndex.toFixed(3)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase text-secondary">CALIBRATED λ</p>
-                    <p className="mt-1 text-[22px] font-semibold text-lime">{gemini.recommendedLambda.toFixed(3)}</p>
-                  </div>
-                </div>
-
-                <ul className="mt-3 divide-y divide-paper/10">
-                  {gemini.contracts.slice(0, 5).map((c) => (
-                    <li key={c.instrumentSymbol} className="flex items-center justify-between gap-3 py-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-[13px] font-medium text-paper">{c.title}</p>
-                        <p className="font-mono text-[10px] text-secondary">{c.instrumentSymbol}</p>
-                      </div>
-                      <span className="shrink-0 font-mono text-[12px] font-semibold text-lime">
-                        YES {Math.round(c.yesProbability * 100)}%
+            <div className="mt-5 space-y-3">
+              {SLA_PRESETS.map((preset) => {
+                const selected = activePreset === preset.id
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => applyPreset(preset)}
+                    className={`w-full rounded-xl border p-4 text-left transition-colors ${
+                      selected
+                        ? 'border-lime/60 bg-lime/[0.07]'
+                        : 'border-paper/10 bg-black/40 hover:border-paper/25'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-[12.5px] font-semibold uppercase tracking-[0.06em] text-paper">
+                        {preset.name}
                       </span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : geminiError ? (
-              <p className="mt-6 font-mono text-[12px] text-crimson">
-                Gemini Prediction Markets feed unavailable ({geminiError}).
-              </p>
-            ) : (
-              <p className="mt-6 font-mono text-[12px] text-secondary">Syncing active Gemini contracts…</p>
-            )}
+                      <span className="inline-flex items-center gap-1.5 font-mono text-[11.5px] font-semibold text-lime">
+                        λ = {preset.lambda.toFixed(2)}
+                        {selected && <Check className="size-3.5" />}
+                      </span>
+                    </div>
+                    <p className="mt-1.5 text-[12.5px] leading-relaxed text-secondary">{preset.summary}</p>
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
-          {gemini && (
-            <div className="mt-6 flex items-center justify-between border-t border-paper/10 pt-4 font-mono text-[10.5px]">
-              <span className="text-secondary">UPDATED {new Date(gemini.fetchedAt).toLocaleTimeString()}</span>
-              <button
-                type="button"
-                onClick={() => setManualLambda(null)}
-                className="text-lime underline-offset-4 hover:underline"
-              >
-                USE LIVE λ = {gemini.recommendedLambda.toFixed(3)}
-              </button>
-            </div>
-          )}
+          <div className="mt-6 flex items-center justify-between border-t border-paper/10 pt-4 font-mono text-[10.5px] text-secondary">
+            <span>ACTIVE PRESET: {activePreset.toUpperCase()}</span>
+            <span className="text-paper">ON-CHAIN FIXED-POINT WAD</span>
+          </div>
         </div>
       </div>
     </section>

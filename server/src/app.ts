@@ -3,6 +3,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { getOracleStatus } from './lib/oracleSigner.js'
 import { agentGuardrailRoute } from './routes/agentGuardrail.js'
+import { authRoute } from './routes/auth.js'
 import { escrowsRoute } from './routes/escrows.js'
 import { eventsRoute, quicknodeWebhookRoute } from './routes/quicknode.js'
 import { riskGeminiRoute } from './routes/riskGemini.js'
@@ -12,7 +13,13 @@ import { walletRelayRoute } from './routes/walletRelay.js'
 
 export const app = new Hono()
 
-app.use('/api/*', cors())
+app.use(
+  '/api/*',
+  cors({
+    origin: (origin) => origin || '*',
+    credentials: true,
+  }),
+)
 
 // Sliding-window per-IP rate limiter to protect AI & TTS credits
 const rateBuckets = new Map<string, number[]>()
@@ -68,6 +75,7 @@ app.get('/api/oracle/status', async (c) => {
   return c.json(await getOracleStatus())
 })
 
+app.route('/api/auth', authRoute)
 app.route('/api/escrows', escrowsRoute)
 app.route('/api/risk', riskGeminiRoute)
 app.route('/api/verify/grok', verifyGrokRoute)

@@ -1,12 +1,11 @@
 import { Reveal } from '@/components/ui'
 
-const MARQUEE_ITEMS = [
-  'ARC NATIVE USDC',
-  'GEMINI PREDICTION MARKETS',
-  'GROK AI AUDITOR',
-  'QUICKNODE STREAMS',
-  'ELEVENLABS VOICE',
-  '@DIPTOS/SDK',
+const OUTCOME_BAR_ITEMS = [
+  'NATIVE USDC · ARC + BASE',
+  'x402 COMPATIBLE',
+  'ZERO PLATFORM CUSTODY',
+  'DETERMINISTIC PROOF',
+  'AUTOMATIC LATE-DELIVERY REBATE',
 ]
 
 const LIFECYCLE_STEPS = [
@@ -14,43 +13,45 @@ const LIFECYCLE_STEPS = [
     num: '01',
     title: 'ORIGINATE',
     tag: 'LINK & SCOPE',
-    body: 'Compose a programmable escrow link with scope, SLA window, and live Gemini-calibrated TECD decay rate.',
+    body: 'Create a shareable settlement link with objective acceptance criteria, SLA deadline, and automatic late-delivery rebate rate.',
   },
   {
     num: '02',
-    title: 'LOCK ON ARC',
-    tag: 'NATIVE USDC',
-    body: 'Buyer locks native USDC atomically into DiptosEscrow.sol. Canonical keccak256 hashes block double-spend.',
+    title: 'LOCK NATIVE USDC',
+    tag: 'ZERO CUSTODY',
+    body: 'Buyer locks native USDC directly in DiptosEscrow.sol. Canonical keccak256 hashes block replay or double-spend.',
   },
   {
     num: '03',
-    title: 'AI & MACRO AUDIT',
-    tag: 'GROK EIP-712',
-    body: 'Grok ingests live GitHub PR diffs or URLs, audits scope compliance, and signs a nonce-bound EIP-712 release.',
+    title: 'DETERMINISTIC PROOF',
+    tag: 'HARDWARE-PINNED',
+    body: 'Objective deliverable proof is verified against the on-chain scope and bound to a single-use cryptographic release nonce.',
   },
   {
     num: '04',
-    title: 'TECD SETTLEMENT',
+    title: '1-SECOND SETTLEMENT',
     tag: 'ATOMIC DVP',
-    body: 'On-time delivery settles 99.5% immediately. Late delivery rebates the buyer mathematically in one transaction.',
+    body: 'On-time proof releases 99.5% immediately. Late delivery rebates the buyer mathematically in one atomic transaction.',
   },
 ]
 
 export function ProcessBar() {
   return (
-    <div className="border-t border-paper/10">
-      {/* Kinetic Continuous Marquee Strip */}
+    <div id="how-it-works" className="border-t border-paper/10">
+      {/* Outcome & Ecosystem Bar */}
       <div className="overflow-hidden border-b border-paper/10 bg-black py-4">
         <div className="flex w-max animate-marquee items-center gap-10 whitespace-nowrap">
-          {[...MARQUEE_ITEMS, ...MARQUEE_ITEMS, ...MARQUEE_ITEMS, ...MARQUEE_ITEMS].map((item, idx) => (
-            <span
-              key={`${item}-${idx}`}
-              className="inline-flex items-center gap-10 font-mono text-[11.5px] font-medium uppercase tracking-[0.16em] text-paper/75"
-            >
-              <span>{item}</span>
-              <span className="size-1.5 rounded-full bg-lime" />
-            </span>
-          ))}
+          {[...OUTCOME_BAR_ITEMS, ...OUTCOME_BAR_ITEMS, ...OUTCOME_BAR_ITEMS, ...OUTCOME_BAR_ITEMS].map(
+            (item, idx) => (
+              <span
+                key={`${item}-${idx}`}
+                className="inline-flex items-center gap-10 font-mono text-[11.5px] font-medium uppercase tracking-[0.16em] text-paper/80"
+              >
+                <span>{item}</span>
+                <span className="size-1.5 rounded-full bg-lime" />
+              </span>
+            ),
+          )}
         </div>
       </div>
 
@@ -60,7 +61,7 @@ export function ProcessBar() {
           <div className="flex flex-col justify-between gap-8 border-b border-ink/15 pb-12 lg:flex-row lg:items-end">
             <Reveal className="max-w-2xl">
               <p className="font-mono text-[11.5px] font-medium uppercase tracking-[0.14em] text-ink/60">
-                PROTOCOL LIFECYCLE // 01 → 04
+                01 // HOW IT WORKS · GUARANTEED OUTCOME PROTECTION
               </p>
               <h2 className="rwa-display mt-4 text-[clamp(2.2rem,4.2vw,3.8rem)] uppercase text-ink">
                 FROM ESCROW LINK TO ATOMIC FINALITY.
@@ -68,8 +69,8 @@ export function ProcessBar() {
             </Reveal>
             <Reveal delayMs={100} className="max-w-md">
               <p className="text-[15.5px] leading-relaxed text-ink/70">
-                Every stage executes deterministically between Arc Testnet smart contracts, xAI Grok EIP-712
-                attestations, and real-time Gemini risk calibration.
+                Every stage executes deterministically on-chain with non-custodial smart contracts, hardware-pinned
+                verification, and continuous SLA math.
               </p>
             </Reveal>
           </div>
@@ -91,10 +92,7 @@ export function ProcessBar() {
                     <p className="mt-3 text-[14px] leading-relaxed text-ink/75">{step.body}</p>
                   </div>
                   <div className="mt-8 h-1 w-full overflow-hidden rounded-full bg-ink/10">
-                    <div
-                      className="h-full bg-ink"
-                      style={{ width: `${(i + 1) * 25}%` }}
-                    />
+                    <div className="h-full bg-ink" style={{ width: `${(i + 1) * 25}%` }} />
                   </div>
                 </article>
               </Reveal>

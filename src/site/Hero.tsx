@@ -5,18 +5,20 @@ export function Hero() {
   return (
     <section id="top" className="mx-auto max-w-[1280px] px-6 pb-20 pt-16 sm:pt-24 lg:px-8">
       <p className="rwa-hud text-lime">
-        ARC TESTNET (5042002) // NATIVE USDC ESCROW &amp; AI SETTLEMENT
+        NATIVE USDC PROTECTION // ZERO PLATFORM CUSTODY
       </p>
 
       <h1 className="rwa-display mt-6 max-w-[1120px] break-normal text-[clamp(2.5rem,5.2vw,4.75rem)] leading-[1.03] text-paper">
-        SELF-PRICING SETTLEMENT.
+        WORK VERIFIED.
         <br />
-        ATOMIC USDC FINALITY.
+        PAID IN 1 SECOND.
+        <br />
+        ZERO ARGUMENTS.
       </h1>
 
       <p className="mt-6 max-w-[680px] text-[16px] leading-[1.6] text-secondary sm:text-[18px]">
-        Replace 15% platform fees and 60-day chargebacks with non-custodial USDC escrow on Arc. Audited by Grok AI,
-        calibrated by Gemini Prediction Markets, and enforced by Time-Entropic Collateral Decay.
+        Replace 15% platform fees and 60-day payment disputes with Guaranteed Outcome Protection. Funds release
+        automatically the second objective proof passes—or rebate the buyer mathematically if delivery is late.
       </p>
 
       {/* Twin Pill CTAs (open in new tab) */}
@@ -27,7 +29,7 @@ export function Hero() {
           rel="noopener noreferrer"
           className="inline-flex h-12 items-center gap-2 rounded-full bg-lime px-7 font-mono text-[12px] font-semibold uppercase tracking-[0.14em] text-ink transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] hover:bg-[#d8ff4d]"
         >
-          <span>LAUNCH ESCROW APP</span>
+          <span>CREATE LINK IN 1 CLICK</span>
           <ArrowRight className="size-4" />
         </a>
         <a
@@ -53,7 +55,7 @@ export function Hero() {
         </div>
         <div className="py-6 sm:pl-8">
           <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">03 / ATOMIC DVP</p>
-          <p className="mt-2 font-mono text-[22px] font-semibold tracking-[-0.02em] text-paper">ZERO CHARGEBACKS</p>
+          <p className="mt-2 font-mono text-[22px] font-semibold tracking-[-0.02em] text-paper">ZERO CUSTODY</p>
         </div>
       </div>
     </section>

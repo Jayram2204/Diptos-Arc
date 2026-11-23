@@ -1,4 +1,4 @@
-import { KineticFlywheel } from '@/components/KineticFlywheel'
+import { WalletProvider } from '@/app/wallet'
 import { Architecture } from './Architecture'
 import { EscrowsGrid } from './EscrowsGrid'
 import { Faucet } from './Faucet'
@@ -12,20 +12,21 @@ import { Waterfall } from './Waterfall'
 
 export function Gateway() {
   return (
-    <div className="min-h-screen">
-      <KineticFlywheel />
-      <Header />
-      <main>
-        <Hero />
-        <ProcessBar />
-        <EscrowsGrid />
-        <Architecture />
-        <Telemetry />
-        <Waterfall />
-        <Registry />
-        <Faucet />
-      </main>
-      <Footer />
-    </div>
+    <WalletProvider>
+      <div className="min-h-screen">
+        <Header />
+        <main>
+          <Hero />
+          <ProcessBar />
+          <EscrowsGrid />
+          <Architecture />
+          <Telemetry />
+          <Waterfall />
+          <Registry />
+          <Faucet />
+        </main>
+        <Footer />
+      </div>
+    </WalletProvider>
   )
 }

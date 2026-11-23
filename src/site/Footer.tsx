@@ -11,8 +11,8 @@ export function Footer() {
             DIPTOS<span className="ml-0.5 inline-block size-2 rounded-full bg-lime" />
           </span>
           <p className="mt-3 max-w-md text-[14px] text-secondary">
-            Programmable USDC escrow links, Grok EIP-712 deliverable audits, Gemini TECD risk calibration, and
-            QuickNode Streams exclusively on {ARC_NETWORK.short}.
+            Guaranteed Outcome Protection for human work and autonomous AI agents. Non-custodial native USDC settlement,
+            deterministic proof, and automatic late-delivery rebates on {ARC_NETWORK.short}.
           </p>
         </div>
 
@@ -61,7 +61,7 @@ export function Footer() {
       </div>
 
       <div className="mx-auto mt-10 max-w-[1380px] border-t border-paper/10 px-6 pt-6 font-mono text-[10.5px] uppercase tracking-[0.12em] text-secondary/70 lg:px-10">
-        UBC 2026 HACKATHON · ARC TESTNET (CHAIN ID 5042002) · DIPTOS.XYZ
+        NON-CUSTODIAL SETTLEMENT PROTOCOL · ARC TESTNET (CHAIN ID 5042002) · DIPTOS.XYZ
       </div>
     </footer>
   )

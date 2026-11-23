@@ -9,7 +9,7 @@ import { useArcPulse, useOracleStatus, useProtocolEvents } from '@/lib/hooks'
 export function Telemetry() {
   const pulse = useArcPulse(4000)
   const { data: oracle } = useOracleStatus(15_000)
-  const { events, connected } = useProtocolEvents(4000)
+  const { events, connected } = useProtocolEvents(5000)
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export function Telemetry() {
       <div className="mx-auto max-w-[1380px] px-6 lg:px-10">
         <div className="flex flex-col justify-between gap-6 border-b border-paper/10 pb-10 lg:flex-row lg:items-end">
           <Reveal>
-            <Eyebrow>LIVE ARC JSON-RPC &amp; QUICKNODE STREAMS</Eyebrow>
+            <Eyebrow>LIVE ARC JSON-RPC &amp; ON-CHAIN SETTLEMENT FEED</Eyebrow>
             <h2 className="rwa-display mt-4 text-[clamp(2rem,3.8vw,3.2rem)] uppercase text-paper">
               REAL-TIME NETWORK TELEMETRY.
             </h2>
@@ -67,34 +67,33 @@ export function Telemetry() {
                 {pulse.latency !== undefined ? `${pulse.latency}ms` : 'Syncing…'}
               </dd>
               <dd className="mt-1 font-mono text-[10.5px] uppercase text-secondary">
-                {oracle?.oracleSigner ? `ORACLE ${shortHex(oracle.oracleSigner)}` : 'EIP-712 ORACLE READY'}
+                {oracle?.oracleSigner ? `VERIFIER ${shortHex(oracle.oracleSigner)}` : 'PROOF VERIFIER READY'}
               </dd>
             </div>
           </dl>
         </Reveal>
 
-        {/* QuickNode Streams + Arc Logs Event Ticker */}
+        {/* Backfilled Arc Testnet Event Ticker */}
         <Reveal delayMs={160} className="mt-8 rounded-2xl border border-paper/10 bg-surface">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-paper/10 px-7 py-4">
             <div className="flex items-center gap-2.5">
               <Radio className={`size-4 ${connected ? 'text-lime' : 'text-secondary'}`} />
-              <span className="rwa-hud text-paper">QUICKNODE STREAMS // LIVE EVENT TICKER</span>
+              <span className="rwa-hud text-paper">ON-CHAIN SETTLEMENT TICKER // ARC 5042002</span>
             </div>
             <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-secondary">
-              GET /API/EVENTS · ORDERED BY BLOCKNUMBER
+              GET /API/EVENTS · BACKFILLED + LIVE LOGS
             </span>
           </div>
 
           {events.length === 0 ? (
             <p className="px-7 py-8 font-mono text-[12px] text-secondary">
-              Listening to <code className="text-paper">POST /api/webhooks/quicknode</code> and live Arc Testnet
-              contract logs (<code className="text-paper">EscrowCreated</code>,{' '}
-              <code className="text-paper">MilestoneSettled</code>,{' '}
-              <code className="text-paper">TECDPenaltyApplied</code>).
+              Syncing historical <code className="text-paper">EscrowCreated</code>,{' '}
+              <code className="text-paper">MilestoneSettled</code>, and{' '}
+              <code className="text-paper">TECDPenaltyApplied</code> logs from Arc Testnet (5042002)…
             </p>
           ) : (
             <ul className="divide-y divide-paper/10">
-              {events.slice(0, 5).map((evt) => (
+              {events.slice(0, 6).map((evt) => (
                 <li
                   key={evt.id}
                   className="flex flex-wrap items-center justify-between gap-3 px-7 py-4 font-mono text-[12px]"
