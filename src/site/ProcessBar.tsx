@@ -13,48 +13,59 @@ const LIFECYCLE_STEPS = [
     num: '01',
     title: 'ORIGINATE',
     tag: 'LINK & SCOPE',
-    body: 'Create a shareable settlement link with objective acceptance criteria, SLA deadline, and automatic late-delivery rebate rate.',
+    body: 'Create a shareable payment link with clear acceptance criteria, delivery deadline, and automatic late-delivery rebate rate.',
   },
   {
     num: '02',
     title: 'LOCK NATIVE USDC',
     tag: 'ZERO CUSTODY',
-    body: 'Buyer locks native USDC directly in DiptosEscrow.sol. Canonical keccak256 hashes block replay or double-spend.',
+    body: 'Buyer locks native USDC directly in a non-custodial vault. Unique on-chain IDs prevent duplicate claims or tampering.',
   },
   {
     num: '03',
     title: 'DETERMINISTIC PROOF',
     tag: 'HARDWARE-PINNED',
-    body: 'Objective deliverable proof is verified against the on-chain scope and bound to a single-use cryptographic release nonce.',
+    body: 'Objective deliverable proof is verified against the agreed scope before automatic release—zero manual arbitration.',
   },
   {
     num: '04',
-    title: '1-SECOND SETTLEMENT',
-    tag: 'ATOMIC DVP',
-    body: 'On-time proof releases 99.5% immediately. Late delivery rebates the buyer mathematically in one atomic transaction.',
+    title: '1-SECOND PAYOUT',
+    tag: 'INSTANT RELEASE',
+    body: 'On-time proof pays 99.5% immediately (0.5% flat fee). Late delivery rebates the buyer mathematically in one transaction.',
   },
 ]
+
+function MarqueeTrack({ hidden = false }: { hidden?: boolean }) {
+  return (
+    <div
+      aria-hidden={hidden || undefined}
+      className={`flex shrink-0 items-center gap-8 whitespace-nowrap pr-8 ${hidden ? 'select-none' : ''}`}
+    >
+      {CAPABILITIES_STRIP.map((item) => (
+        <span
+          key={item}
+          className="inline-flex items-center gap-8 font-mono text-[11.5px] font-medium uppercase tracking-[0.16em] text-[#E5E7EB]"
+        >
+          <span>{item}</span>
+          <span aria-hidden="true" className="text-lime">
+            ·
+          </span>
+        </span>
+      ))}
+    </div>
+  )
+}
 
 export function ProcessBar() {
   return (
     <div id="how-it-works" className="border-t border-paper/10">
-      {/* Kinetic Continuous Capabilities & Rails Marquee */}
+      {/* Kinetic Continuous Capabilities & Rails Marquee (screen-reader accessible: clones aria-hidden) */}
       <div className="overflow-hidden border-b border-paper/10 bg-black py-4">
-        <div className="flex w-max animate-marquee items-center gap-10 whitespace-nowrap">
-          {[
-            ...CAPABILITIES_STRIP,
-            ...CAPABILITIES_STRIP,
-            ...CAPABILITIES_STRIP,
-            ...CAPABILITIES_STRIP,
-          ].map((item, idx) => (
-            <span
-              key={`${item}-${idx}`}
-              className="inline-flex items-center gap-10 font-mono text-[11.5px] font-medium uppercase tracking-[0.16em] text-[#E5E7EB]"
-            >
-              <span>{item}</span>
-              <span className="size-1.5 rounded-full bg-lime" />
-            </span>
-          ))}
+        <div className="flex w-max animate-marquee items-center">
+          <MarqueeTrack />
+          <MarqueeTrack hidden />
+          <MarqueeTrack hidden />
+          <MarqueeTrack hidden />
         </div>
       </div>
 
@@ -67,13 +78,13 @@ export function ProcessBar() {
                 01 // HOW IT WORKS · GUARANTEED OUTCOME PROTECTION
               </p>
               <h2 className="rwa-display mt-4 text-[clamp(2rem,4.2vw,3.6rem)] uppercase text-ink">
-                FROM ESCROW LINK TO ATOMIC FINALITY.
+                FROM PAYMENT LINK TO 1-SECOND PAYOUT.
               </h2>
             </Reveal>
             <Reveal delayMs={100} className="max-w-md">
               <p className="text-[15.5px] leading-relaxed text-ink/80">
-                Every stage executes deterministically on-chain with non-custodial smart contracts, hardware-pinned
-                verification, and continuous SLA math.
+                Every stage executes automatically on-chain with non-custodial vaults, hardware-pinned verification,
+                and continuous late-delivery math.
               </p>
             </Reveal>
           </div>

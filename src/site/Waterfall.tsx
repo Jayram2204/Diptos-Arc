@@ -260,20 +260,35 @@ export function Waterfall() {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-3 gap-4 border-t border-paper/10 pt-5 font-mono">
-            <div>
-              <p className="text-[10px] uppercase text-secondary">PAYEE PAYOUT</p>
-              <p className="mt-1 text-[18px] font-semibold text-emerald">{fmtAmount(result.payeePayoutUsdc)} USDC</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase text-secondary">AUTO BUYER REBATE</p>
-              <p className="mt-1 text-[18px] font-semibold text-crimson">{fmtAmount(result.buyerRebateUsdc)} USDC</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase text-secondary">FEE (0.5%)</p>
-              <p className="mt-1 text-[18px] font-semibold text-paper">{fmtAmount(result.protocolFeeUsdc)} USDC</p>
-            </div>
-          </div>
+          {(() => {
+            const displayFee = Math.round(result.protocolFeeUsdc * 100) / 100
+            const displayPayee = Math.round(result.payeePayoutUsdc * 100) / 100
+            const displayRebate =
+              delayHours === 0
+                ? 0
+                : Math.max(0, Math.round((amountUsdc - displayPayee - displayFee) * 100) / 100)
+            const exactPayee =
+              delayHours === 0
+                ? Math.max(0, Math.round((amountUsdc - displayFee) * 100) / 100)
+                : displayPayee
+
+            return (
+              <div className="mt-6 grid grid-cols-3 gap-4 border-t border-paper/10 pt-5 font-mono">
+                <div>
+                  <p className="text-[10px] uppercase text-secondary">PAYEE PAYOUT</p>
+                  <p className="mt-1 text-[18px] font-semibold text-emerald">{fmtAmount(exactPayee)} USDC</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-secondary">AUTO BUYER REBATE</p>
+                  <p className="mt-1 text-[18px] font-semibold text-crimson">{fmtAmount(displayRebate)} USDC</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase text-secondary">FEE (0.5%)</p>
+                  <p className="mt-1 text-[18px] font-semibold text-paper">{fmtAmount(displayFee)} USDC</p>
+                </div>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Right Card (5 cols): Interactive SLA Protection Presets driving live previewTECDPayout() */}

@@ -18,11 +18,9 @@ export function EscrowsGrid() {
   const pulse = useArcPulse(6000)
   const [showX402Headers, setShowX402Headers] = useState(false)
 
-  // Dynamically sort newest-first and keep ONLY the 3 most recent escrows for the compact folder row
+  // Reverse paginated order so the featured institutional escrows lead the top 3 cards
   const recentThree = useMemo(() => {
-    return [...escrows]
-      .sort((a, b) => new Date(b.createdAt ?? b.deadline).getTime() - new Date(a.createdAt ?? a.deadline).getTime())
-      .slice(0, 3)
+    return [...escrows].reverse().slice(0, 3)
   }, [escrows])
 
   const settledCount = useMemo(

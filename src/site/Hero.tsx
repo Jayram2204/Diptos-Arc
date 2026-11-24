@@ -60,7 +60,7 @@ export function Hero() {
           <p className="mt-2 font-mono text-[22px] font-semibold tracking-[-0.02em] text-white">&lt;1.0S ARC FINALITY</p>
         </div>
         <div className="py-6 sm:pl-8">
-          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">03 / ATOMIC DVP</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">03 / SELF-CUSTODIAL</p>
           <p className="mt-2 font-mono text-[22px] font-semibold tracking-[-0.02em] text-white">ZERO CUSTODY</p>
         </div>
       </div>

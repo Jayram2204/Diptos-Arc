@@ -48,7 +48,7 @@ export const CONTRACTS: ContractMeta[] = [
   {
     key: 'DiptosEscrow',
     file: 'DiptosEscrow.sol',
-    role: 'Non-custodial native 18-dec USDC escrow, on-chain metadata, EIP-712 Grok oracle release & WAD TECD decay',
+    role: 'Non-custodial native 18-dec USDC escrow, deterministic EIP-712 proof release & WAD TECD decay',
     standard: 'DvP + TECD',
     address: ESCROW_CONTRACT_ADDRESS,
   },
