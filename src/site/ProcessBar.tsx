@@ -38,16 +38,21 @@ const LIFECYCLE_STEPS = [
 export function ProcessBar() {
   return (
     <div id="how-it-works" className="border-t border-paper/10">
-      {/* Clean Non-Repeating Capabilities & Rails Strip */}
-      <div className="border-b border-paper/10 bg-black py-4">
-        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-center gap-x-6 gap-y-2 px-5 lg:justify-between lg:px-8">
-          {CAPABILITIES_STRIP.map((item, idx) => (
+      {/* Kinetic Continuous Capabilities & Rails Marquee */}
+      <div className="overflow-hidden border-b border-paper/10 bg-black py-4">
+        <div className="flex w-max animate-marquee items-center gap-10 whitespace-nowrap">
+          {[
+            ...CAPABILITIES_STRIP,
+            ...CAPABILITIES_STRIP,
+            ...CAPABILITIES_STRIP,
+            ...CAPABILITIES_STRIP,
+          ].map((item, idx) => (
             <span
-              key={item}
-              className="inline-flex items-center gap-3 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#E5E7EB]"
+              key={`${item}-${idx}`}
+              className="inline-flex items-center gap-10 font-mono text-[11.5px] font-medium uppercase tracking-[0.16em] text-[#E5E7EB]"
             >
-              {idx > 0 && <span className="hidden size-1.5 rounded-full bg-lime lg:inline-block" />}
               <span>{item}</span>
+              <span className="size-1.5 rounded-full bg-lime" />
             </span>
           ))}
         </div>
