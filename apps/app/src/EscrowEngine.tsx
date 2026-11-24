@@ -16,6 +16,7 @@ import {
   Info,
   Layers,
   LoaderCircle,
+  LogOut,
   Plus,
   RefreshCw,
   Search,
@@ -187,6 +188,7 @@ function EscrowEngineInner() {
     address,
     isConnected,
     balanceUsdc,
+    disconnect,
     execute,
     txStage,
     error: walletError,
@@ -562,6 +564,18 @@ function EscrowEngineInner() {
                 </>
               )}
             </button>
+            {isConnected && address && (
+              <button
+                type="button"
+                onClick={() => void disconnect()}
+                aria-label="Disconnect wallet and revoke session"
+                title="Disconnect wallet"
+                className="inline-flex h-8 items-center gap-1 rounded-full border border-white/15 bg-white/[0.03] px-2.5 font-mono text-[10.5px] text-[#E5E7EB] transition-colors hover:border-red-500/50 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
+              >
+                <LogOut className="size-3" />
+                <span className="hidden sm:inline">Disconnect</span>
+              </button>
+            )}
           </div>
         </header>
 

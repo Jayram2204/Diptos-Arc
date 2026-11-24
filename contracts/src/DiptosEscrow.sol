@@ -3,6 +3,22 @@ pragma solidity ^0.8.24;
 
 import {IDiptosRegistry} from "./DiptosRegistry.sol";
 
+/// @notice Minimal ERC-1271 interface for smart-account / ERC-4337 / EIP-7702 verifier compatibility.
+interface IERC1271 {
+    function isValidSignature(bytes32 hash, bytes calldata signature) external view returns (bytes4 magicValue);
+}
+
+/// @notice Modular pluggable verifier interface (TEE attestations, ZK proofs, or future PQ verifiers).
+interface IDiptosVerifier {
+    function verifyRelease(
+        bytes32 escrowId,
+        uint256 milestoneIndex,
+        bytes32 deliverableHash,
+        uint256 nonce,
+        bytes calldata proof
+    ) external view returns (bool);
+}
+
 /// @title DiptosEscrow
 /// @notice Multi-Milestone Programmable Escrow, On-Chain Metadata & Enumeration, EIP-712 Replay-Protected
 ///         Grok Oracle Settlement, Fixed-Point WAD Time-Entropic Collateral Decay (TECD),
@@ -57,12 +73,15 @@ contract DiptosEscrow {
     }
 
     uint256 public constant PROTOCOL_FEE_BPS = 50; // 0.50% flat fee
+    uint256 public constant MAX_PROTOCOL_FEE_BPS = 100; // Hard 1.00% protocol fee ceiling
+    uint256 public constant MAX_LAMBDA_BPS = 50_000; // Bounded λ <= 5.0
     uint256 public constant BPS_DENOMINATOR = 10_000;
     uint256 public constant WAD = 1e18;
     uint256 public constant NATIVE_TO_ERC20_SCALE = 1e12; // 18-dec native USDC <-> 6-dec ERC-20 USDC
     uint256 public constant DEFAULT_GRACE_PERIOD = 24 hours;
     uint256 public constant ANNUAL_FLOAT_YIELD_BPS = 450; // 4.50% APY reference float rate
     uint256 public constant FAUCET_DRIP = 0.25 ether; // 0.25 native USDC (18 decimals)
+    bytes4 private constant ERC1271_MAGICVALUE = 0x1626ba7e;
 
     uint256 private constant SECP256K1_HALF_N =
         0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
@@ -73,6 +92,10 @@ contract DiptosEscrow {
     bytes32 public constant VERSION_HASH = keccak256("1");
     bytes32 public constant RELEASE_TYPEHASH =
         keccak256("ReleaseEscrow(bytes32 escrowId,bytes32 deliverableHash,uint256 nonce)");
+    bytes32 public constant RELEASE_WITH_EXPIRY_TYPEHASH =
+        keccak256(
+            "ReleaseEscrowWithExpiry(bytes32 escrowId,uint256 milestoneIndex,bytes32 deliverableHash,uint256 nonce,uint256 expiry)"
+        );
     bytes32 public constant LEGACY_RELEASE_MILESTONE_TYPEHASH =
         keccak256(
             "ReleaseMilestone(bytes32 escrowId,uint256 milestoneIndex,bytes32 deliverableHash,uint256 nonce,uint256 chainId)"
@@ -82,6 +105,11 @@ contract DiptosEscrow {
     address public oracleSigner;
     address public treasury;
     IDiptosRegistry public registry;
+    IDiptosVerifier public customVerifier;
+
+    // Strict reentrancy guard (1 = unlocked, 2 = locked) & segregated locked principal accounting
+    uint256 private _reentrancyStatus = 1;
+    uint256 public totalLockedPrincipal;
 
     mapping(bytes32 => Escrow) public escrows;
     mapping(bytes32 => Milestone[]) private _milestones;
@@ -143,9 +171,13 @@ contract DiptosEscrow {
 
     event FaucetDispensed(address indexed recipient, uint256 amount);
     event OracleSignerUpdated(address indexed previousSigner, address indexed newSigner);
+    event CustomVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
 
     error Unauthorized();
     error InvalidParameters();
+    error SelfEscrowNotAllowed();
+    error ReentrancyDetected();
+    error SignatureExpired();
     error InvalidMilestoneIndex();
     error MilestoneNotFunded();
     error EscrowNotFunded();
@@ -162,6 +194,13 @@ contract DiptosEscrow {
     modifier onlyOwner() {
         if (msg.sender != owner) revert Unauthorized();
         _;
+    }
+
+    modifier nonReentrant() {
+        if (_reentrancyStatus == 2) revert ReentrancyDetected();
+        _reentrancyStatus = 2;
+        _;
+        _reentrancyStatus = 1;
     }
 
     constructor(address _oracleSigner, address _treasury, address _registry) {
@@ -205,6 +244,12 @@ contract DiptosEscrow {
         if (_oracleSigner == address(0)) revert InvalidParameters();
         emit OracleSignerUpdated(oracleSigner, _oracleSigner);
         oracleSigner = _oracleSigner;
+    }
+
+    /// @notice Plug in a modular verifier (TEE / ZK / ERC-4337 / PQ) without redeploying core escrow logic.
+    function setCustomVerifier(address _verifier) external onlyOwner {
+        emit CustomVerifierUpdated(address(customVerifier), _verifier);
+        customVerifier = IDiptosVerifier(_verifier);
     }
 
     /// @notice Creates a single-shot programmable native USDC escrow link with full on-chain title & acceptance scope.
@@ -260,14 +305,15 @@ contract DiptosEscrow {
         bool isAgentMode,
         string memory title,
         string memory acceptanceScope
-    ) internal {
+    ) internal nonReentrant {
         uint256 count = amounts.length;
+        if (payee == msg.sender) revert SelfEscrowNotAllowed();
         if (
             escrowId == bytes32(0) ||
             payee == address(0) ||
             count == 0 ||
             count != deadlines.length ||
-            lambdaBps > 50_000
+            lambdaBps > MAX_LAMBDA_BPS
         ) revert InvalidParameters();
 
         uint256 sum = 0;
@@ -277,7 +323,7 @@ contract DiptosEscrow {
             sum += amounts[i];
             if (deadlines[i] > finalDeadline) finalDeadline = deadlines[i];
         }
-        if (sum != msg.value) revert InvalidParameters();
+        if (sum != msg.value || msg.value == 0) revert InvalidParameters();
 
         bytes32 canonicalHash = registry.recordCommitment(
             escrowId,
@@ -286,6 +332,8 @@ contract DiptosEscrow {
             msg.value,
             finalDeadline
         );
+
+        totalLockedPrincipal += msg.value;
 
         Escrow storage e = escrows[escrowId];
         e.payer = msg.sender;
@@ -342,11 +390,12 @@ contract DiptosEscrow {
         createEscrowLink(escrowId, payee, resolvedDeadline, resolvedLambda, isAgentMode);
     }
 
-    function faucetMint() public {
+    function faucetMint() public nonReentrant {
         if (lastFaucetClaim[msg.sender] != 0 && block.timestamp < lastFaucetClaim[msg.sender] + 1 hours) {
             revert FaucetCooldown();
         }
-        if (address(this).balance < FAUCET_DRIP) revert FaucetEmpty();
+        // Strictly segregate faucet reserve from locked user escrow principal
+        if (address(this).balance < totalLockedPrincipal + FAUCET_DRIP) revert FaucetEmpty();
         lastFaucetClaim[msg.sender] = block.timestamp;
         _transferNative(msg.sender, FAUCET_DRIP);
         emit FaucetDispensed(msg.sender, FAUCET_DRIP);
@@ -466,24 +515,77 @@ contract DiptosEscrow {
         return keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR(), structHash));
     }
 
-    /// @notice Settle milestone 0 with Grok EIP-712 signature (4-arg convenience overload).
+    /// @notice Computes the EIP-712 digest with explicit expiry bound to chainId and verifyingContract.
+    function computeReleaseWithExpiryDigest(
+        bytes32 escrowId,
+        uint256 milestoneIndex,
+        bytes32 deliverableHash,
+        uint256 nonce,
+        uint256 expiry
+    ) public view returns (bytes32) {
+        bytes32 structHash = keccak256(
+            abi.encode(RELEASE_WITH_EXPIRY_TYPEHASH, escrowId, milestoneIndex, deliverableHash, nonce, expiry)
+        );
+        return keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR(), structHash));
+    }
+
+    /// @notice Hardened settlement entrypoint with signature expiry, ERC-1271 smart-account support, and modular verifier hook.
+    function releaseWithExpiry(
+        bytes32 escrowId,
+        uint256 milestoneIndex,
+        bytes32 deliverableHash,
+        uint256 expectedNonce,
+        uint256 expiry,
+        bytes calldata signature
+    ) external nonReentrant {
+        if (block.timestamp > expiry) revert SignatureExpired();
+        Escrow storage e = escrows[escrowId];
+        if (e.payer == address(0)) revert EscrowNotFunded();
+
+        Milestone[] storage list = _milestones[escrowId];
+        if (milestoneIndex >= list.length) revert InvalidMilestoneIndex();
+        Milestone storage m = list[milestoneIndex];
+        if (m.status == MilestoneStatus.SETTLED) revert AlreadySettled();
+        if (m.status != MilestoneStatus.FUNDED) revert EscrowNotFunded();
+        if (expectedNonce != e.nonce) revert InvalidNonce(e.nonce, expectedNonce);
+
+        bool verified = false;
+        if (address(customVerifier) != address(0)) {
+            verified = customVerifier.verifyRelease(escrowId, milestoneIndex, deliverableHash, expectedNonce, signature);
+        }
+        if (!verified) {
+            bytes32 digest = computeReleaseWithExpiryDigest(
+                escrowId,
+                milestoneIndex,
+                deliverableHash,
+                expectedNonce,
+                expiry
+            );
+            verified = _isValidOracleSignature(digest, signature);
+        }
+        if (!verified) revert InvalidOracleSignature(address(0), oracleSigner);
+
+        _settleMilestoneInternal(escrowId, milestoneIndex, deliverableHash, expectedNonce);
+    }
+
+    /// @notice Settle milestone 0 with EIP-712 signature (4-arg convenience overload).
     function releaseWithOracle(
         bytes32 escrowId,
         bytes32 deliverableHash,
         uint256 expectedNonce,
         bytes calldata grokSignature
-    ) external {
+    ) external nonReentrant {
         _releaseWithOracleInternal(escrowId, 0, deliverableHash, expectedNonce, grokSignature);
     }
 
-    /// @notice Settle a specific milestone with Grok EIP-712 signature (5-arg canonical entrypoint).
+    /// @notice Settle a specific milestone with EIP-712 signature (5-arg canonical entrypoint).
     function releaseWithOracle(
         bytes32 escrowId,
         uint256 milestoneIndex,
         bytes32 deliverableHash,
         uint256 expectedNonce,
         bytes calldata grokSignature
-    ) public {
+    ) public nonReentrant {
         _releaseWithOracleInternal(escrowId, milestoneIndex, deliverableHash, expectedNonce, grokSignature);
     }
 
@@ -529,7 +631,7 @@ contract DiptosEscrow {
     }
 
     /// @notice Payer mutual release: allows the escrow payer to directly approve and settle on-chain.
-    function releaseByPayer(bytes32 escrowId) external {
+    function releaseByPayer(bytes32 escrowId) external nonReentrant {
         Escrow storage e = escrows[escrowId];
         if (e.payer == address(0)) revert EscrowNotFunded();
         if (msg.sender != e.payer) revert Unauthorized();
@@ -567,6 +669,7 @@ contract DiptosEscrow {
         e.nonce = expectedNonce + 1;
         m.deliverableHash = deliverableHash;
         m.status = MilestoneStatus.SETTLED;
+        totalLockedPrincipal -= m.amount;
 
         uint256 delaySeconds = block.timestamp > m.deadline ? block.timestamp - m.deadline : 0;
         bool onTime = delaySeconds == 0;
@@ -598,7 +701,7 @@ contract DiptosEscrow {
         );
     }
 
-    function claimTimeoutRefund(bytes32 escrowId) external {
+    function claimTimeoutRefund(bytes32 escrowId) external nonReentrant {
         Escrow storage e = escrows[escrowId];
         if (e.payer == address(0)) revert EscrowNotFunded();
         if (msg.sender != e.payer) revert Unauthorized();
@@ -622,11 +725,12 @@ contract DiptosEscrow {
         if (!anyFunded) revert NothingToRefund();
         if (refundAmount == 0) revert TimeoutNotReached();
 
+        totalLockedPrincipal -= refundAmount;
         _transferNative(e.payer, refundAmount);
         emit TimeoutRefunded(escrowId, e.payer, refundAmount, refundedCount);
     }
 
-    function mutualCancel(bytes32 escrowId) external {
+    function mutualCancel(bytes32 escrowId) external nonReentrant {
         Escrow storage e = escrows[escrowId];
         if (e.payer == address(0)) revert EscrowNotFunded();
         if (msg.sender != e.payee) revert Unauthorized();
@@ -643,6 +747,7 @@ contract DiptosEscrow {
 
         if (refundAmount == 0) revert NothingToRefund();
 
+        totalLockedPrincipal -= refundAmount;
         _transferNative(e.payer, refundAmount);
         emit EscrowCancelled(escrowId, msg.sender, refundAmount);
     }
@@ -753,6 +858,39 @@ contract DiptosEscrow {
             y = z;
             z = (x / z + z) / 2;
         }
+    }
+
+    /// @notice Zero-dust multi-decimal WAD normalization (supports 6-dec Base ERC-20 USDC and 18-dec Arc Native USDC).
+    ///         Routes any rounding dust deterministically to payerRebate so payeePayout + payerRebate + protocolFee == amount.
+    function calculateTECDForDecimals(
+        uint256 amount,
+        uint8 decimals,
+        uint256 delaySeconds,
+        uint256 windowSeconds,
+        uint256 lambdaBps
+    ) public pure returns (uint256 payeePayout, uint256 payerRebate, uint256 protocolFee, uint256 decayBps) {
+        if (amount == 0) return (0, 0, 0, 0);
+        if (decimals > 18) revert InvalidParameters();
+        uint256 scale = 10 ** (18 - decimals);
+        uint256 wadAmount = amount * scale;
+        (uint256 wPayee, , uint256 wFee, uint256 dBps) =
+            calculateTECD(wadAmount, delaySeconds, windowSeconds, lambdaBps);
+        payeePayout = wPayee / scale;
+        protocolFee = wFee / scale;
+        // Route any sub-unit rounding dust deterministically to buyer rebate (0 wei trapped)
+        payerRebate = amount - payeePayout - protocolFee;
+        decayBps = dBps;
+    }
+
+    function _isValidOracleSignature(bytes32 digest, bytes calldata sig) internal view returns (bool) {
+        if (oracleSigner.code.length > 0) {
+            try IERC1271(oracleSigner).isValidSignature(digest, sig) returns (bytes4 magic) {
+                return magic == ERC1271_MAGICVALUE;
+            } catch {
+                return false;
+            }
+        }
+        return _recoverSigner(digest, sig) == oracleSigner;
     }
 
     function _recoverSigner(bytes32 digest, bytes calldata sig) internal view returns (address) {

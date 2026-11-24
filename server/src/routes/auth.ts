@@ -4,6 +4,7 @@ import { type Address, getAddress, type Hex, isAddress, verifyMessage } from 'vi
 
 interface NonceRecord {
   nonce: string
+  domain: string
   expiresAt: number
 }
 
@@ -11,17 +12,49 @@ interface SessionRecord {
   id: string
   address: Address
   chainId: number
-  createdAt: number
+  issuedAt: number
   expiresAt: number
 }
 
 const SESSION_COOKIE = 'diptos_sid'
+const NONCE_COOKIE = 'diptos_nonce'
 const SESSION_TTL_SEC = 7 * 24 * 60 * 60 // 7 days
-const NONCE_TTL_MS = 10 * 60 * 1000 // 10 minutes
+const NONCE_TTL_SEC = 5 * 60 // 5 minutes
+const NONCE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
 
-// Server-side session & nonce stores (Redis REST optional, in-memory fallback for dev/serverless)
+const COOKIE_SECRET =
+  process.env.SESSION_COOKIE_SECRET?.trim() ||
+  process.env.ORACLE_PRIVATE_KEY?.trim() ||
+  'diptos-dev-cookie-hmac-secret'
+
+// Server-side stores (in-memory for dev/edge, pluggable for Redis/Postgres)
 const nonceStore = new Map<string, NonceRecord>()
 const sessionStore = new Map<string, SessionRecord>()
+
+/** Cryptographically random 12-character alphanumeric nonce (>71 bits entropy). */
+function generateAlphanumericNonce(length = 12): string {
+  const bytes = crypto.randomBytes(length * 2)
+  let out = ''
+  for (let i = 0; i < bytes.length && out.length < length; i++) {
+    const idx = bytes[i] % NONCE_ALPHABET.length
+    out += NONCE_ALPHABET[idx]
+  }
+  return out
+}
+
+function signNonceValue(nonce: string): string {
+  const mac = crypto.createHmac('sha256', COOKIE_SECRET).update(nonce).digest('hex').slice(0, 24)
+  return `${nonce}.${mac}`
+}
+
+function verifySignedNonceCookie(cookieVal: string | null): string | null {
+  if (!cookieVal) return null
+  const [nonce, mac] = cookieVal.split('.')
+  if (!nonce || !mac) return null
+  const expected = crypto.createHmac('sha256', COOKIE_SECRET).update(nonce).digest('hex').slice(0, 24)
+  if (mac.length !== expected.length) return null
+  return crypto.timingSafeEqual(Buffer.from(mac, 'utf8'), Buffer.from(expected, 'utf8')) ? nonce : null
+}
 
 function parseCookie(header: string | undefined, name: string): string | null {
   if (!header) return null
@@ -34,9 +67,9 @@ function parseCookie(header: string | undefined, name: string): string | null {
   return null
 }
 
-function buildCookieHeader(value: string, maxAgeSec: number, isHttps: boolean): string {
+function buildCookieHeader(name: string, value: string, maxAgeSec: number, isHttps: boolean): string {
   const attrs = [
-    `${SESSION_COOKIE}=${encodeURIComponent(value)}`,
+    `${name}=${encodeURIComponent(value)}`,
     'HttpOnly',
     'SameSite=Lax',
     'Path=/',
@@ -52,27 +85,6 @@ function isRequestHttps(req: { header: (name: string) => string | undefined; url
   return req.url.startsWith('https://')
 }
 
-function buildSiweMessage(params: {
-  domain: string
-  address: Address
-  nonce: string
-  chainId: number
-  issuedAt: string
-}): string {
-  return [
-    `${params.domain} wants you to sign in with your Ethereum account:`,
-    params.address,
-    '',
-    'Sign in to Diptos Guaranteed Outcome Protection. Zero platform custody; this signature does not authorize any fund transfer.',
-    '',
-    `URI: https://${params.domain}`,
-    'Version: 1',
-    `Chain ID: ${params.chainId}`,
-    `Nonce: ${params.nonce}`,
-    `Issued At: ${params.issuedAt}`,
-  ].join('\n')
-}
-
 export const authRoute = new Hono()
 
 authRoute.get('/nonce', (c) => {
@@ -81,11 +93,14 @@ authRoute.get('/nonce', (c) => {
     if (rec.expiresAt <= now) nonceStore.delete(k)
   }
 
-  const nonce = crypto.randomBytes(16).toString('hex')
-  nonceStore.set(nonce, { nonce, expiresAt: now + NONCE_TTL_MS })
-
   const host = c.req.header('host') || 'diptos.xyz'
   const domain = host.replace(/:\d+$/, '')
+  const nonce = generateAlphanumericNonce(12)
+  nonceStore.set(nonce, { nonce, domain, expiresAt: now + NONCE_TTL_SEC * 1000 })
+
+  const https = isRequestHttps(c.req)
+  c.header('Set-Cookie', buildCookieHeader(NONCE_COOKIE, signNonceValue(nonce), NONCE_TTL_SEC, https))
+
   return c.json({
     nonce,
     domain,
@@ -116,15 +131,21 @@ authRoute.post('/verify', async (c) => {
     return c.json({ error: 'Valid EIP-191 signature is required.' }, 400)
   }
   if (!nonce || !message) {
-    return c.json({ error: 'Signed SIWE message and nonce are required.' }, 400)
+    return c.json({ error: 'Signed EIP-4361 message and nonce are required.' }, 400)
   }
 
   const storedNonce = nonceStore.get(nonce)
-  if (!storedNonce || storedNonce.expiresAt < Date.now()) {
+  const cookieNonce = verifySignedNonceCookie(parseCookie(c.req.header('cookie'), NONCE_COOKIE))
+  const now = Date.now()
+
+  if (!storedNonce || storedNonce.expiresAt < now) {
     nonceStore.delete(nonce)
-    return c.json({ error: 'Session nonce expired or invalid. Please retry.' }, 401)
+    return c.json({ error: 'Verification nonce expired. Please try again.' }, 401)
   }
-  if (!message.includes(nonce)) {
+  if (cookieNonce && cookieNonce !== nonce) {
+    return c.json({ error: 'Nonce cookie mismatch.' }, 401)
+  }
+  if (!message.includes(`Nonce: ${nonce}`)) {
     return c.json({ error: 'Nonce mismatch in signed message.' }, 401)
   }
 
@@ -144,45 +165,57 @@ authRoute.post('/verify', async (c) => {
     return c.json({ error: 'Signature verification failed.' }, 401)
   }
 
-  // Single-use nonce
+  // Single-use nonce invalidation
   nonceStore.delete(nonce)
 
   const sid = crypto.randomBytes(32).toString('hex')
-  const now = Date.now()
   const session: SessionRecord = {
     id: sid,
     address: checksummed,
     chainId: Number(chainId) || 5042002,
-    createdAt: now,
+    issuedAt: now,
     expiresAt: now + SESSION_TTL_SEC * 1000,
   }
   sessionStore.set(sid, session)
 
   const https = isRequestHttps(c.req)
-  c.header('Set-Cookie', buildCookieHeader(sid, SESSION_TTL_SEC, https))
+  c.header('Set-Cookie', buildCookieHeader(NONCE_COOKIE, '', 0, https), { append: true })
+  c.header('Set-Cookie', buildCookieHeader(SESSION_COOKIE, sid, SESSION_TTL_SEC, https), { append: true })
+
   return c.json({
     authenticated: true,
     address: session.address,
     chainId: session.chainId,
+    issuedAt: new Date(session.issuedAt).toISOString(),
     expiresAt: new Date(session.expiresAt).toISOString(),
   })
 })
 
 authRoute.get('/session', (c) => {
-  const sid = parseCookie(c.req.header('cookie'), SESSION_COOKIE)
+  const cookieHeader = c.req.header('cookie')
+  const sid = parseCookie(cookieHeader, SESSION_COOKIE)
+  const preferences = {
+    chain: parseCookie(cookieHeader, 'diptos_chain'),
+    mode: parseCookie(cookieHeader, 'diptos_mode'),
+    consent: parseCookie(cookieHeader, 'diptos_consent') ?? 'pending',
+    splashSeen: parseCookie(cookieHeader, 'diptos_splash_seen') === '1',
+  }
+
   if (!sid) {
-    return c.json({ authenticated: false, address: null, chainId: null })
+    return c.json({ authenticated: false, address: null, chainId: null, preferences })
   }
   const session = sessionStore.get(sid)
   if (!session || session.expiresAt <= Date.now()) {
     sessionStore.delete(sid)
-    return c.json({ authenticated: false, address: null, chainId: null })
+    return c.json({ authenticated: false, address: null, chainId: null, preferences })
   }
   return c.json({
     authenticated: true,
     address: session.address,
     chainId: session.chainId,
+    issuedAt: new Date(session.issuedAt).toISOString(),
     expiresAt: new Date(session.expiresAt).toISOString(),
+    preferences,
   })
 })
 
@@ -190,8 +223,7 @@ authRoute.post('/logout', (c) => {
   const sid = parseCookie(c.req.header('cookie'), SESSION_COOKIE)
   if (sid) sessionStore.delete(sid)
   const https = isRequestHttps(c.req)
-  c.header('Set-Cookie', buildCookieHeader('', 0, https))
+  c.header('Set-Cookie', buildCookieHeader(SESSION_COOKIE, '', 0, https), { append: true })
+  c.header('Set-Cookie', buildCookieHeader(NONCE_COOKIE, '', 0, https), { append: true })
   return c.json({ ok: true, authenticated: false })
 })
-
-export { buildSiweMessage }

@@ -76,7 +76,12 @@
   html {
     background: var(--bg-black);
     color-scheme: dark;
-    scroll-padding-top: 84px;
+    scroll-behavior: smooth;
+    scroll-padding-top: 88px;
+  }
+  section[id],
+  div[id] {
+    scroll-margin-top: 88px;
   }
   body {
     background: var(--bg-black);

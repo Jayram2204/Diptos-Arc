@@ -1,31 +1,10 @@
-import { ArrowRight, ArrowUpRight, CheckCircle2, Lock, Zap } from 'lucide-react'
+import { ArrowRight, ArrowUpRight } from 'lucide-react'
 import { trackFunnelEvent } from '@/lib/analytics'
 import { getAppUrl, getSdkUrl } from '@/lib/route'
 
-const QUICK_STEPS = [
-  {
-    step: 'STEP 01',
-    icon: Lock,
-    title: 'Lock USDC Against Objective Proof',
-    body: 'Buyer locks native USDC in DiptosEscrow.sol with clear acceptance criteria—merged PR, passing tests, or valid agent output.',
-  },
-  {
-    step: 'STEP 02',
-    icon: CheckCircle2,
-    title: 'Verify Deterministically',
-    body: 'Proof is verified against the on-chain scope via hardware-pinned attestation—zero subjective moderation or support tickets.',
-  },
-  {
-    step: 'STEP 03',
-    icon: Zap,
-    title: '1-Second Release or Auto-Rebate',
-    body: 'On-time proof pays 99.5% instantly (0.5% flat fee). Late delivery rebates the buyer mathematically in one atomic tx.',
-  },
-]
-
 export function Hero() {
   return (
-    <section id="top" className="mx-auto max-w-[1280px] px-5 pb-20 pt-14 sm:px-6 sm:pt-24 lg:px-8">
+    <section id="top" className="mx-auto max-w-[1280px] px-5 pb-16 pt-14 sm:px-6 sm:pt-24 lg:px-8">
       <p className="rwa-hud text-lime">NATIVE USDC PROTECTION // ZERO PLATFORM CUSTODY</p>
 
       <h1 className="rwa-display mt-6 max-w-[1120px] break-normal text-[clamp(2.35rem,5.2vw,4.75rem)] leading-[1.03] text-white">
@@ -63,36 +42,6 @@ export function Hero() {
           <span>EXPLORE @DIPTOS/SDK</span>
           <ArrowUpRight className="size-4" />
         </a>
-      </div>
-
-      {/* 10-Second "How it works for freelancers & AI teams" 3-Step Visual Summary */}
-      <div className="mt-14 rounded-2xl border border-paper/15 bg-surface p-6 sm:p-7">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-paper/10 pb-4">
-          <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[#E5E7EB]">
-            HOW IT WORKS FOR FREELANCERS &amp; AI TEAMS (10-SECOND SUMMARY)
-          </p>
-          <span className="font-mono text-[11px] text-[#E5E7EB]">0.5% FLAT FEE · &lt;1.0S FINALITY · ZERO CUSTODY</span>
-        </div>
-
-        <div className="mt-5 grid gap-6 md:grid-cols-3">
-          {QUICK_STEPS.map((item) => {
-            const Icon = item.icon
-            return (
-              <div key={item.step} className="flex flex-col">
-                <div className="flex items-center gap-2">
-                  <span className="grid size-7 place-items-center rounded-lg border border-lime/40 bg-lime/10 text-lime">
-                    <Icon className="size-3.5" />
-                  </span>
-                  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-[#E5E7EB]">
-                    {item.step}
-                  </span>
-                </div>
-                <h2 className="mt-3 text-[15.5px] font-semibold text-white">{item.title}</h2>
-                <p className="mt-1.5 text-[13.5px] leading-relaxed text-[#E5E7EB]/85">{item.body}</p>
-              </div>
-            )
-          })}
-        </div>
       </div>
     </section>
   )

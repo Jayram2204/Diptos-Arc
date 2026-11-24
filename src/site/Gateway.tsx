@@ -8,7 +8,6 @@ import { Header } from './Header'
 import { Hero } from './Hero'
 import { ProcessBar } from './ProcessBar'
 import { Registry } from './Registry'
-import { Telemetry } from './Telemetry'
 import { Waterfall } from './Waterfall'
 
 export function Gateway() {
@@ -22,7 +21,6 @@ export function Gateway() {
           <ProcessBar />
           <EscrowsGrid />
           <Architecture />
-          <Telemetry />
           <Waterfall />
           <Registry />
           <Faucet />

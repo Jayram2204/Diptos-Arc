@@ -53,16 +53,26 @@ export interface DetectedWallet {
   icon?: string
 }
 
+export interface SiweSession {
+  authenticated: boolean
+  address: Address
+  chainId: number
+  issuedAt: string
+  expiresAt: string
+}
+
 interface WalletContextValue {
   address: Address | null
   isConnected: boolean
   walletName: string | null
   walletChainId: number | null
   detectedWallets: DetectedWallet[]
+  siweSession: SiweSession | null
   connecting: WalletId | null
-  connect: (id?: WalletId, rdns?: string) => Promise<Address | null>
+  connect: (id?: WalletId, rdns?: string, options?: { autoSiwe?: boolean }) => Promise<Address | null>
+  signInWithSiwe: (overrideAddr?: Address, overrideProvider?: EIP1193Provider) => Promise<boolean>
   switchNetwork: (chainId: number) => Promise<void>
-  disconnect: () => void
+  disconnect: () => Promise<void>
   balanceUsdc: string | null
   refreshBalance: () => void
   execute: (req: TxRequest) => Promise<Receipt | null>
@@ -118,6 +128,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<Address | null>(null)
   const [walletName, setWalletName] = useState<string | null>(null)
   const [walletChainId, setWalletChainId] = useState<number | null>(null)
+  const [siweSession, setSiweSession] = useState<SiweSession | null>(null)
   const [connecting, setConnecting] = useState<WalletId | null>(null)
   const [balanceUsdc, setBalanceUsdc] = useState<string | null>(null)
   const [txStage, setTxStage] = useState<{ kind: TxKind; stage: 'switch' | 'simulate' | 'sign' | 'mining' } | null>(null)
@@ -148,19 +159,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const resolveInjectedProvider = useCallback(
     (preferredRdns?: string): { provider: EIP1193Provider; name: string } | null => {
-      if (preferredRdns && eip6963[preferredRdns]) {
+      // STRICT EIP-6963 ISOLATION: when a specific wallet rdns (e.g. io.rabby) is requested,
+      // call strictly that wallet's announced provider — NEVER fall back to window.ethereum.
+      if (preferredRdns) {
+        const exact = eip6963[preferredRdns]
+        if (!exact) return null
         return {
-          provider: eip6963[preferredRdns].provider,
-          name: eip6963[preferredRdns].info.name || 'Web3 Wallet',
+          provider: exact.provider,
+          name: exact.info.name || preferredRdns,
         }
       }
-      if (eip6963['io.metamask']) return { provider: eip6963['io.metamask'].provider, name: 'MetaMask' }
-      if (eip6963['io.rabby']) return { provider: eip6963['io.rabby'].provider, name: 'Rabby Wallet' }
-      if (eip6963['com.coinbase.wallet']) {
-        return { provider: eip6963['com.coinbase.wallet'].provider, name: 'Coinbase Wallet' }
-      }
-      if (eip6963['app.phantom']) return { provider: eip6963['app.phantom'].provider, name: 'Phantom' }
-      if (eip6963['me.rainbow']) return { provider: eip6963['me.rainbow'].provider, name: 'Rainbow' }
       const firstEip6963 = Object.values(eip6963)[0]
       if (firstEip6963) return { provider: firstEip6963.provider, name: firstEip6963.info.name || 'Web3 Wallet' }
 
@@ -170,15 +178,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             isMetaMask?: boolean
             isRabby?: boolean
             isCoinbaseWallet?: boolean
-            providers?: (EIP1193Provider & { isMetaMask?: boolean; isRabby?: boolean })[]
           }
         }
       ).ethereum
 
-      if (winEth?.providers?.length) {
-        const preferred = winEth.providers.find((p) => p.isRabby || p.isMetaMask) ?? winEth.providers[0]
-        return { provider: preferred, name: preferred.isRabby ? 'Rabby Wallet' : 'MetaMask' }
-      }
       if (winEth && typeof winEth.request === 'function') {
         const name = winEth.isRabby ? 'Rabby Wallet' : winEth.isMetaMask ? 'MetaMask' : 'Web3 Wallet'
         return { provider: winEth, name }
@@ -280,14 +283,74 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     p.on?.('chainChanged', onChain as never)
   }, [])
 
+  const signInWithSiwe = useCallback(
+    async (overrideAddr?: Address, overrideProvider?: EIP1193Provider): Promise<boolean> => {
+      const targetAddr = overrideAddr ?? address
+      const targetProvider = overrideProvider ?? provider.current
+      if (!targetAddr || !targetProvider) return false
+
+      try {
+        const nonceRes = await fetch('/api/auth/nonce', { credentials: 'include' })
+        if (!nonceRes.ok) return false
+        const { nonce, domain, chainId, issuedAt } = (await nonceRes.json()) as {
+          nonce: string
+          domain: string
+          chainId: number
+          issuedAt: string
+        }
+
+        // Ultra-short EIP-4361 (SIWE) message: verified domain badge + zero scroll overflow
+        const message = [
+          `${domain} wants you to sign in with your Ethereum account:`,
+          targetAddr,
+          '',
+          'Sign in to Diptos. Free verification — no funds move.',
+          '',
+          `URI: ${window.location.origin}`,
+          'Version: 1',
+          `Chain ID: ${chainId}`,
+          `Nonce: ${nonce}`,
+          `Issued At: ${issuedAt}`,
+        ].join('\n')
+
+        const signature = (await targetProvider.request({
+          method: 'personal_sign',
+          params: [message, targetAddr],
+        } as never)) as string
+
+        const verifyRes = await fetch('/api/auth/verify', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ address: targetAddr, signature, message, nonce, chainId }),
+        })
+        if (!verifyRes.ok) return false
+        const sessionData = (await verifyRes.json()) as SiweSession
+        setSiweSession(sessionData)
+        return true
+      } catch {
+        return false
+      }
+    },
+    [address],
+  )
+
   const connect = useCallback(
-    async (id: WalletId = 'metamask', rdns?: string): Promise<Address | null> => {
+    async (
+      id: WalletId = 'metamask',
+      rdns?: string,
+      options?: { autoSiwe?: boolean },
+    ): Promise<Address | null> => {
       setError(null)
       setConnecting(id)
       try {
         const detected = resolveInjectedProvider(rdns)
         if (!detected) {
-          setError(NO_WEB3_WALLET_MSG)
+          setError(
+            rdns
+              ? `Wallet (${rdns}) is not installed in this browser. Install it or choose another detected wallet.`
+              : NO_WEB3_WALLET_MSG,
+          )
           return null
         }
 
@@ -310,6 +373,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
         await switchToArc(detected.provider).catch(() => {})
         refreshBalance(connectedAddress)
+
+        if (options?.autoSiwe) {
+          await signInWithSiwe(connectedAddress, detected.provider)
+        }
         return connectedAddress
       } catch (e) {
         setError(decodeRevertError(e))
@@ -318,14 +385,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setConnecting(null)
       }
     },
-    [resolveInjectedProvider, attach, switchToArc, refreshBalance],
+    [resolveInjectedProvider, attach, switchToArc, refreshBalance, signInWithSiwe],
   )
 
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback(async () => {
+    const activeProvider = provider.current
+    // 1. Revoke server-side HttpOnly SIWE session cookie (diptos_sid)
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {})
+    // 2. Attempt EIP-2255 wallet_revokePermissions (supported by MetaMask & Rabby)
+    if (activeProvider) {
+      await activeProvider
+        .request({
+          method: 'wallet_revokePermissions',
+          params: [{ eth_accounts: {} }],
+        } as never)
+        .catch(() => {})
+    }
+    // 3. Clear all in-memory wallet/session state (no auto-re-authentication)
     provider.current = null
     setAddress(null)
     setWalletName(null)
     setWalletChainId(null)
+    setSiweSession(null)
     setBalanceUsdc(null)
     setError(null)
   }, [])
@@ -410,8 +491,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         walletName,
         walletChainId,
         detectedWallets,
+        siweSession,
         connecting,
         connect,
+        signInWithSiwe,
         switchNetwork,
         disconnect,
         balanceUsdc,

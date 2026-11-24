@@ -1,4 +1,5 @@
 import { ArrowUpRight } from 'lucide-react'
+import { OPEN_COOKIE_CONTROLS_EVENT } from '@/components/CookieConsentPill'
 import { ARC_NETWORK, LINKS } from '@/config/protocol'
 import { getAppUrl, getSdkUrl } from '@/lib/route'
 
@@ -60,8 +61,15 @@ export function Footer() {
         </ul>
       </div>
 
-      <div className="mx-auto mt-10 max-w-[1380px] border-t border-paper/10 px-6 pt-6 font-mono text-[10.5px] uppercase tracking-[0.12em] text-secondary/70 lg:px-10">
-        NON-CUSTODIAL SETTLEMENT PROTOCOL · ARC TESTNET (CHAIN ID 5042002) · DIPTOS.XYZ
+      <div className="mx-auto mt-10 flex max-w-[1380px] flex-wrap items-center justify-between gap-4 border-t border-paper/10 px-6 pt-6 font-mono text-[10.5px] uppercase tracking-[0.12em] text-secondary/80 lg:px-10">
+        <span>NON-CUSTODIAL SETTLEMENT PROTOCOL · ARC TESTNET (CHAIN ID 5042002) · DIPTOS.XYZ</span>
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event(OPEN_COOKIE_CONTROLS_EVENT))}
+          className="text-[#E5E7EB] underline-offset-4 hover:text-lime hover:underline"
+        >
+          COOKIE &amp; SESSION CONTROLS
+        </button>
       </div>
     </footer>
   )

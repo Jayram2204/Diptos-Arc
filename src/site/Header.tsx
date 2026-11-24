@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowUpRight, ChevronDown, Menu, Plus, X } from 'lucide-react'
+import { ArrowUpRight, ChevronDown, LogOut, Menu, Plus, X } from 'lucide-react'
 import { WalletModal } from '@diptos/app/WalletModal'
 import { useWallet } from '@/app/wallet'
 import { InteractiveFlywheelEmblem } from '@/components/KineticFlywheel'
@@ -16,13 +16,22 @@ const NAV_LINKS = [
 ]
 
 export function Header() {
-  const { address, isConnected, walletChainId } = useWallet()
+  const { address, isConnected, walletChainId, disconnect } = useWallet()
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [walletOpen, setWalletOpen] = useState(false)
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24)
+    let ticking = false
+    const onScroll = () => {
+      if (ticking) return
+      ticking = true
+      window.requestAnimationFrame(() => {
+        const next = window.scrollY > 24
+        setScrolled((prev) => (prev === next ? prev : next))
+        ticking = false
+      })
+    }
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
@@ -69,6 +78,18 @@ export function Header() {
               <span>{isConnected && address ? `${shortHex(address, 4, 4)} · ${chainLabel}` : chainLabel}</span>
               <ChevronDown className="size-3 text-[#E5E7EB]" />
             </button>
+            {isConnected && address && (
+              <button
+                type="button"
+                onClick={() => void disconnect()}
+                aria-label="Disconnect wallet and revoke session"
+                title="Disconnect wallet"
+                className="hidden h-7 items-center gap-1 rounded-full border border-paper/20 bg-surface px-2.5 font-mono text-[10px] uppercase tracking-[0.08em] text-[#E5E7EB] transition-colors hover:border-crimson/60 hover:text-crimson focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime sm:inline-flex"
+              >
+                <LogOut className="size-3" />
+                <span>Disconnect</span>
+              </button>
+            )}
           </div>
 
           {/* Center: Clear User Destinations */}

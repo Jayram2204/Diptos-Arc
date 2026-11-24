@@ -80,8 +80,10 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
     walletName,
     walletChainId,
     detectedWallets,
+    siweSession,
     connecting,
     connect,
+    signInWithSiwe,
     switchNetwork,
     disconnect,
     balanceUsdc,
@@ -149,9 +151,6 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
   if (!open) return null
 
   const detectedByRdns = new Map(detectedWallets.map((w) => [w.rdns, w]))
-  const hasAnyWindowEth =
-    typeof window !== 'undefined' &&
-    Boolean((window as unknown as { ethereum?: unknown }).ethereum)
 
   const extraDetected = detectedWallets.filter(
     (d) => !STANDARD_WALLETS.some((s) => s.rdns === d.rdns),
@@ -165,7 +164,11 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
   const handleConnect = async (rdns?: string) => {
     clearError()
     setSiweError(null)
-    const connected = await connect(rdns === 'com.coinbase.wallet' ? 'coinbase' : 'metamask', rdns)
+    const connected = await connect(
+      rdns === 'com.coinbase.wallet' ? 'coinbase' : 'metamask',
+      rdns,
+      { autoSiwe: true },
+    )
     if (connected) {
       setPreference('diptos_chain', '5042002')
       trackFunnelEvent('wallet_connected', { chainId: 5042002 })
@@ -177,54 +180,18 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
     if (!address) return
     setSiweError(null)
     setSiweState('signing')
-    try {
-      const nonceRes = await fetch('/api/auth/nonce', { credentials: 'include' })
-      if (!nonceRes.ok) throw new Error('Unable to request session nonce.')
-      const { nonce, domain, chainId, issuedAt } = (await nonceRes.json()) as {
-        nonce: string
-        domain: string
-        chainId: number
-        issuedAt: string
-      }
-
-      const message = [
-        `${domain} wants you to sign in with your Ethereum account:`,
-        address,
-        '',
-        'Sign in to Diptos Guaranteed Outcome Protection. Zero platform custody; this signature does not authorize any fund transfer.',
-        '',
-        `URI: https://${domain}`,
-        'Version: 1',
-        `Chain ID: ${chainId}`,
-        `Nonce: ${nonce}`,
-        `Issued At: ${issuedAt}`,
-      ].join('\n')
-
-      const eth = (window as unknown as { ethereum?: { request: (arg: unknown) => Promise<string> } }).ethereum
-      if (!eth) throw new Error('Injected EVM wallet required for SIWE verification.')
-      const signature = await eth.request({ method: 'personal_sign', params: [message, address] })
-
-      const verifyRes = await fetch('/api/auth/verify', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ address, signature, message, nonce, chainId }),
-      })
-      if (!verifyRes.ok) {
-        const err = (await verifyRes.json().catch(() => ({}))) as { error?: string }
-        throw new Error(err.error || 'SIWE verification failed.')
-      }
+    const ok = await signInWithSiwe()
+    if (ok) {
       setSiweState('verified')
-    } catch (e) {
+    } else {
       setSiweState('idle')
-      setSiweError((e as Error).message)
+      setSiweError('SIWE verification cancelled or failed.')
     }
   }
 
   const handleDisconnect = async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {})
+    await disconnect()
     setSiweState('idle')
-    disconnect()
     onClose()
   }
 
@@ -450,7 +417,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                     </p>
                   </div>
                 </div>
-                {siweState === 'verified' ? (
+                {siweState === 'verified' || siweSession?.authenticated ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-[#10B981]/20 px-2.5 py-1 font-mono text-[10px] font-semibold text-[#10B981]">
                     <Check className="size-3" /> ACTIVE
                   </span>
@@ -526,7 +493,8 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                 {STANDARD_WALLETS.map((w) => {
                   const detected = detectedByRdns.get(w.rdns)
                   const isWc = w.rdns === 'walletconnect'
-                  const canConnect = !isWc && Boolean(detected || hasAnyWindowEth)
+                  // STRICT EIP-6963 isolation: NEVER route a non-detected wallet (e.g. Rabby) to window.ethereum
+                  const isInstalled = !isWc && Boolean(detected)
                   return (
                     <div
                       key={w.rdns}
@@ -536,8 +504,8 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                         type="button"
                         disabled={Boolean(connecting)}
                         onClick={() =>
-                          canConnect
-                            ? handleConnect(detected?.rdns)
+                          isInstalled && detected
+                            ? handleConnect(detected.rdns)
                             : window.open(w.installUrl, '_blank', 'noopener,noreferrer')
                         }
                         className="flex flex-1 items-center gap-3 text-left focus-visible:outline-none"
@@ -551,27 +519,20 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                         )}
                         <div>
                           <p className="text-[13.5px] font-medium text-white">{w.name}</p>
-                          <p className="text-[11.5px] text-[#E5E7EB]/75">{w.tagline}</p>
+                          <p className="text-[11.5px] text-[#E5E7EB]/75">
+                            {isInstalled ? 'Detected via EIP-6963' : isWc ? w.tagline : 'Not installed'}
+                          </p>
                         </div>
                       </button>
 
-                      {detected ? (
+                      {isInstalled && detected ? (
                         <button
                           type="button"
                           disabled={Boolean(connecting)}
                           onClick={() => handleConnect(detected.rdns)}
                           className="rounded-full bg-[#C8FF00] px-3 py-1 font-mono text-[10.5px] font-semibold text-[#07080C] hover:bg-[#d8ff4d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                         >
-                          {connecting ? <LoaderCircle className="size-3.5 animate-spin" /> : 'Connect'}
-                        </button>
-                      ) : canConnect ? (
-                        <button
-                          type="button"
-                          disabled={Boolean(connecting)}
-                          onClick={() => handleConnect()}
-                          className="rounded-full border border-white/20 px-3 py-1 font-mono text-[10.5px] text-white hover:border-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
-                        >
-                          Connect
+                          {connecting ? <LoaderCircle className="size-3.5 animate-spin" /> : '1-Click Sign In'}
                         </button>
                       ) : (
                         <a
@@ -580,7 +541,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 rounded-full border border-white/15 px-2.5 py-1 font-mono text-[10.5px] text-[#E5E7EB] hover:text-white"
                         >
-                          {isWc ? 'Mobile' : 'Install'} <ArrowUpRight className="size-3" />
+                          {isWc ? 'Mobile' : 'Not installed'} <ArrowUpRight className="size-3" />
                         </a>
                       )}
                     </div>

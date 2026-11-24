@@ -44,6 +44,13 @@ contract DiptosRegistry is IDiptosRegistry {
     mapping(bytes32 => bool) public escrowIds;
     mapping(address => CounterpartyStats) private _stats;
 
+    // Commit-and-reveal deliverable protection (blocks front-running & double-spend)
+    mapping(bytes32 => mapping(address => bytes32)) public deliverableCommits;
+    mapping(bytes32 => bool) public revealedDeliverables;
+
+    event DeliverableCommitted(bytes32 indexed escrowId, address indexed committer, bytes32 commitment);
+    event DeliverableRevealed(bytes32 indexed escrowId, address indexed committer, bytes32 indexed deliverableHash);
+
     event CanonicalCommitmentRecorded(
         bytes32 indexed escrowId,
         bytes32 indexed canonicalHash,
@@ -67,6 +74,9 @@ contract DiptosRegistry is IDiptosRegistry {
     error Unauthorized();
     error CommitmentAlreadyExists();
     error InvalidAddress();
+    error SelfEscrowNotAllowed();
+    error InvalidReveal();
+    error DeliverableAlreadyRevealed();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert Unauthorized();
@@ -106,6 +116,8 @@ contract DiptosRegistry is IDiptosRegistry {
         uint256 amount,
         uint256 deadline
     ) external onlyEscrow returns (bytes32 canonicalHash) {
+        if (payer == address(0) || payee == address(0)) revert InvalidAddress();
+        if (payer == payee) revert SelfEscrowNotAllowed();
         canonicalHash = computeCanonicalHash(escrowId, payer, payee, amount, deadline);
         if (escrowIds[escrowId] || canonicalHashes[canonicalHash]) {
             revert CommitmentAlreadyExists();
@@ -116,6 +128,25 @@ contract DiptosRegistry is IDiptosRegistry {
         totalVolumeWei += amount;
 
         emit CanonicalCommitmentRecorded(escrowId, canonicalHash, payer, payee, amount, deadline);
+    }
+
+    /// @notice Commit a blinded deliverable hash prior to reveal to block mempool front-running.
+    function commitDeliverable(bytes32 escrowId, bytes32 commitment) external {
+        if (escrowId == bytes32(0) || commitment == bytes32(0)) revert InvalidReveal();
+        if (deliverableCommits[escrowId][msg.sender] != bytes32(0)) revert CommitmentAlreadyExists();
+        deliverableCommits[escrowId][msg.sender] = commitment;
+        emit DeliverableCommitted(escrowId, msg.sender, commitment);
+    }
+
+    /// @notice Reveal a previously committed deliverable hash with its secret salt.
+    function revealDeliverable(bytes32 escrowId, bytes32 deliverableHash, bytes32 salt) external {
+        bytes32 stored = deliverableCommits[escrowId][msg.sender];
+        if (stored == bytes32(0)) revert InvalidReveal();
+        bytes32 expected = keccak256(abi.encode(escrowId, msg.sender, deliverableHash, salt));
+        if (stored != expected) revert InvalidReveal();
+        if (revealedDeliverables[deliverableHash]) revert DeliverableAlreadyRevealed();
+        revealedDeliverables[deliverableHash] = true;
+        emit DeliverableRevealed(escrowId, msg.sender, deliverableHash);
     }
 
     function recordSettlement(
