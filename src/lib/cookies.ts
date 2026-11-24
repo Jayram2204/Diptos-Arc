@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 
-export type DynamicCookieKey = 'diptos_chain' | 'diptos_mode' | 'diptos_consent' | 'diptos_ref'
+export type DynamicCookieKey =
+  | 'diptos_splash_seen'
+  | 'diptos_chain'
+  | 'diptos_mode'
+  | 'diptos_consent'
+  | 'diptos_ref'
+
 export type CookieConsentState = 'pending' | 'essential' | 'accepted'
 
 const COOKIE_EVENT = 'diptos:cookies-changed'
@@ -18,14 +24,20 @@ export function readCookie(name: DynamicCookieKey): string | null {
   return null
 }
 
-export function writeCookie(name: DynamicCookieKey, value: string, maxAgeSec = DEFAULT_MAX_AGE): void {
+/**
+ * Write a SameSite=Lax (+ Secure on HTTPS) cookie.
+ * Pass `maxAgeSec = null` for a browser-session-scoped cookie (e.g. `diptos_splash_seen`).
+ */
+export function writeCookie(
+  name: DynamicCookieKey,
+  value: string,
+  maxAgeSec: number | null = DEFAULT_MAX_AGE,
+): void {
   if (typeof document === 'undefined') return
-  const attrs = [
-    `${name}=${encodeURIComponent(value)}`,
-    'Path=/',
-    'SameSite=Lax',
-    `Max-Age=${maxAgeSec}`,
-  ]
+  const attrs = [`${name}=${encodeURIComponent(value)}`, 'Path=/', 'SameSite=Lax']
+  if (maxAgeSec !== null) {
+    attrs.push(`Max-Age=${maxAgeSec}`)
+  }
   if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
     attrs.push('Secure')
   }
@@ -39,6 +51,7 @@ export function clearCookie(name: DynamicCookieKey): void {
 
 export interface DynamicCookiePreferences {
   consent: CookieConsentState
+  splashSeen: boolean
   chain: string | null
   mode: 'human' | 'agent' | null
   ref: string | null
@@ -52,6 +65,7 @@ function snapshotPreferences(): DynamicCookiePreferences {
   const mode = rawMode === 'agent' || rawMode === 'human' ? rawMode : null
   return {
     consent,
+    splashSeen: readCookie('diptos_splash_seen') === '1',
     chain: readCookie('diptos_chain'),
     mode,
     ref: readCookie('diptos_ref'),
@@ -60,8 +74,9 @@ function snapshotPreferences(): DynamicCookiePreferences {
 
 /**
  * Typed client preference cookie helper.
- * Non-essential preference cookies (diptos_chain, diptos_mode, diptos_ref) are strictly
- * gated behind explicit user consent (`diptos_consent=accepted`) and default OFF.
+ * Non-essential preference cookies (`diptos_chain`, `diptos_mode`, `diptos_ref`) are gated
+ * behind explicit user consent (`diptos_consent=accepted`) and default OFF.
+ * `diptos_splash_seen` is an essential session-scoped UI state cookie.
  */
 export function useDynamicCookies() {
   const [prefs, setPrefs] = useState<DynamicCookiePreferences>(snapshotPreferences)
@@ -86,15 +101,22 @@ export function useDynamicCookies() {
     }
   }, [])
 
-  const setPreference = useCallback((key: Exclude<DynamicCookieKey, 'diptos_consent'>, value: string) => {
-    // Only persist non-essential UI preferences when user accepted preference cookies
-    if (readCookie('diptos_consent') !== 'accepted') return
-    writeCookie(key, value)
+  const markSplashSeen = useCallback(() => {
+    writeCookie('diptos_splash_seen', '1', null)
   }, [])
+
+  const setPreference = useCallback(
+    (key: Exclude<DynamicCookieKey, 'diptos_consent' | 'diptos_splash_seen'>, value: string) => {
+      if (readCookie('diptos_consent') !== 'accepted') return
+      writeCookie(key, value)
+    },
+    [],
+  )
 
   return {
     ...prefs,
     setConsent,
+    markSplashSeen,
     setPreference,
   }
 }

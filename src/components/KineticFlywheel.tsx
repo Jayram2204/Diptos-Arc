@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { readCookie, writeCookie } from '@/lib/cookies'
 
 /**
  * Custom Precision SVG Settlement Wheel — Crisp White (#FFFFFF) for dark institutional surfaces:
@@ -182,21 +183,24 @@ export function KineticFlywheel() {
     if (typeof window === 'undefined') return false
     try {
       if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return false
-      return true
+      return readCookie('diptos_splash_seen') !== '1'
     } catch {
-      return true
+      return false
     }
   })
   const [locked, setLocked] = useState(false)
   const [exiting, setExiting] = useState(false)
 
   const dismissNow = useCallback(() => {
+    writeCookie('diptos_splash_seen', '1', null)
     setExiting(true)
     setVisible(false)
   }, [])
 
   useEffect(() => {
     if (!visible) return
+
+    writeCookie('diptos_splash_seen', '1', null)
 
     const tLock = window.setTimeout(() => setLocked(true), 1350)
     const tExit = window.setTimeout(() => setExiting(true), 2100)

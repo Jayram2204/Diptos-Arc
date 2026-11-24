@@ -12,11 +12,20 @@ import {
   Wallet,
   X,
 } from 'lucide-react'
-import { formatUnits } from 'viem'
+import { createPublicClient, formatUnits, http, parseAbi } from 'viem'
+import { base } from 'viem/chains'
+import { trackFunnelEvent } from '@/lib/analytics'
 import { explorerUrl, shortHex } from '@/lib/chain'
 import { useDynamicCookies } from '@/lib/cookies'
 import { useArcPulse } from '@/lib/hooks'
 import { useWallet } from '@/app/wallet'
+
+const BASE_USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as const
+const ERC20_BALANCE_ABI = parseAbi(['function balanceOf(address owner) view returns (uint256)'])
+const basePublicClient = createPublicClient({
+  chain: base,
+  transport: http('https://mainnet.base.org', { timeout: 5000 }),
+})
 
 interface WalletOption {
   rdns: string
@@ -64,23 +73,6 @@ const STANDARD_WALLETS: WalletOption[] = [
   },
 ]
 
-const MODAL_CHAINS = [
-  {
-    id: 5042002,
-    name: 'Arc Testnet',
-    status: 'live' as const,
-    asset: 'Native USDC',
-    subtitle: 'Chain ID 5042002 · Sub-second finality',
-  },
-  {
-    id: 8453,
-    name: 'Base',
-    status: 'coming_next' as const,
-    asset: 'USDC',
-    subtitle: 'Chain ID 8453 · Multi-chain expansion',
-  },
-]
-
 export function WalletModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const {
     address,
@@ -102,6 +94,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
 
   const [copied, setCopied] = useState(false)
   const [switchingChain, setSwitchingChain] = useState<number | null>(null)
+  const [baseBalanceUsdc, setBaseBalanceUsdc] = useState<string | null>(null)
   const [siweState, setSiweState] = useState<'idle' | 'signing' | 'verified'>('idle')
   const [siweError, setSiweError] = useState<string | null>(null)
 
@@ -113,6 +106,33 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
+
+  // Fetch live Base 6-dec ERC-20 USDC balance when connected
+  useEffect(() => {
+    if (!open || !address) {
+      setBaseBalanceUsdc(null)
+      return
+    }
+    let alive = true
+    basePublicClient
+      .readContract({
+        address: BASE_USDC,
+        abi: ERC20_BALANCE_ABI,
+        functionName: 'balanceOf',
+        args: [address],
+      })
+      .then((raw) => {
+        if (!alive) return
+        const val = Number(formatUnits(raw, 6))
+        setBaseBalanceUsdc(val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+      })
+      .catch(() => {
+        if (alive) setBaseBalanceUsdc('0.00')
+      })
+    return () => {
+      alive = false
+    }
+  }, [open, address])
 
   useEffect(() => {
     if (!open || !isConnected) return
@@ -148,6 +168,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
     const connected = await connect(rdns === 'com.coinbase.wallet' ? 'coinbase' : 'metamask', rdns)
     if (connected) {
       setPreference('diptos_chain', '5042002')
+      trackFunnelEvent('wallet_connected', { chainId: 5042002 })
       onClose()
     }
   }
@@ -221,7 +242,29 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
   const handleSwitchChain = async (chainId: number) => {
     setSwitchingChain(chainId)
     try {
-      await switchNetwork(chainId)
+      if (chainId === 8453) {
+        const eth = (window as unknown as { ethereum?: { request: (a: unknown) => Promise<unknown> } }).ethereum
+        if (eth) {
+          try {
+            await eth.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x2105' }] })
+          } catch {
+            await eth.request({
+              method: 'wallet_addEthereumChain',
+              params: [
+                {
+                  chainId: '0x2105',
+                  chainName: 'Base',
+                  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                  rpcUrls: ['https://mainnet.base.org'],
+                  blockExplorerUrls: ['https://basescan.org'],
+                },
+              ],
+            })
+          }
+        }
+      } else {
+        await switchNetwork(chainId)
+      }
       setPreference('diptos_chain', String(chainId))
     } finally {
       setSwitchingChain(null)
@@ -237,20 +280,20 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
       aria-label="1-Click Multi-Chain Settlement Modal"
     >
       <div
-        className="w-full max-w-[448px] overflow-hidden rounded-2xl border border-paper/15 bg-[#08090D] text-[#F4F2EC] shadow-2xl"
+        className="w-full max-w-[468px] overflow-hidden rounded-2xl border border-paper/15 bg-[#08090D] text-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-paper/10 px-5 py-4">
           <div className="flex items-center gap-2.5">
-            <div className="grid size-8 place-items-center rounded-lg border border-lime/30 bg-lime/10">
+            <div className="grid size-8 place-items-center rounded-lg border border-lime/40 bg-lime/10">
               <Wallet className="size-4 text-[#C8FF00]" />
             </div>
             <div>
-              <h2 className="text-[14.5px] font-semibold text-[#F4F2EC]">
+              <h2 className="text-[14.5px] font-semibold text-white">
                 {isConnected ? 'Multi-Chain Settlement Account' : '1-Click Settlement Wallet'}
               </h2>
-              <p className="font-mono text-[10.5px] text-[#8E93A4]">
+              <p className="font-mono text-[11px] text-[#E5E7EB]/80">
                 {isConnected
                   ? `${walletName ?? 'Web3 Wallet'} · Non-Custodial Signer`
                   : 'EIP-6963 Multi-Provider + WalletConnect'}
@@ -261,7 +304,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
             type="button"
             onClick={onClose}
             aria-label="Close wallet dialog"
-            className="grid size-8 place-items-center rounded-lg text-[#8E93A4] transition-colors hover:bg-white/[0.06] hover:text-white"
+            className="grid size-8 place-items-center rounded-lg text-[#E5E7EB] transition-colors hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
           >
             <X className="size-4" />
           </button>
@@ -269,35 +312,36 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
 
         <div className="max-h-[78vh] overflow-y-auto p-5">
           {(error || siweError) && (
-            <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-[12px] leading-relaxed text-red-200">
+            <div
+              role="alert"
+              className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3.5 py-2.5 text-[12px] leading-relaxed text-red-100"
+            >
               {error || siweError}
             </div>
           )}
 
           {isConnected && address ? (
             <div className="space-y-4">
-              {/* Account Card */}
-              <div className="rounded-xl border border-paper/12 bg-white/[0.02] p-4">
+              {/* Account Header */}
+              <div className="rounded-xl border border-paper/15 bg-white/[0.02] p-4">
                 <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 font-mono text-[10.5px] text-[#10B981]">
+                  <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-[#10B981]">
                     <span className="size-1.5 rounded-full bg-[#10B981]" />
                     CONNECTED
                   </span>
-                  <span className="inline-flex items-center gap-1 font-mono text-[10.5px] text-[#8E93A4]">
+                  <span className="inline-flex items-center gap-1 font-mono text-[11px] text-[#E5E7EB]">
                     <Fuel className="size-3 text-[#C8FF00]" />
-                    Gas: {liveGasLabel}
+                    Arc Gas: {liveGasLabel}
                   </span>
                 </div>
 
                 <div className="mt-2.5 flex items-center justify-between gap-3">
-                  <p className="font-mono text-[15px] font-semibold text-[#F4F2EC]">
-                    {shortHex(address, 8, 6)}
-                  </p>
+                  <p className="font-mono text-[15px] font-semibold text-white">{shortHex(address, 8, 6)}</p>
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={handleCopy}
-                      className="inline-flex items-center gap-1 rounded border border-white/[0.1] bg-white/[0.03] px-2 py-1 font-mono text-[10.5px] text-[#B8BCC9] hover:text-white"
+                      className="inline-flex items-center gap-1 rounded border border-white/15 bg-white/[0.04] px-2 py-1 font-mono text-[11px] text-[#E5E7EB] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
                     >
                       {copied ? <Check className="size-3 text-[#10B981]" /> : <Copy className="size-3" />}
                       {copied ? 'Copied' : 'Copy'}
@@ -306,34 +350,108 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                       href={explorerUrl('address', address)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 rounded border border-white/[0.1] bg-white/[0.03] px-2 py-1 font-mono text-[10.5px] text-[#B8BCC9] hover:text-white"
+                      className="inline-flex items-center gap-1 rounded border border-white/15 bg-white/[0.04] px-2 py-1 font-mono text-[11px] text-[#E5E7EB] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
                     >
                       ArcScan <ArrowUpRight className="size-3" />
                     </a>
                   </div>
                 </div>
+              </div>
 
-                <div className="mt-3.5 flex items-baseline justify-between border-t border-white/[0.07] pt-3">
-                  <span className="text-[12px] text-[#8E93A4]">Live USDC Balance (Arc 5042002)</span>
-                  <span className="font-mono text-[15px] font-semibold tabular-nums text-[#F4F2EC]">
-                    {balanceUsdc ?? '—'} <span className="text-[11px] text-[#8E93A4]">USDC</span>
-                  </span>
+              {/* Side-by-Side Arc + Base Multi-Chain Settlement Rails */}
+              <div>
+                <p className="mb-2 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-[#E5E7EB]">
+                  <Globe className="size-3.5 text-[#C8FF00]" />
+                  Active Settlement Rails (Arc + Base)
+                </p>
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  {/* Arc Testnet (5042002) */}
+                  <button
+                    type="button"
+                    disabled={switchingChain === 5042002}
+                    onClick={() => handleSwitchChain(5042002)}
+                    className={`flex flex-col justify-between rounded-xl border p-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime ${
+                      walletChainId === 5042002
+                        ? 'border-[#C8FF00]/60 bg-[#C8FF00]/[0.07]'
+                        : 'border-white/15 bg-white/[0.02] hover:border-white/30'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[13px] font-semibold text-white">Arc Testnet</span>
+                        <span className="rounded bg-[#10B981]/20 px-1.5 py-0.5 font-mono text-[9.5px] font-semibold uppercase text-[#10B981]">
+                          Live
+                        </span>
+                      </div>
+                      <p className="mt-0.5 font-mono text-[10.5px] text-[#E5E7EB]/75">
+                        5042002 · 18-dec Native USDC
+                      </p>
+                    </div>
+                    <div className="mt-3 border-t border-white/10 pt-2.5">
+                      <p className="font-mono text-[14px] font-semibold tabular-nums text-white">
+                        {balanceUsdc ?? '—'} <span className="text-[10.5px] text-[#E5E7EB]">USDC</span>
+                      </p>
+                      <p className="mt-0.5 font-mono text-[10px] text-[#C8FF00]">
+                        {switchingChain === 5042002
+                          ? 'Switching…'
+                          : walletChainId === 5042002
+                            ? '✓ Active Rail'
+                            : '1-Click Switch →'}
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Base (8453) — 6-dec ERC-20 USDC + Base Builder Codes */}
+                  <button
+                    type="button"
+                    disabled={switchingChain === 8453}
+                    onClick={() => handleSwitchChain(8453)}
+                    className={`flex flex-col justify-between rounded-xl border p-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime ${
+                      walletChainId === 8453
+                        ? 'border-[#C8FF00]/60 bg-[#C8FF00]/[0.07]'
+                        : 'border-white/15 bg-white/[0.02] hover:border-white/30'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[13px] font-semibold text-white">Base</span>
+                        <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[9.5px] font-semibold uppercase text-[#E5E7EB]">
+                          x402 + ERC-20
+                        </span>
+                      </div>
+                      <p className="mt-0.5 font-mono text-[10.5px] text-[#E5E7EB]/75">
+                        8453 · 6-dec USDC · Builder Code
+                      </p>
+                    </div>
+                    <div className="mt-3 border-t border-white/10 pt-2.5">
+                      <p className="font-mono text-[14px] font-semibold tabular-nums text-white">
+                        {baseBalanceUsdc ?? '…'} <span className="text-[10.5px] text-[#E5E7EB]">USDC</span>
+                      </p>
+                      <p className="mt-0.5 font-mono text-[10px] text-[#E5E7EB]">
+                        {switchingChain === 8453
+                          ? 'Switching…'
+                          : walletChainId === 8453
+                            ? '✓ Active Rail'
+                            : '1-Click Switch →'}
+                      </p>
+                    </div>
+                  </button>
                 </div>
               </div>
 
               {/* 1-Click SIWE HttpOnly Session */}
-              <div className="flex items-center justify-between rounded-xl border border-paper/10 bg-white/[0.015] px-4 py-3">
+              <div className="flex items-center justify-between rounded-xl border border-paper/15 bg-white/[0.02] px-4 py-3">
                 <div className="flex items-center gap-2.5">
                   <KeyRound className="size-4 text-[#C8FF00]" />
                   <div>
-                    <p className="text-[12.5px] font-medium text-[#F4F2EC]">SIWE Session Cookie</p>
-                    <p className="font-mono text-[10px] text-[#8E93A4]">
+                    <p className="text-[12.5px] font-medium text-white">SIWE Session Cookie</p>
+                    <p className="font-mono text-[10.5px] text-[#E5E7EB]/75">
                       HttpOnly · SameSite=Lax · Zero key storage
                     </p>
                   </div>
                 </div>
                 {siweState === 'verified' ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-[#10B981]/15 px-2.5 py-1 font-mono text-[10px] font-semibold text-[#10B981]">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[#10B981]/20 px-2.5 py-1 font-mono text-[10px] font-semibold text-[#10B981]">
                     <Check className="size-3" /> ACTIVE
                   </span>
                 ) : (
@@ -341,74 +459,17 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                     type="button"
                     disabled={siweState === 'signing'}
                     onClick={handleSiweSignIn}
-                    className="rounded-full bg-[#C8FF00] px-3 py-1 font-mono text-[10.5px] font-semibold text-[#07080C] hover:bg-[#d8ff4d] disabled:opacity-50"
+                    className="rounded-full bg-[#C8FF00] px-3 py-1 font-mono text-[10.5px] font-semibold text-[#07080C] hover:bg-[#d8ff4d] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                   >
                     {siweState === 'signing' ? 'Signing…' : 'Sign In'}
                   </button>
                 )}
               </div>
 
-              {/* Clean Multi-Chain Network Switcher */}
-              <div>
-                <p className="mb-2 flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#8E93A4]">
-                  <Globe className="size-3" />
-                  Settlement Networks
-                </p>
-                <div className="space-y-1.5">
-                  {MODAL_CHAINS.map((chain) => {
-                    const active = walletChainId === chain.id
-                    const busy = switchingChain === chain.id
-                    const isLive = chain.status === 'live'
-                    return (
-                      <button
-                        key={chain.id}
-                        type="button"
-                        disabled={!isLive || busy}
-                        onClick={() => isLive && handleSwitchChain(chain.id)}
-                        className={`flex w-full items-center justify-between rounded-xl border px-3.5 py-2.5 text-left transition-colors ${
-                          active
-                            ? 'border-[#C8FF00]/50 bg-[#C8FF00]/[0.07]'
-                            : isLive
-                              ? 'border-white/[0.08] bg-white/[0.015] hover:border-white/[0.18]'
-                              : 'cursor-not-allowed border-white/[0.06] bg-white/[0.01] opacity-65'
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[13px] font-medium text-[#F4F2EC]">{chain.name}</span>
-                            <span
-                              className={`rounded px-1.5 py-0.5 font-mono text-[9.5px] uppercase ${
-                                isLive
-                                  ? 'bg-[#10B981]/15 text-[#10B981]'
-                                  : 'bg-white/[0.06] text-[#8E93A4]'
-                              }`}
-                            >
-                              {isLive ? 'Live' : 'Coming Next'}
-                            </span>
-                          </div>
-                          <p className="mt-0.5 font-mono text-[10.5px] text-[#7F8596]">{chain.subtitle}</p>
-                        </div>
-                        {busy ? (
-                          <LoaderCircle className="size-4 animate-spin text-[#C8FF00]" />
-                        ) : active ? (
-                          <span className="inline-flex items-center gap-1 font-mono text-[10.5px] text-[#C8FF00]">
-                            <Check className="size-3.5" /> Active
-                          </span>
-                        ) : isLive ? (
-                          <span className="font-mono text-[10.5px] text-[#C8FF00]">1-Click Switch</span>
-                        ) : (
-                          <span className="font-mono text-[10px] text-[#7F8596]">Soon</span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
               <button
                 type="button"
                 onClick={handleDisconnect}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/[0.12] bg-white/[0.02] py-2.5 font-mono text-[11.5px] text-[#B8BCC9] transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-200"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.02] py-2.5 font-mono text-[11.5px] text-[#E5E7EB] transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
               >
                 <LogOut className="size-3.5" />
                 Disconnect &amp; Clear Session
@@ -417,19 +478,19 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
           ) : (
             <div className="space-y-4">
               {/* Plain-English Security & Guarantee Receipt */}
-              <div className="rounded-xl border border-[#C8FF00]/25 bg-[#C8FF00]/[0.05] px-3.5 py-3">
+              <div className="rounded-xl border border-[#C8FF00]/30 bg-[#C8FF00]/[0.06] px-3.5 py-3">
                 <div className="flex items-center gap-1.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[#C8FF00]">
                   <ShieldCheck className="size-3.5" />
                   Security &amp; Guarantee Receipt
                 </div>
-                <p className="mt-1 text-[11.5px] leading-relaxed text-[#E6E4DD]">
+                <p className="mt-1 text-[12px] leading-relaxed text-white">
                   Zero platform custody • Hardware-pinned verification • Automatic late-delivery rebate.
                 </p>
               </div>
 
               {extraDetected.length > 0 && (
                 <div className="space-y-1.5">
-                  <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#8E93A4]">
+                  <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#E5E7EB]">
                     Detected in Browser (EIP-6963)
                   </p>
                   {extraDetected.map((w) => (
@@ -438,7 +499,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                       type="button"
                       disabled={Boolean(connecting)}
                       onClick={() => handleConnect(w.rdns)}
-                      className="flex w-full items-center justify-between rounded-xl border border-white/[0.1] bg-white/[0.03] px-3.5 py-3 text-left transition-colors hover:border-[#C8FF00]/50"
+                      className="flex w-full items-center justify-between rounded-xl border border-white/15 bg-white/[0.03] px-3.5 py-3 text-left transition-colors hover:border-[#C8FF00]/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
                     >
                       <div className="flex items-center gap-3">
                         {w.icon ? (
@@ -448,9 +509,9 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                             W3
                           </div>
                         )}
-                        <span className="text-[13.5px] font-medium text-[#F4F2EC]">{w.name}</span>
+                        <span className="text-[13.5px] font-medium text-white">{w.name}</span>
                       </div>
-                      <span className="rounded bg-[#C8FF00] px-2.5 py-1 font-mono text-[10px] font-semibold text-[#07080C]">
+                      <span className="rounded-full bg-[#C8FF00] px-2.5 py-1 font-mono text-[10px] font-semibold text-[#07080C]">
                         1-Click Connect
                       </span>
                     </button>
@@ -459,7 +520,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
               )}
 
               <div className="space-y-1.5">
-                <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#8E93A4]">
+                <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#E5E7EB]">
                   Select Signer
                 </p>
                 {STANDARD_WALLETS.map((w) => {
@@ -469,7 +530,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                   return (
                     <div
                       key={w.rdns}
-                      className="flex items-center justify-between rounded-xl border border-white/[0.08] bg-white/[0.02] px-3.5 py-2.5 transition-colors hover:border-white/[0.18]"
+                      className="flex items-center justify-between rounded-xl border border-white/12 bg-white/[0.02] px-3.5 py-2.5 transition-colors hover:border-white/25"
                     >
                       <button
                         type="button"
@@ -479,18 +540,18 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                             ? handleConnect(detected?.rdns)
                             : window.open(w.installUrl, '_blank', 'noopener,noreferrer')
                         }
-                        className="flex flex-1 items-center gap-3 text-left"
+                        className="flex flex-1 items-center gap-3 text-left focus-visible:outline-none"
                       >
                         {detected?.icon ? (
                           <img src={detected.icon} alt="" className="size-8 rounded-lg" />
                         ) : (
-                          <div className="grid size-8 place-items-center rounded-lg border border-white/[0.1] bg-white/[0.04] font-mono text-[11px] font-semibold text-[#F4F2EC]">
+                          <div className="grid size-8 place-items-center rounded-lg border border-white/15 bg-white/[0.05] font-mono text-[11px] font-semibold text-white">
                             {w.badge}
                           </div>
                         )}
                         <div>
-                          <p className="text-[13.5px] font-medium text-[#F4F2EC]">{w.name}</p>
-                          <p className="text-[11.5px] text-[#7F8596]">{w.tagline}</p>
+                          <p className="text-[13.5px] font-medium text-white">{w.name}</p>
+                          <p className="text-[11.5px] text-[#E5E7EB]/75">{w.tagline}</p>
                         </div>
                       </button>
 
@@ -499,16 +560,16 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                           type="button"
                           disabled={Boolean(connecting)}
                           onClick={() => handleConnect(detected.rdns)}
-                          className="rounded-full bg-[#C8FF00] px-3 py-1 font-mono text-[10.5px] font-semibold text-[#07080C] hover:bg-[#d8ff4d]"
+                          className="rounded-full bg-[#C8FF00] px-3 py-1 font-mono text-[10.5px] font-semibold text-[#07080C] hover:bg-[#d8ff4d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                         >
-                          {connecting ? '…' : 'Connect'}
+                          {connecting ? <LoaderCircle className="size-3.5 animate-spin" /> : 'Connect'}
                         </button>
                       ) : canConnect ? (
                         <button
                           type="button"
                           disabled={Boolean(connecting)}
                           onClick={() => handleConnect()}
-                          className="rounded-full border border-white/[0.14] px-3 py-1 font-mono text-[10.5px] text-[#E6E4DD] hover:border-white/[0.28]"
+                          className="rounded-full border border-white/20 px-3 py-1 font-mono text-[10.5px] text-white hover:border-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
                         >
                           Connect
                         </button>
@@ -517,7 +578,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                           href={w.installUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 rounded-full border border-white/[0.1] px-2.5 py-1 font-mono text-[10.5px] text-[#8E93A4] hover:text-white"
+                          className="inline-flex items-center gap-1 rounded-full border border-white/15 px-2.5 py-1 font-mono text-[10.5px] text-[#E5E7EB] hover:text-white"
                         >
                           {isWc ? 'Mobile' : 'Install'} <ArrowUpRight className="size-3" />
                         </a>
@@ -527,10 +588,9 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                 })}
               </div>
 
-              {/* Clean Live Rail Footer */}
-              <div className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.015] px-3.5 py-2.5 font-mono text-[10.5px]">
-                <span className="text-[#8E93A4]">Arc Testnet 5042002 (Live)</span>
-                <span className="text-[#C8FF00]">Base (Coming Next)</span>
+              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-3.5 py-2.5 font-mono text-[11px]">
+                <span className="text-white">Arc 5042002 (Live)</span>
+                <span className="text-[#E5E7EB]">Base 8453 (x402 + ERC-20)</span>
               </div>
             </div>
           )}

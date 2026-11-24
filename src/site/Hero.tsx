@@ -1,14 +1,34 @@
-import { ArrowRight, ArrowUpRight } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, CheckCircle2, Lock, Zap } from 'lucide-react'
+import { trackFunnelEvent } from '@/lib/analytics'
 import { getAppUrl, getSdkUrl } from '@/lib/route'
+
+const QUICK_STEPS = [
+  {
+    step: 'STEP 01',
+    icon: Lock,
+    title: 'Lock USDC Against Objective Proof',
+    body: 'Buyer locks native USDC in DiptosEscrow.sol with clear acceptance criteria—merged PR, passing tests, or valid agent output.',
+  },
+  {
+    step: 'STEP 02',
+    icon: CheckCircle2,
+    title: 'Verify Deterministically',
+    body: 'Proof is verified against the on-chain scope via hardware-pinned attestation—zero subjective moderation or support tickets.',
+  },
+  {
+    step: 'STEP 03',
+    icon: Zap,
+    title: '1-Second Release or Auto-Rebate',
+    body: 'On-time proof pays 99.5% instantly (0.5% flat fee). Late delivery rebates the buyer mathematically in one atomic tx.',
+  },
+]
 
 export function Hero() {
   return (
-    <section id="top" className="mx-auto max-w-[1280px] px-6 pb-20 pt-16 sm:pt-24 lg:px-8">
-      <p className="rwa-hud text-lime">
-        NATIVE USDC PROTECTION // ZERO PLATFORM CUSTODY
-      </p>
+    <section id="top" className="mx-auto max-w-[1280px] px-5 pb-20 pt-14 sm:px-6 sm:pt-24 lg:px-8">
+      <p className="rwa-hud text-lime">NATIVE USDC PROTECTION // ZERO PLATFORM CUSTODY</p>
 
-      <h1 className="rwa-display mt-6 max-w-[1120px] break-normal text-[clamp(2.5rem,5.2vw,4.75rem)] leading-[1.03] text-paper">
+      <h1 className="rwa-display mt-6 max-w-[1120px] break-normal text-[clamp(2.35rem,5.2vw,4.75rem)] leading-[1.03] text-white">
         WORK VERIFIED.
         <br />
         PAID IN 1 SECOND.
@@ -16,18 +36,19 @@ export function Hero() {
         ZERO ARGUMENTS.
       </h1>
 
-      <p className="mt-6 max-w-[680px] text-[16px] leading-[1.6] text-secondary sm:text-[18px]">
-        Replace 15% platform fees and 60-day payment disputes with Guaranteed Outcome Protection. Funds release
-        automatically the second objective proof passes—or rebate the buyer mathematically if delivery is late.
+      <p className="mt-6 max-w-[680px] text-[16px] leading-[1.65] text-[#E5E7EB] sm:text-[18px]">
+        Lock USDC against objective proof—merged code, passing tests, or valid AI agent output. Release 99.5%
+        automatically on time, or rebate the buyer mathematically if delivery is late.
       </p>
 
-      {/* Twin Pill CTAs (open in new tab) */}
+      {/* Twin Pill CTAs */}
       <div className="mt-9 flex flex-wrap items-center gap-3.5">
         <a
           href={getAppUrl()}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex h-12 items-center gap-2 rounded-full bg-lime px-7 font-mono text-[12px] font-semibold uppercase tracking-[0.14em] text-ink transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] hover:bg-[#d8ff4d]"
+          onClick={() => trackFunnelEvent('landing_cta_click', { location: 'hero_primary' })}
+          className="inline-flex h-12 items-center gap-2 rounded-full bg-lime px-7 font-mono text-[12px] font-semibold uppercase tracking-[0.14em] text-ink transition-all duration-200 hover:scale-[1.02] hover:bg-[#d8ff4d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
         >
           <span>CREATE LINK IN 1 CLICK</span>
           <ArrowRight className="size-4" />
@@ -36,26 +57,41 @@ export function Hero() {
           href={getSdkUrl()}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex h-12 items-center gap-2 rounded-full border border-paper/25 px-7 font-mono text-[12px] font-medium uppercase tracking-[0.14em] text-paper transition-colors hover:border-lime hover:text-lime"
+          onClick={() => trackFunnelEvent('landing_cta_click', { location: 'hero_sdk' })}
+          className="inline-flex h-12 items-center gap-2 rounded-full border border-paper/30 px-7 font-mono text-[12px] font-medium uppercase tracking-[0.14em] text-white transition-colors hover:border-lime focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
         >
           <span>EXPLORE @DIPTOS/SDK</span>
           <ArrowUpRight className="size-4" />
         </a>
       </div>
 
-      {/* Bottom 3-Column IBM Plex Mono KPI Strip with 1px vertical dividers */}
-      <div className="mt-16 grid grid-cols-1 divide-y divide-paper/12 border-y border-paper/12 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-        <div className="py-6 sm:pr-8">
-          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">01 / PROTOCOL FEE</p>
-          <p className="mt-2 font-mono text-[22px] font-semibold tracking-[-0.02em] text-paper">0.5% FLAT FEE</p>
+      {/* 10-Second "How it works for freelancers & AI teams" 3-Step Visual Summary */}
+      <div className="mt-14 rounded-2xl border border-paper/15 bg-surface p-6 sm:p-7">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-paper/10 pb-4">
+          <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[#E5E7EB]">
+            HOW IT WORKS FOR FREELANCERS &amp; AI TEAMS (10-SECOND SUMMARY)
+          </p>
+          <span className="font-mono text-[11px] text-[#E5E7EB]">0.5% FLAT FEE · &lt;1.0S FINALITY · ZERO CUSTODY</span>
         </div>
-        <div className="py-6 sm:px-8">
-          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">02 / DETERMINISTIC</p>
-          <p className="mt-2 font-mono text-[22px] font-semibold tracking-[-0.02em] text-paper">&lt;1.0S ARC FINALITY</p>
-        </div>
-        <div className="py-6 sm:pl-8">
-          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-lime">03 / ATOMIC DVP</p>
-          <p className="mt-2 font-mono text-[22px] font-semibold tracking-[-0.02em] text-paper">ZERO CUSTODY</p>
+
+        <div className="mt-5 grid gap-6 md:grid-cols-3">
+          {QUICK_STEPS.map((item) => {
+            const Icon = item.icon
+            return (
+              <div key={item.step} className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="grid size-7 place-items-center rounded-lg border border-lime/40 bg-lime/10 text-lime">
+                    <Icon className="size-3.5" />
+                  </span>
+                  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-[#E5E7EB]">
+                    {item.step}
+                  </span>
+                </div>
+                <h2 className="mt-3 text-[15.5px] font-semibold text-white">{item.title}</h2>
+                <p className="mt-1.5 text-[13.5px] leading-relaxed text-[#E5E7EB]/85">{item.body}</p>
+              </div>
+            )
+          })}
         </div>
       </div>
     </section>
