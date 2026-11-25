@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-export type RouteView = 'gateway' | 'app' | 'pay' | 'sdk'
+export type RouteView = 'gateway' | 'app' | 'pay' | 'sdk' | 'agent'
 
 export interface AppRoute {
   view: RouteView
@@ -25,6 +25,10 @@ export function isSdkSubdomain(): boolean {
   return getHost() === 'sdk.diptos.xyz'
 }
 
+export function isAgentSubdomain(): boolean {
+  return getHost() === 'agent.diptos.xyz'
+}
+
 export function getApexUrl(): string {
   return isProdDiptosDomain() ? 'https://diptos.xyz' : '/'
 }
@@ -39,6 +43,10 @@ export function getAppUrl(subPath = ''): string {
 
 export function getSdkUrl(): string {
   return isProdDiptosDomain() ? 'https://sdk.diptos.xyz' : '/sdk'
+}
+
+export function getAgentUrl(): string {
+  return isProdDiptosDomain() ? 'https://agent.diptos.xyz' : '/agent'
 }
 
 export function getPayUrl(escrowPathOrId: string): string {
@@ -64,6 +72,9 @@ function parseRoute(): AppRoute {
   }
 
   // Hostname-based subdomain routing in production
+  if (isAgentSubdomain()) {
+    return { view: 'agent', escrowId: null }
+  }
   if (isSdkSubdomain()) {
     return { view: 'sdk', escrowId: null }
   }
@@ -72,6 +83,9 @@ function parseRoute(): AppRoute {
   }
 
   // Path-based fallbacks for localhost & *.vercel.app preview deployments
+  if (pathname === '/agent' || pathname.startsWith('/agent/') || hash.startsWith('#/agent')) {
+    return { view: 'agent', escrowId: null }
+  }
   if (pathname === '/sdk' || pathname.startsWith('/sdk/') || hash.startsWith('#/sdk')) {
     return { view: 'sdk', escrowId: null }
   }

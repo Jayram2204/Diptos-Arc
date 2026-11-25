@@ -13,6 +13,7 @@
     "format": "oxfmt"
   },
   "dependencies": {
+    "@circle-fin/onramp-kit": "^1.0.10",
     "@coinbase/wallet-sdk": "^4.4.0",
     "@diptos/sdk": "workspace:*",
     "@hono/node-server": "^1.14.1",

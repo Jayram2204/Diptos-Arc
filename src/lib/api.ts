@@ -151,6 +151,52 @@ export async function fetchGeminiRisk(): Promise<GeminiRiskSnapshot> {
   return parseJson<GeminiRiskSnapshot>(res)
 }
 
+export interface DeterministicCheckItem {
+  label: string
+  passed: boolean
+  detail: string
+}
+
+export type DeliverableProofType = 'github_pr' | 'artifact_hash' | 'url_digest'
+
+export interface DeterministicVerifyResponse {
+  approved: boolean
+  proofType: DeliverableProofType
+  escrowId: string
+  escrowIdBytes32: `0x${string}`
+  milestoneIndex: number
+  amountUsdc: number
+  proofHash: `0x${string}`
+  deliverableHash: `0x${string}`
+  sha256?: string
+  nonce: number
+  eip712Signature?: `0x${string}`
+  verifier?: string
+  nonCustodial: boolean
+  summary: string
+  errorRecovery?: string
+  checks: DeterministicCheckItem[]
+  verifiedAt: string
+}
+
+export async function verifyDeliverableDeterministically(payload: {
+  escrowId: string
+  proofType: DeliverableProofType
+  payload: Record<string, unknown>
+  milestoneIndex?: number
+}): Promise<DeterministicVerifyResponse> {
+  const res = await fetch('/api/verify/deliverable', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const data = (await res.json().catch(() => ({}))) as DeterministicVerifyResponse & { error?: string }
+  if (!res.ok && typeof data.approved !== 'boolean') {
+    throw new Error(data.error || `Verification failed (${res.status})`)
+  }
+  return data
+}
+
 export async function verifyWithGrok(payload: {
   escrowId: string
   deliverableUrl?: string

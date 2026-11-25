@@ -27,12 +27,13 @@ import {
   X,
 } from 'lucide-react'
 import { encodePacked, isAddress, keccak256, parseEther } from 'viem'
+import { DiptosVerifiedBadge } from '@/components/DiptosVerifiedBadge'
 import { ESCROW_CONTRACT_ADDRESS, REGISTRY_CONTRACT_ADDRESS } from '@/config/protocol'
 import { trackFunnelEvent } from '@/lib/analytics'
 import { explorerUrl, fmtAmount, shortHex } from '@/lib/chain'
 import { useDynamicCookies } from '@/lib/cookies'
 import { useArcPulse, useEscrows } from '@/lib/hooks'
-import { getApexUrl, getPayUrl, getSdkUrl, navigate } from '@/lib/route'
+import { getAgentUrl, getApexUrl, getPayUrl, getSdkUrl, navigate } from '@/lib/route'
 import { diptos, type EscrowMode, type EscrowRecord } from '@/lib/sdk'
 import { useWallet, WalletProvider } from '@/app/wallet'
 import { WalletModal } from './WalletModal'
@@ -476,6 +477,18 @@ function EscrowEngineInner() {
 
         <div className="space-y-2 border-t border-white/10 p-4 text-[12px] text-[#E5E7EB]">
           <a
+            href={getAgentUrl()}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between rounded-md px-2 py-1.5 text-[#C8FF00] transition-colors hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
+          >
+            <span className="inline-flex items-center gap-2">
+              <Bot className="size-3.5" />
+              AI Agents (Dipto)
+            </span>
+            <ArrowUpRight className="size-3" />
+          </a>
+          <a
             href={getSdkUrl()}
             target="_blank"
             rel="noopener noreferrer"
@@ -788,7 +801,7 @@ function EscrowEngineInner() {
                                 {fmtAmount(esc.amountUsdc)} USDC · λ {esc.tecdLambda.toFixed(2)}
                               </p>
                             </div>
-                            <StatusBadge status={esc.status} />
+                            {isSettled ? <DiptosVerifiedBadge size="xs" /> : <StatusBadge status={esc.status} />}
                           </div>
 
                           <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3 font-mono text-[11px]">
@@ -897,6 +910,7 @@ function EscrowEngineInner() {
                                       <span className="font-medium text-white">
                                         {esc.title || `Escrow ${shortHex(esc.id, 6, 4)}`}
                                       </span>
+                                      {isSettled && <DiptosVerifiedBadge size="xs" />}
                                       {esc.mode === 'agent' && (
                                         <span className="inline-flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5 font-mono text-[9.5px] text-[#E5E7EB]">
                                           <Bot className="size-2.5" /> Agent

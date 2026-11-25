@@ -261,16 +261,18 @@ export function Waterfall() {
           </div>
 
           {(() => {
-            const displayFee = Math.round(result.protocolFeeUsdc * 100) / 100
-            const displayPayee = Math.round(result.payeePayoutUsdc * 100) / 100
-            const displayRebate =
+            const principalCents = Math.max(0, Math.round(amountUsdc * 100))
+            const feeCents = Math.min(principalCents, Math.max(0, Math.round(result.protocolFeeUsdc * 100)))
+            const rawPayeeCents = Math.max(0, Math.round(result.payeePayoutUsdc * 100))
+            const payeeCents =
               delayHours === 0
-                ? 0
-                : Math.max(0, Math.round((amountUsdc - displayPayee - displayFee) * 100) / 100)
-            const exactPayee =
-              delayHours === 0
-                ? Math.max(0, Math.round((amountUsdc - displayFee) * 100) / 100)
-                : displayPayee
+                ? principalCents - feeCents
+                : Math.min(principalCents - feeCents, rawPayeeCents)
+            const rebateCents = delayHours === 0 ? 0 : principalCents - payeeCents - feeCents
+
+            const exactPayee = payeeCents / 100
+            const displayRebate = rebateCents / 100
+            const displayFee = feeCents / 100
 
             return (
               <div className="mt-6 grid grid-cols-3 gap-4 border-t border-paper/10 pt-5 font-mono">

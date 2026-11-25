@@ -9,6 +9,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@diptos/contracts': path.resolve(__dirname, './packages/contracts/deployments.ts'),
+      '@diptos/agent-guard': path.resolve(__dirname, './packages/agent-guard/src/index.ts'),
       '@diptos/app': path.resolve(__dirname, './apps/app/src'),
       '@diptos/docs': path.resolve(__dirname, './apps/docs/src'),
     },

@@ -6,7 +6,7 @@ import { InteractiveFlywheelEmblem } from '@/components/KineticFlywheel'
 import { PulseDot } from '@/components/ui'
 import { trackFunnelEvent } from '@/lib/analytics'
 import { shortHex } from '@/lib/chain'
-import { getApexUrl, getAppUrl, getSdkUrl, navigate } from '@/lib/route'
+import { getAgentUrl, getApexUrl, getAppUrl, getSdkUrl, navigate } from '@/lib/route'
 
 const NAV_LINKS = [
   { label: 'How It Works', href: '#how-it-works' },
@@ -105,8 +105,17 @@ export function Header() {
             ))}
           </nav>
 
-          {/* Right: SDK Docs + Start in 1 Click */}
+          {/* Right: AI Agents + SDK Docs + Start in 1 Click */}
           <div className="flex items-center gap-2.5">
+            <a
+              href={getAgentUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setMobileOpen(false)}
+              className="hidden h-10 items-center gap-1.5 rounded-full border border-lime/35 bg-lime/[0.06] px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-lime transition-colors hover:border-lime hover:bg-lime/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime md:inline-flex"
+            >
+              AI Agents <ArrowUpRight className="size-3.5" />
+            </a>
             <a
               href={getSdkUrl()}
               target="_blank"

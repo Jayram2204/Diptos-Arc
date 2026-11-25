@@ -1,0 +1,29 @@
+{
+  "name": "@diptos/agent-guard",
+  "version": "1.0.0",
+  "description": "Dipto — Post-quote, proof-gated USDC settlement & x402 policy harness for autonomous AI agents on Arc & Base.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --import tsx test/agentGuard.test.ts"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

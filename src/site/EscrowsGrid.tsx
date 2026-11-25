@@ -8,19 +8,29 @@ import {
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react'
+import { DiptosVerifiedBadge } from '@/components/DiptosVerifiedBadge'
 import { PulseDot } from '@/components/ui'
 import { fmtAmount } from '@/lib/chain'
 import { useArcPulse, useEscrows } from '@/lib/hooks'
-import { getAppUrl, getPayUrl, getSdkUrl } from '@/lib/route'
+import { getAgentUrl, getAppUrl, getPayUrl, getSdkUrl } from '@/lib/route'
 
 export function EscrowsGrid() {
   const { escrows, loading, refresh } = useEscrows(5000)
   const pulse = useArcPulse(6000)
   const [showX402Headers, setShowX402Headers] = useState(false)
 
-  // Reverse paginated order so the featured institutional escrows lead the top 3 cards
+  // Sort dynamically by newest timestamp descending (tie-broken by ID) before slicing latest 3
   const recentThree = useMemo(() => {
-    return [...escrows].reverse().slice(0, 3)
+    const toEpoch = (iso?: string) => {
+      const t = iso ? Date.parse(iso) : NaN
+      return Number.isFinite(t) ? t : 0
+    }
+    return [...escrows]
+      .sort((a, b) => {
+        const diff = toEpoch(b.createdAt) - toEpoch(a.createdAt)
+        return diff !== 0 ? diff : b.id.localeCompare(a.id)
+      })
+      .slice(0, 3)
   }, [escrows])
 
   const settledCount = useMemo(
@@ -140,14 +150,24 @@ X-Proof-Gate: deterministic-eip712`}</code>
               {showX402Headers ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
               {showX402Headers ? 'Hide x402 Headers' : 'View x402 Headers'}
             </button>
-            <a
-              href={getSdkUrl()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-lime hover:underline"
-            >
-              SDK Docs <ArrowRight className="size-3.5" />
-            </a>
+            <div className="flex items-center gap-3">
+              <a
+                href={getAgentUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-lime hover:underline"
+              >
+                agent.diptos.xyz <ArrowRight className="size-3.5" />
+              </a>
+              <a
+                href={getSdkUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[#E5E7EB] hover:text-lime hover:underline"
+              >
+                SDK Docs <ArrowRight className="size-3.5" />
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -200,7 +220,7 @@ X-Proof-Gate: deterministic-eip712`}</code>
                       <p className="truncate text-[13.5px] font-semibold text-white group-hover:text-lime">
                         {escrow.title || 'Protected Escrow'}
                       </p>
-                      <div className="mt-0.5 flex items-center gap-2 font-mono text-[11px] text-[#E5E7EB]/80">
+                      <div className="mt-1 flex flex-wrap items-center gap-2 font-mono text-[11px] text-[#E5E7EB]/80">
                         <span
                           className={`inline-block size-1.5 rounded-full ${
                             isSettled ? 'bg-emerald' : 'bg-lime'
@@ -208,7 +228,7 @@ X-Proof-Gate: deterministic-eip712`}</code>
                         />
                         <span>{fmtAmount(escrow.amountUsdc)} USDC</span>
                         <span>·</span>
-                        <span>{escrow.status}</span>
+                        {isSettled ? <DiptosVerifiedBadge size="xs" /> : <span>{escrow.status}</span>}
                       </div>
                     </div>
                   </div>

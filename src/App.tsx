@@ -6,6 +6,7 @@ import { useAppRoute } from '@/lib/route'
 const EscrowApp = lazy(() => import('@/app/EscrowApp').then((m) => ({ default: m.EscrowApp })))
 const PayCheckout = lazy(() => import('@/app/PayCheckout').then((m) => ({ default: m.PayCheckout })))
 const SdkPortal = lazy(() => import('@/site/SdkPortal').then((m) => ({ default: m.SdkPortal })))
+const AgentPortal = lazy(() => import('@/site/AgentPortal').then((m) => ({ default: m.AgentPortal })))
 
 /**
  * Hostname + path-fallback routing:
@@ -24,6 +25,8 @@ export default function App() {
       document.title = 'Diptos App — Programmable Escrow Links on Arc'
     } else if (route.view === 'sdk') {
       document.title = '@diptos/sdk — Developer Portal & Live Console'
+    } else if (route.view === 'agent') {
+      document.title = 'Dipto — Proof-Gated AI Agent USDC Budgets | agent.diptos.xyz'
     } else {
       document.title = 'Diptos — Programmable Escrow & AI Settlement on Arc'
     }
@@ -46,6 +49,17 @@ export default function App() {
       <>
         <Suspense fallback={<div className="min-h-screen bg-black" />}>
           <EscrowApp />
+        </Suspense>
+        <CookieConsentPill />
+      </>
+    )
+  }
+
+  if (route.view === 'agent') {
+    return (
+      <>
+        <Suspense fallback={<div className="min-h-screen bg-black" />}>
+          <AgentPortal />
         </Suspense>
         <CookieConsentPill />
       </>

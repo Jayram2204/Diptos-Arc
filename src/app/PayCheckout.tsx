@@ -19,13 +19,20 @@ import {
   Wallet,
 } from 'lucide-react'
 import { type Hex } from 'viem'
+import { CircleFundingPanel } from '@/components/CircleFundingPanel'
+import { DiptosVerifiedBadge, VerifiedSettlementReceiptCard } from '@/components/DiptosVerifiedBadge'
 import { Wordmark } from '@/components/Logo'
 import { Button, CopyButton, Field, inputCls, PulseDot } from '@/components/ui'
 import { ESCROW_CONTRACT_ADDRESS } from '@/config/protocol'
-import { fetchVoiceBriefAudio } from '@/lib/api'
+import {
+  type DeliverableProofType,
+  type DeterministicVerifyResponse,
+  fetchVoiceBriefAudio,
+  verifyDeliverableDeterministically,
+} from '@/lib/api'
 import { explorerUrl, fmtAmount, shortHex } from '@/lib/chain'
 import { useProtocolEvents } from '@/lib/hooks'
-import { getApexUrl, getAppUrl, getSdkUrl, navigate } from '@/lib/route'
+import { getAgentUrl, getApexUrl, getAppUrl, getSdkUrl, navigate } from '@/lib/route'
 import { diptos, type EscrowRecord, type GrokMilestoneReceipt } from '@/lib/sdk'
 import { useWallet, WalletProvider } from './wallet'
 
@@ -62,11 +69,12 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioUrlRef = useRef<string | null>(null)
 
-  // Grok Verifier state
-  const [deliverableUrl, setDeliverableUrl] = useState('https://github.com/Jayram2204/Diptos-Arc')
-  const [deliverableNotes, setDeliverableNotes] = useState(
-    'Smart contracts deployed & verified on Arc Testnet (5042002) with passing Foundry test suite.',
-  )
+  // Deterministic Deliverable Verifier state (POST /api/verify/deliverable)
+  const [proofType, setProofType] = useState<DeliverableProofType>('github_pr')
+  const [deliverableUrl, setDeliverableUrl] = useState('https://github.com/Jayram2204/Diptos-Arc/pull/1')
+  const [artifactHashInput, setArtifactHashInput] = useState('')
+  const [expectedHashInput, setExpectedHashInput] = useState('')
+  const [detResult, setDetResult] = useState<DeterministicVerifyResponse | null>(null)
   const [verifying, setVerifying] = useState(false)
   const [verifyError, setVerifyError] = useState<string | null>(null)
 
@@ -228,25 +236,49 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
     }
   }
 
-  const handleVerifyGrok = async (e: FormEvent) => {
+  const handleVerifyDeliverable = async (e: FormEvent) => {
     e.preventDefault()
     if (!escrow || escrow.status === 'settled') return
     setVerifyError(null)
-    const effectiveUrl = deliverableUrl.trim() || 'https://github.com/Jayram2204/Diptos-Arc'
-    const effectiveNotes =
-      deliverableNotes.trim() ||
-      `Completed deliverable for "${escrow.title}" satisfying scope: ${escrow.scope}`
     setVerifying(true)
     try {
-      const receipt = await diptos.verifyDeliverableWithGrok({
+      const payload: Record<string, unknown> =
+        proofType === 'github_pr'
+          ? { prUrl: deliverableUrl.trim(), expectedCommitSha: expectedHashInput.trim() || undefined }
+          : proofType === 'artifact_hash'
+            ? {
+                sha256: artifactHashInput.trim(),
+                expectedSha256: expectedHashInput.trim() || undefined,
+              }
+            : {
+                url: deliverableUrl.trim(),
+                expectedSha256: expectedHashInput.trim() || undefined,
+              }
+
+      const res = await verifyDeliverableDeterministically({
         escrowId: escrow.escrowIdBytes32,
-        title: escrow.title,
-        scope: escrow.scope,
-        amountUsdc: escrow.amountUsdc,
-        deliverableUrl: effectiveUrl,
-        notes: effectiveNotes,
+        proofType,
+        payload,
       })
-      setGrokReceipt(receipt)
+      setDetResult(res)
+      if (res.approved && res.eip712Signature) {
+        setGrokReceipt({
+          approved: true,
+          confidence: 1,
+          summary: res.summary,
+          auditReasoning: res.summary,
+          milestoneIndex: res.milestoneIndex,
+          nonce: res.nonce,
+          deliverableHash: res.proofHash,
+          evidenceHash: res.proofHash,
+          eip712Signature: res.eip712Signature,
+          signature: res.eip712Signature,
+          oracleSigner: res.verifier,
+          auditedAt: res.verifiedAt,
+        })
+      } else if (!res.approved) {
+        setVerifyError(res.errorRecovery || res.summary)
+      }
     } catch (err) {
       setVerifyError((err as Error).message)
     } finally {
@@ -304,6 +336,14 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
           </div>
 
           <div className="flex items-center gap-2.5">
+            <a
+              href={getAgentUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden h-9 items-center gap-1 rounded-full border border-lime/35 bg-lime/[0.06] px-3.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-lime transition-colors hover:border-lime sm:inline-flex"
+            >
+              Agents <ArrowUpRight className="size-3" />
+            </a>
             <a
               href={getSdkUrl()}
               target="_blank"
@@ -374,17 +414,19 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                           </>
                         )}
                       </span>
-                      <span
-                        className={`rounded-full border px-3 py-1 font-mono text-[10px] font-semibold uppercase ${
-                          isRefunded
-                            ? 'border-crimson/35 bg-crimson/10 text-crimson'
-                            : isSettled
-                              ? 'border-emerald/40 bg-emerald/15 text-emerald'
+                      {isSettled ? (
+                        <DiptosVerifiedBadge size="sm" />
+                      ) : (
+                        <span
+                          className={`rounded-full border px-3 py-1 font-mono text-[10px] font-semibold uppercase ${
+                            isRefunded
+                              ? 'border-crimson/35 bg-crimson/10 text-crimson'
                               : 'border-lime/35 bg-lime/10 text-lime'
-                        }`}
-                      >
-                        {isRefunded ? 'REFUNDED ON ARC' : isSettled ? 'SETTLED ON ARC' : 'FUNDED ON ARC'}
-                      </span>
+                          }`}
+                        >
+                          {isRefunded ? 'REFUNDED ON ARC' : 'FUNDED ON ARC'}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2 font-mono text-[11px] text-secondary">
@@ -452,6 +494,28 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                     </div>
                   </div>
 
+                  {!isSettled && !isRefunded && (
+                    <CircleFundingPanel
+                      escrowId={escrow.id}
+                      amountUsdc={escrow.amountUsdc}
+                      connectedAddress={address}
+                      balanceUsdc={balanceUsdc}
+                      onConnectWallet={() => void connect('metamask')}
+                    />
+                  )}
+
+                  {isSettled && (
+                    <VerifiedSettlementReceiptCard
+                      escrowId={escrow.id}
+                      escrowIdBytes32={escrow.escrowIdBytes32}
+                      title={escrow.title}
+                      amountUsdc={escrow.amountUsdc}
+                      proofHash={activeAudit?.deliverableHash ?? detResult?.proofHash}
+                      txHash={escrow.settleTxHash ?? txSuccess?.hash}
+                      shareUrl={shareUrl}
+                    />
+                  )}
+
                   {/* ElevenLabs Voice Brief Player */}
                   <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-paper/10 bg-black/45 px-4 py-3">
                     <div>
@@ -508,17 +572,17 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                             className="h-11 flex-1 font-bold"
                           >
                             <CheckCircle2 className="size-4" />
-                            Settle On-Chain with Grok Signature
+                            Settle On-Chain with EIP-712 Proof
                           </Button>
                         ) : (
                           <Button
                             variant="primary"
                             loading={verifying}
-                            onClick={(e) => void handleVerifyGrok(e as unknown as FormEvent)}
+                            onClick={(e) => void handleVerifyDeliverable(e as unknown as FormEvent)}
                             className="h-11 flex-1 font-bold"
                           >
                             <Sparkles className="size-4" />
-                            1. Verify with Grok AI to Unlock Settlement
+                            1. Run Deterministic Proof to Unlock Settlement
                           </Button>
                         )}
 
@@ -592,39 +656,144 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
               <div className="rwa-depth-card rounded-2xl p-6">
                 <div className="flex items-center justify-between gap-2 border-b border-paper/10 pb-4">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="size-4 text-lime" />
-                    <h2 className="text-[16px] font-semibold text-paper">Grok AI Deliverable Verifier</h2>
+                    <ShieldCheck className="size-4 text-lime" />
+                    <h2 className="text-[16px] font-semibold text-paper">Deterministic Verification Gate</h2>
                   </div>
-                  <span className="font-mono text-[10px] text-secondary">POST /api/verify/grok</span>
+                  <span className="font-mono text-[10px] text-secondary">POST /api/verify/deliverable</span>
                 </div>
 
-                <form onSubmit={handleVerifyGrok} className="mt-4 space-y-3.5">
-                  <Field label="GitHub PR or Live Demo URL">
-                    <input
-                      type="url"
-                      value={deliverableUrl}
-                      onChange={(e) => setDeliverableUrl(e.target.value)}
+                {/* Live 3-Stage Verification Gate Indicator */}
+                <div className="mt-4 grid grid-cols-3 gap-2 font-mono text-[10px]">
+                  <div
+                    className={`rounded-lg border px-2.5 py-2 ${
+                      !verifying && !activeAudit?.approved && !isSettled
+                        ? 'border-lime/50 bg-lime/10 text-lime'
+                        : 'border-paper/10 bg-black/40 text-secondary'
+                    }`}
+                  >
+                    <p className="font-semibold">1. Pending</p>
+                    <p className="mt-0.5 text-[9.5px] opacity-80">Submit proof</p>
+                  </div>
+                  <div
+                    className={`rounded-lg border px-2.5 py-2 ${
+                      verifying
+                        ? 'border-lime/60 bg-lime/15 text-lime'
+                        : activeAudit?.approved && !isSettled
+                          ? 'border-emerald/45 bg-emerald/10 text-emerald'
+                          : 'border-paper/10 bg-black/40 text-secondary'
+                    }`}
+                  >
+                    <p className="font-semibold">{verifying ? '2. Checking…' : '2. Verified'}</p>
+                    <p className="mt-0.5 text-[9.5px] opacity-80">EIP-712 proof</p>
+                  </div>
+                  <div
+                    className={`rounded-lg border px-2.5 py-2 ${
+                      isSettled
+                        ? 'border-lime/60 bg-lime/15 text-lime'
+                        : 'border-paper/10 bg-black/40 text-secondary'
+                    }`}
+                  >
+                    <p className="font-semibold">3. Verified ✓</p>
+                    <p className="mt-0.5 text-[9.5px] opacity-80">USDC Released</p>
+                  </div>
+                </div>
+
+                {/* Proof Type Selector */}
+                <div className="mt-4 grid grid-cols-3 gap-1.5 rounded-xl border border-paper/10 bg-black/50 p-1 font-mono text-[10.5px]">
+                  {(
+                    [
+                      ['github_pr', 'GitHub PR'],
+                      ['artifact_hash', 'Artifact SHA-256'],
+                      ['url_digest', 'URL Digest'],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
                       disabled={isSettled}
-                      placeholder="https://github.com/org/repo/pull/42"
+                      onClick={() => {
+                        setProofType(key)
+                        setVerifyError(null)
+                      }}
+                      className={`rounded-lg px-2 py-1.5 font-semibold transition-colors ${
+                        proofType === key
+                          ? 'bg-lime text-ink'
+                          : 'text-secondary hover:text-paper disabled:opacity-50'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <form onSubmit={handleVerifyDeliverable} className="mt-4 space-y-3.5">
+                  {proofType === 'artifact_hash' ? (
+                    <Field label="Deliverable SHA-256 Digest (64 hex chars)">
+                      <input
+                        type="text"
+                        value={artifactHashInput}
+                        onChange={(e) => setArtifactHashInput(e.target.value)}
+                        disabled={isSettled}
+                        placeholder="0x… or 64-char SHA-256 hex digest"
+                        className={`${inputCls} font-mono text-[12px]`}
+                      />
+                    </Field>
+                  ) : (
+                    <Field label={proofType === 'github_pr' ? 'Merged GitHub PR URL' : 'Live Deliverable URL'}>
+                      <input
+                        type="url"
+                        value={deliverableUrl}
+                        onChange={(e) => setDeliverableUrl(e.target.value)}
+                        disabled={isSettled}
+                        placeholder={
+                          proofType === 'github_pr'
+                            ? 'https://github.com/org/repo/pull/42'
+                            : 'https://your-deliverable.example.com'
+                        }
+                        className={`${inputCls} font-mono text-[12px]`}
+                      />
+                    </Field>
+                  )}
+
+                  <Field
+                    label={
+                      proofType === 'github_pr'
+                        ? 'Expected Commit SHA (Optional)'
+                        : 'Expected SHA-256 Hash (Optional)'
+                    }
+                  >
+                    <input
+                      type="text"
+                      value={expectedHashInput}
+                      onChange={(e) => setExpectedHashInput(e.target.value)}
+                      disabled={isSettled}
+                      placeholder={
+                        proofType === 'github_pr'
+                          ? 'Optional commit SHA prefix'
+                          : 'Optional expected SHA-256 to enforce exact match'
+                      }
                       className={`${inputCls} font-mono text-[12px]`}
                     />
                   </Field>
 
-                  <Field label="Deliverable Notes / Proof">
-                    <textarea
-                      rows={2}
-                      value={deliverableNotes}
-                      onChange={(e) => setDeliverableNotes(e.target.value)}
-                      disabled={isSettled}
-                      placeholder="Summarize completed acceptance criteria, test results, or deployment hash..."
-                      className="w-full resize-none rounded-xl border border-paper/12 bg-elevated px-3.5 py-2 text-[13px] text-paper outline-none transition-colors placeholder:text-secondary/45 focus:border-lime disabled:opacity-50"
-                    />
-                  </Field>
+                  {detResult && detResult.checks.length > 0 && (
+                    <ul className="space-y-1.5 rounded-xl border border-paper/10 bg-black/45 p-3 font-mono text-[11px]">
+                      {detResult.checks.map((ch) => (
+                        <li key={ch.label} className="flex items-start justify-between gap-2">
+                          <span className={ch.passed ? 'text-emerald' : 'text-crimson'}>
+                            {ch.passed ? '✓' : '✕'} {ch.label}
+                          </span>
+                          <span className="text-right text-secondary">{ch.detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
 
                   {verifyError && (
-                    <p className="rounded-xl border border-crimson/35 bg-crimson/10 px-3 py-2 font-mono text-[11.5px] text-crimson">
-                      {verifyError}
-                    </p>
+                    <div className="rounded-xl border border-crimson/35 bg-crimson/10 px-3 py-2.5 font-mono text-[11.5px] text-crimson">
+                      <p className="font-semibold">Verification Blocked</p>
+                      <p className="mt-0.5 text-[11px] opacity-90">{verifyError}</p>
+                    </div>
                   )}
 
                   <Button
@@ -634,8 +803,12 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                     disabled={isSettled}
                     className="w-full font-bold"
                   >
-                    <Sparkles className="size-3.5" />
-                    {isSettled ? 'Escrow Already Settled On-Chain' : 'Verify Deliverable with Grok'}
+                    <ShieldCheck className="size-3.5" />
+                    {isSettled
+                      ? 'DIPTOS VERIFIED ✓ · USDC Released'
+                      : verifying
+                        ? 'Deterministic Check Running…'
+                        : 'Run Deterministic Verification'}
                   </Button>
                 </form>
 

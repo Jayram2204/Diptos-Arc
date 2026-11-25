@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {DiptosEscrow, IERC1271} from "../src/DiptosEscrow.sol";
+import {DiptosEscrow, IERC1271, IDiptosVerifier} from "../src/DiptosEscrow.sol";
 import {DiptosRegistry} from "../src/DiptosRegistry.sol";
 
 interface Vm {
@@ -11,6 +11,7 @@ interface Vm {
     function prank(address) external;
     function warp(uint256) external;
     function expectRevert(bytes4) external;
+    function expectEmit(bool, bool, bool, bool) external;
 }
 
 /// @notice Malicious payee contract attempting reentrancy on settlement & faucet callbacks.
@@ -51,6 +52,25 @@ contract MockERC1271Signer is IERC1271 {
 
     function isValidSignature(bytes32 hash, bytes calldata) external view returns (bytes4) {
         return hash == approvedDigest ? bytes4(0x1626ba7e) : bytes4(0xffffffff);
+    }
+}
+
+/// @notice Mock Phase 2 hardware-pinned TEE verifier implementing IDiptosVerifier.
+contract MockTEEVerifier is IDiptosVerifier {
+    bytes32 public expectedProofHash;
+
+    function setExpectedProof(bytes32 proofHash) external {
+        expectedProofHash = proofHash;
+    }
+
+    function verifyRelease(
+        bytes32,
+        uint256,
+        bytes32 deliverableHash,
+        uint256,
+        bytes calldata proof
+    ) external view returns (bool) {
+        return deliverableHash == expectedProofHash && keccak256(proof) == keccak256("tee-pcr-attestation");
     }
 }
 
@@ -264,5 +284,103 @@ contract DiptosSecurityTest {
         require(payeeAmt + buyerRebate + protocolFee == amount, "Zero-dust accounting violated");
         require(decayBps <= 10_000, "decayBps must be <= 10000");
         require(protocolFee <= (amount * escrow.MAX_PROTOCOL_FEE_BPS()) / 10_000 + 1, "fee cap exceeded");
+        if (delay == 0 || lambda == 0) {
+            require(buyerRebate == 0, "on-time settlement must have 0 rebate");
+        }
+    }
+
+    /// @notice Verifies Phase 2 modular TEE verifier hook + DiptosVerified event emission.
+    function testPluggableTEEVerifierEmitsDiptosVerified() public {
+        MockTEEVerifier tee = new MockTEEVerifier();
+        escrow.setCustomVerifier(address(tee));
+
+        bytes32 id = keccak256("tee-verified-escrow");
+        bytes32 proofHash = keccak256("sha256-artifact-proof");
+        tee.setExpectedProof(proofHash);
+
+        vm.prank(payer);
+        escrow.createEscrowLink{value: 2 ether}(id, payee, block.timestamp + 1 days, 4000, true, "TEE", "PCR-Pinned");
+
+        vm.expectEmit(true, true, true, true);
+        emit DiptosEscrow.DiptosVerified(id, proofHash, address(tee), block.timestamp);
+        escrow.releaseWithExpiry(id, 0, proofHash, 0, block.timestamp + 1 hours, bytes("tee-pcr-attestation"));
+
+        require(escrow.totalLockedPrincipal() == 0, "locked principal must be 0");
+        require(address(escrow).balance >= escrow.totalLockedPrincipal(), "solvency invariant broken");
+    }
+
+    /// @notice Verifies unauthorized callers cannot invoke admin, registry, or party-only functions.
+    function testUnauthorizedCallsRevert() public {
+        bytes32 id = keccak256("unauth-escrow");
+        vm.prank(payer);
+        escrow.createEscrowLink{value: 1 ether}(id, payee, block.timestamp + 1 days, 3000, false, "Auth", "Guard");
+
+        vm.prank(attacker);
+        vm.expectRevert(DiptosEscrow.Unauthorized.selector);
+        escrow.setOracleSigner(attacker);
+
+        vm.prank(attacker);
+        vm.expectRevert(DiptosEscrow.Unauthorized.selector);
+        escrow.setCustomVerifier(attacker);
+
+        vm.prank(attacker);
+        vm.expectRevert(DiptosEscrow.Unauthorized.selector);
+        escrow.releaseByPayer(id);
+
+        vm.prank(attacker);
+        vm.expectRevert(DiptosEscrow.Unauthorized.selector);
+        escrow.mutualCancel(id);
+
+        vm.prank(attacker);
+        vm.expectRevert(DiptosRegistry.Unauthorized.selector);
+        registry.recordCommitment(keccak256("forged"), payer, payee, 1 ether, block.timestamp + 1 days);
+    }
+
+    /// @notice Verifies claimTimeout() alias works identically to claimTimeoutRefund() and maintains solvency.
+    function testClaimTimeoutAliasPermissionless() public {
+        bytes32 id = keccak256("claim-timeout-alias");
+        uint256 deadline = block.timestamp + 6 hours;
+        vm.prank(payer);
+        escrow.createEscrowLink{value: 1.5 ether}(id, payee, deadline, 2500, false, "Alias", "Safety hatch");
+
+        uint256 balBefore = payer.balance;
+        vm.warp(deadline + 24 hours + 1);
+        vm.prank(payer);
+        escrow.claimTimeout(id);
+
+        require(payer.balance - balBefore == 1.5 ether, "full refund mismatch");
+        require(escrow.totalLockedPrincipal() == 0, "locked principal must be 0");
+        require(address(escrow).balance >= escrow.totalLockedPrincipal(), "solvency invariant broken");
+    }
+
+    /// @notice End-to-end on-chain fuzz proving exact native USDC conservation & solvency invariant.
+    function testFuzzOnChainSettlementConservationAndSolvency(
+        uint256 rawAmount,
+        uint256 rawDelay,
+        uint256 rawLambda
+    ) public {
+        uint256 amount = _bound(rawAmount, 1e12, 100 ether);
+        uint256 delay = _bound(rawDelay, 0, 14 days);
+        uint256 lambda = _bound(rawLambda, 0, 50_000);
+
+        bytes32 id = keccak256(abi.encode("fuzz-settle", amount, delay, lambda));
+        uint256 deadline = block.timestamp + 24 hours;
+
+        vm.prank(payer);
+        escrow.createEscrowLink{value: amount}(id, payee, deadline, lambda, false, "Fuzz", "Zero-dust");
+        require(address(escrow).balance >= escrow.totalLockedPrincipal(), "solvency broken after create");
+
+        vm.warp(deadline + delay);
+        uint256 payerBefore = payer.balance;
+        uint256 payeeBefore = payee.balance;
+        uint256 treasuryBefore = treasury.balance;
+
+        vm.prank(payer);
+        escrow.releaseByPayer(id);
+
+        uint256 distributed = (payer.balance - payerBefore) + (payee.balance - payeeBefore) + (treasury.balance - treasuryBefore);
+        require(distributed == amount, "on-chain conservation violated (wei dust leaked)");
+        require(escrow.totalLockedPrincipal() == 0, "locked principal not zeroed");
+        require(address(escrow).balance >= escrow.totalLockedPrincipal(), "solvency broken after settle");
     }
 }

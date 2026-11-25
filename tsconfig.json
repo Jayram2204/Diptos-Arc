@@ -10,6 +10,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@diptos/contracts": ["./packages/contracts/deployments.ts"],
+      "@diptos/agent-guard": ["./packages/agent-guard/src/index.ts"],
       "@diptos/app/*": ["./apps/app/src/*"],
       "@diptos/docs/*": ["./apps/docs/src/*"]
     },

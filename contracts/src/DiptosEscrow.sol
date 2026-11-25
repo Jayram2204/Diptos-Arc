@@ -172,6 +172,12 @@ contract DiptosEscrow {
     event FaucetDispensed(address indexed recipient, uint256 amount);
     event OracleSignerUpdated(address indexed previousSigner, address indexed newSigner);
     event CustomVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
+    event DiptosVerified(
+        bytes32 indexed escrowId,
+        bytes32 indexed proofHash,
+        address indexed verifier,
+        uint256 settledAt
+    );
 
     error Unauthorized();
     error InvalidParameters();
@@ -325,14 +331,9 @@ contract DiptosEscrow {
         }
         if (sum != msg.value || msg.value == 0) revert InvalidParameters();
 
-        bytes32 canonicalHash = registry.recordCommitment(
-            escrowId,
-            msg.sender,
-            payee,
-            msg.value,
-            finalDeadline
-        );
+        bytes32 canonicalHash = keccak256(abi.encode(escrowId, msg.sender, payee, msg.value, finalDeadline));
 
+        // Strict CEI: commit all local state before external registry interaction
         totalLockedPrincipal += msg.value;
 
         Escrow storage e = escrows[escrowId];
@@ -365,6 +366,15 @@ contract DiptosEscrow {
         if (payee != msg.sender) {
             userEscrows[payee].push(escrowId);
         }
+
+        bytes32 recordedHash = registry.recordCommitment(
+            escrowId,
+            msg.sender,
+            payee,
+            msg.value,
+            finalDeadline
+        );
+        if (recordedHash != canonicalHash) revert InvalidParameters();
 
         emit EscrowCreated(
             escrowId,
@@ -550,8 +560,12 @@ contract DiptosEscrow {
         if (expectedNonce != e.nonce) revert InvalidNonce(e.nonce, expectedNonce);
 
         bool verified = false;
+        address verifierUsed = oracleSigner;
         if (address(customVerifier) != address(0)) {
             verified = customVerifier.verifyRelease(escrowId, milestoneIndex, deliverableHash, expectedNonce, signature);
+            if (verified) {
+                verifierUsed = address(customVerifier);
+            }
         }
         if (!verified) {
             bytes32 digest = computeReleaseWithExpiryDigest(
@@ -562,10 +576,11 @@ contract DiptosEscrow {
                 expiry
             );
             verified = _isValidOracleSignature(digest, signature);
+            verifierUsed = oracleSigner;
         }
         if (!verified) revert InvalidOracleSignature(address(0), oracleSigner);
 
-        _settleMilestoneInternal(escrowId, milestoneIndex, deliverableHash, expectedNonce);
+        _settleMilestoneInternal(escrowId, milestoneIndex, deliverableHash, expectedNonce, verifierUsed);
     }
 
     /// @notice Settle milestone 0 with EIP-712 signature (4-arg convenience overload).
@@ -607,8 +622,11 @@ contract DiptosEscrow {
         if (expectedNonce != e.nonce) revert InvalidNonce(e.nonce, expectedNonce);
 
         bytes32 digest = computeReleaseDigest(escrowId, deliverableHash, expectedNonce);
-        address recovered = _recoverSigner(digest, grokSignature);
-        if (recovered != oracleSigner) {
+        address recovered = oracleSigner.code.length == 0 ? _recoverSigner(digest, grokSignature) : address(0);
+        bool valid = oracleSigner.code.length == 0
+            ? (recovered == oracleSigner)
+            : _isValidOracleSignature(digest, grokSignature);
+        if (!valid) {
             // Also check legacy 5-field ReleaseMilestone digest before reverting
             bytes32 legacyStructHash = keccak256(
                 abi.encode(
@@ -621,13 +639,12 @@ contract DiptosEscrow {
                 )
             );
             bytes32 legacyDigest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR(), legacyStructHash));
-            address legacyRecovered = _recoverSigner(legacyDigest, grokSignature);
-            if (legacyRecovered != oracleSigner) {
+            if (!_isValidOracleSignature(legacyDigest, grokSignature)) {
                 revert InvalidOracleSignature(recovered, oracleSigner);
             }
         }
 
-        _settleMilestoneInternal(escrowId, milestoneIndex, deliverableHash, expectedNonce);
+        _settleMilestoneInternal(escrowId, milestoneIndex, deliverableHash, expectedNonce, oracleSigner);
     }
 
     /// @notice Payer mutual release: allows the escrow payer to directly approve and settle on-chain.
@@ -649,14 +666,15 @@ contract DiptosEscrow {
         if (targetIdx == type(uint256).max) revert AlreadySettled();
 
         bytes32 delHash = keccak256(abi.encodePacked("payer-approved:", escrowId, e.nonce));
-        _settleMilestoneInternal(escrowId, targetIdx, delHash, e.nonce);
+        _settleMilestoneInternal(escrowId, targetIdx, delHash, e.nonce, e.payer);
     }
 
     function _settleMilestoneInternal(
         bytes32 escrowId,
         uint256 milestoneIndex,
         bytes32 deliverableHash,
-        uint256 expectedNonce
+        uint256 expectedNonce,
+        address verifier
     ) internal {
         Escrow storage e = escrows[escrowId];
         Milestone storage m = _milestones[escrowId][milestoneIndex];
@@ -689,6 +707,7 @@ contract DiptosEscrow {
         }
 
         emit FloatYieldSettled(escrowId, milestoneIndex, lockDuration, accruedYieldBps, notionalYieldWei);
+        emit DiptosVerified(escrowId, deliverableHash, verifier, block.timestamp);
         emit MilestoneSettled(
             escrowId,
             milestoneIndex,
@@ -702,6 +721,15 @@ contract DiptosEscrow {
     }
 
     function claimTimeoutRefund(bytes32 escrowId) external nonReentrant {
+        _claimTimeoutRefundInternal(escrowId);
+    }
+
+    /// @notice Alias for claimTimeoutRefund(bytes32) — permissionless buyer safety hatch after deadline + gracePeriod.
+    function claimTimeout(bytes32 escrowId) external nonReentrant {
+        _claimTimeoutRefundInternal(escrowId);
+    }
+
+    function _claimTimeoutRefundInternal(bytes32 escrowId) internal {
         Escrow storage e = escrows[escrowId];
         if (e.payer == address(0)) revert EscrowNotFunded();
         if (msg.sender != e.payer) revert Unauthorized();
@@ -871,6 +899,11 @@ contract DiptosEscrow {
     ) public pure returns (uint256 payeePayout, uint256 payerRebate, uint256 protocolFee, uint256 decayBps) {
         if (amount == 0) return (0, 0, 0, 0);
         if (decimals > 18) revert InvalidParameters();
+        if (delaySeconds == 0 || lambdaBps == 0) {
+            protocolFee = (amount * PROTOCOL_FEE_BPS) / BPS_DENOMINATOR;
+            payeePayout = amount - protocolFee;
+            return (payeePayout, 0, protocolFee, 0);
+        }
         uint256 scale = 10 ** (18 - decimals);
         uint256 wadAmount = amount * scale;
         (uint256 wPayee, , uint256 wFee, uint256 dBps) =

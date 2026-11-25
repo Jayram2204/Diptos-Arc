@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { formatEther, parseUnits } from 'viem'
 import { ESCROW_CONTRACT_ADDRESS } from '@/config/protocol'
-import { getApexUrl, getAppUrl } from '@/lib/route'
+import { getAgentUrl, getApexUrl, getAppUrl } from '@/lib/route'
 import { diptos } from '@/lib/sdk'
 import { DOC_GROUPS, DOC_PAGES, type DocCodeBlock, type DocPage } from './docsData'
 
@@ -447,6 +447,14 @@ export function DocsPortal() {
             </button>
 
             <nav className="hidden items-center gap-4 text-[12.5px] text-[#E5E7EB] md:flex">
+              <a
+                href={getAgentUrl()}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-medium text-[#C8FF00] hover:underline"
+              >
+                Agents <ArrowUpRight className="size-3" />
+              </a>
               <a
                 href={getAppUrl()}
                 target="_blank"

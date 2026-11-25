@@ -10,6 +10,14 @@ interface IDiptosRegistry {
         uint256 averageLatencySeconds;
     }
 
+    function computeCanonicalHash(
+        bytes32 escrowId,
+        address payer,
+        address payee,
+        uint256 amount,
+        uint256 deadline
+    ) external pure returns (bytes32);
+
     function recordCommitment(
         bytes32 escrowId,
         address payer,
@@ -74,6 +82,7 @@ contract DiptosRegistry is IDiptosRegistry {
     error Unauthorized();
     error CommitmentAlreadyExists();
     error InvalidAddress();
+    error InvalidParameters();
     error SelfEscrowNotAllowed();
     error InvalidReveal();
     error DeliverableAlreadyRevealed();
@@ -118,6 +127,7 @@ contract DiptosRegistry is IDiptosRegistry {
     ) external onlyEscrow returns (bytes32 canonicalHash) {
         if (payer == address(0) || payee == address(0)) revert InvalidAddress();
         if (payer == payee) revert SelfEscrowNotAllowed();
+        if (escrowId == bytes32(0) || amount == 0 || deadline == 0) revert InvalidParameters();
         canonicalHash = computeCanonicalHash(escrowId, payer, payee, amount, deadline);
         if (escrowIds[escrowId] || canonicalHashes[canonicalHash]) {
             revert CommitmentAlreadyExists();

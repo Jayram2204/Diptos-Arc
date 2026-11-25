@@ -5,8 +5,10 @@ import { getOracleStatus } from './lib/oracleSigner.js'
 import { agentGuardrailRoute } from './routes/agentGuardrail.js'
 import { authRoute } from './routes/auth.js'
 import { escrowsRoute } from './routes/escrows.js'
+import { onrampRoute } from './routes/onramp.js'
 import { eventsRoute, quicknodeWebhookRoute } from './routes/quicknode.js'
 import { riskGeminiRoute } from './routes/riskGemini.js'
+import { verifyDeliverableRoute } from './routes/verifyDeliverable.js'
 import { verifyGrokRoute } from './routes/verifyGrok.js'
 import { voiceBriefRoute } from './routes/voiceBrief.js'
 import { walletRelayRoute } from './routes/walletRelay.js'
@@ -48,6 +50,8 @@ function rateLimit(maxRequests: number, windowMs: number) {
 }
 
 app.use('/api/verify/grok', rateLimit(10, 60_000))
+app.use('/api/verify/deliverable', rateLimit(15, 60_000))
+app.use('/api/onramp/sessions', rateLimit(20, 60_000))
 app.use('/api/voice/brief', rateLimit(5, 60_000))
 app.use('/api/wallet/relay', rateLimit(10, 60_000))
 
@@ -77,8 +81,10 @@ app.get('/api/oracle/status', async (c) => {
 
 app.route('/api/auth', authRoute)
 app.route('/api/escrows', escrowsRoute)
+app.route('/api/onramp', onrampRoute)
 app.route('/api/risk', riskGeminiRoute)
 app.route('/api/verify/grok', verifyGrokRoute)
+app.route('/api/verify/deliverable', verifyDeliverableRoute)
 app.route('/api/voice/brief', voiceBriefRoute)
 app.route('/api/webhooks/quicknode', quicknodeWebhookRoute)
 app.route('/api/events', eventsRoute)
