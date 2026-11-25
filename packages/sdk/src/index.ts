@@ -67,8 +67,8 @@ export const DIPTOS_SUPPORTED_CHAINS: readonly DiptosSupportedChain[] = [
     rpcUrl: ARC_RPC_PRIMARY,
     explorerUrl: 'https://testnet.arcscan.app',
     nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
-    escrowContract: '0x601bD8caDf9ba2274E645412C1Fca2dF13a318F5',
-    registryContract: '0xC831EBFA825d88853625C52d1BD55c456111B004',
+    escrowContract: '0xA7d2f5c4A13C75c05A73F46B49d33fD81E41646C',
+    registryContract: '0x823480419bbC57799391e751Edb6C4CeA6b51fbB',
     usdcAddress: '0x3600000000000000000000000000000000000000',
   },
   {

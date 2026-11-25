@@ -12,10 +12,11 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 CHAIN_ID="${CHAIN_ID:-5042002}"
 RPC_URL="${ARC_RPC_URL:-https://rpc.testnet.arc.network}"
-VERIFIER_URL="${VERIFIER_URL:-https://testnet.arcscan.app/api/}"
+VERIFIER_URL="${VERIFIER_URL:-https://explorer.testnet.arc.io/api}"
+export ARC_EXPLORER_API_KEY="${ARC_EXPLORER_API_KEY:-blockscout}"
 
-REGISTRY_ADDRESS="${REGISTRY_ADDRESS:-0xC831EBFA825d88853625C52d1BD55c456111B004}"
-ESCROW_ADDRESS="${ESCROW_ADDRESS:-0x601bD8caDf9ba2274E645412C1Fca2dF13a318F5}"
+REGISTRY_ADDRESS="${REGISTRY_ADDRESS:-0x823480419bbC57799391e751Edb6C4CeA6b51fbB}"
+ESCROW_ADDRESS="${ESCROW_ADDRESS:-0xA7d2f5c4A13C75c05A73F46B49d33fD81E41646C}"
 DEPLOYER_ADDRESS="${DEPLOYER_ADDRESS:-0x344d7adf93542C6c27a11bb53A2d7C9d909D9f34}"
 ORACLE_SIGNER="${ORACLE_SIGNER:-$DEPLOYER_ADDRESS}"
 TREASURY_ADDRESS="${TREASURY_ADDRESS:-$DEPLOYER_ADDRESS}"
@@ -41,7 +42,6 @@ forge verify-contract \
   --num-of-optimizations 200 \
   --via-ir \
   --constructor-args "${REG_ARGS}" \
-  --watch \
   "${REGISTRY_ADDRESS}" \
   src/DiptosRegistry.sol:DiptosRegistry
 
@@ -56,7 +56,6 @@ forge verify-contract \
   --num-of-optimizations 200 \
   --via-ir \
   --constructor-args "${ESC_ARGS}" \
-  --watch \
   "${ESCROW_ADDRESS}" \
   src/DiptosEscrow.sol:DiptosEscrow
 

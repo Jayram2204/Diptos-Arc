@@ -27,7 +27,10 @@ contract DeployArc {
         uint256 oracleKey = vm.envOr("GROK_ORACLE_PRIVATE_KEY", deployerKey);
         address oracleSigner = vm.addr(oracleKey);
         address treasury = vm.envOr("TREASURY_ADDRESS", deployer);
-        address genesisPayee = vm.envOr("GENESIS_PAYEE_ADDRESS", oracleSigner);
+        address genesisPayee = vm.envOr("GENESIS_PAYEE_ADDRESS", address(0x000000000000000000000000000000000000dEaD));
+        if (genesisPayee == deployer || genesisPayee == address(0)) {
+            genesisPayee = address(0x000000000000000000000000000000000000dEaD);
+        }
 
         vm.startBroadcast(deployerKey);
 
