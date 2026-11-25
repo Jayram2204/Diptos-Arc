@@ -35,6 +35,7 @@ export {
 
 export {
   appendBaseBuilderCode,
+  buildExactUsdcApproveCalldata,
   DUAL_SETTLEMENT_RAILS,
   toRailUsdcUnits,
   type DualRailConfig,

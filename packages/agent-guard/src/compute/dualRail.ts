@@ -79,3 +79,30 @@ export function appendBaseBuilderCode(
   const suffix = `6263${lenHex}${hexCode}`
   return `${calldata}${suffix}` as `0x${string}`
 }
+
+const MAX_EXACT_APPROVAL_USDC = 1_000_000_000 // Hard ceiling preventing uint256.max infinite approvals
+
+/**
+ * Socket Protocol Defense: Builds an EXACT-AMOUNT ERC-20 USDC `approve(address,uint256)` calldata for Base.
+ * - Rejects zero, negative, or infinite approvals (`uint256.max` is strictly forbidden).
+ * - Returns `null` on Arc rails because native 18-dec USDC (`msg.value`) requires ZERO token approvals.
+ */
+export function buildExactUsdcApproveCalldata(
+  spender: `0x${string}`,
+  amountUsdc: number,
+  rail: SettlementRailId,
+): `0x${string}` | null {
+  const cfg = DUAL_SETTLEMENT_RAILS[rail]
+  if (cfg.isNativeUsdc) return null
+  if (!/^0x[0-9a-fA-F]{40}$/.test(spender) || /^0x0{40}$/.test(spender)) {
+    throw new Error('Invalid non-zero spender address required for exact USDC approval')
+  }
+  if (!Number.isFinite(amountUsdc) || amountUsdc <= 0 || amountUsdc > MAX_EXACT_APPROVAL_USDC) {
+    throw new Error('Exact USDC approval amount out of safe bounds (infinite approvals forbidden)')
+  }
+  const units = toRailUsdcUnits(amountUsdc, rail)
+  const spenderPadded = spender.slice(2).toLowerCase().padStart(64, '0')
+  const amountPadded = units.toString(16).padStart(64, '0')
+  // Selector 0x095ea7b3 = approve(address,uint256)
+  return `0x095ea7b3${spenderPadded}${amountPadded}` as `0x${string}`
+}

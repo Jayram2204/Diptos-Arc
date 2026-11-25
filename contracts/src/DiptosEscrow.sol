@@ -110,6 +110,13 @@ contract DiptosEscrow {
     // Strict reentrancy guard (1 = unlocked, 2 = locked) & segregated locked principal accounting
     uint256 private _reentrancyStatus = 1;
     uint256 public totalLockedPrincipal;
+    uint256 public totalPendingWithdrawals;
+    mapping(address => uint256) public pendingWithdrawals;
+
+    // Optional Ronin-style outflow velocity circuit breaker for oracle-triggered settlements (0 = uncapped)
+    uint256 public maxHourlyOracleOutflow;
+    uint256 public currentHourWindowStart;
+    uint256 public currentHourOracleOutflow;
 
     mapping(bytes32 => Escrow) public escrows;
     mapping(bytes32 => Milestone[]) private _milestones;
@@ -171,7 +178,11 @@ contract DiptosEscrow {
 
     event FaucetDispensed(address indexed recipient, uint256 amount);
     event OracleSignerUpdated(address indexed previousSigner, address indexed newSigner);
+    event OracleSignerRevoked(address indexed revokedSigner);
     event CustomVerifierUpdated(address indexed previousVerifier, address indexed newVerifier);
+    event VelocityCapUpdated(uint256 maxHourlyOracleOutflow);
+    event WithdrawalCredited(address indexed recipient, uint256 amount);
+    event PendingWithdrawn(address indexed recipient, uint256 amount);
     event DiptosVerified(
         bytes32 indexed escrowId,
         bytes32 indexed proofHash,
@@ -196,6 +207,9 @@ contract DiptosEscrow {
     error TransferFailed();
     error FaucetCooldown();
     error FaucetEmpty();
+    error SolvencyInvariantViolated();
+    error VelocityCapExceeded();
+    error NothingToWithdraw();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert Unauthorized();
@@ -250,6 +264,30 @@ contract DiptosEscrow {
         if (_oracleSigner == address(0)) revert InvalidParameters();
         emit OracleSignerUpdated(oracleSigner, _oracleSigner);
         oracleSigner = _oracleSigner;
+    }
+
+    /// @notice Emergency Ronin-defense kill-switch: immediately revokes a compromised oracle key.
+    ///         Never blocks payer direct release or permissionless claimTimeoutRefund().
+    function revokeOracleSigner() external onlyOwner {
+        address prev = oracleSigner;
+        oracleSigner = address(0);
+        emit OracleSignerRevoked(prev);
+    }
+
+    /// @notice Configures optional rolling 1-hour outflow velocity cap for oracle-triggered releases (0 = uncapped).
+    function setMaxHourlyOracleOutflow(uint256 _maxHourlyOutflow) external onlyOwner {
+        maxHourlyOracleOutflow = _maxHourlyOutflow;
+        emit VelocityCapUpdated(_maxHourlyOutflow);
+    }
+
+    /// @notice Pull-payment claim for recipients whose fallback/receive reverted during push settlement.
+    function withdrawPending() external nonReentrant {
+        uint256 amount = pendingWithdrawals[msg.sender];
+        if (amount == 0) revert NothingToWithdraw();
+        pendingWithdrawals[msg.sender] = 0;
+        totalPendingWithdrawals -= amount;
+        _transferNative(msg.sender, amount);
+        emit PendingWithdrawn(msg.sender, amount);
     }
 
     /// @notice Plug in a modular verifier (TEE / ZK / ERC-4337 / PQ) without redeploying core escrow logic.
@@ -404,8 +442,8 @@ contract DiptosEscrow {
         if (lastFaucetClaim[msg.sender] != 0 && block.timestamp < lastFaucetClaim[msg.sender] + 1 hours) {
             revert FaucetCooldown();
         }
-        // Strictly segregate faucet reserve from locked user escrow principal
-        if (address(this).balance < totalLockedPrincipal + FAUCET_DRIP) revert FaucetEmpty();
+        // Strictly segregate faucet reserve from locked user escrow principal and pending pull-withdrawals
+        if (address(this).balance < totalLockedPrincipal + totalPendingWithdrawals + FAUCET_DRIP) revert FaucetEmpty();
         lastFaucetClaim[msg.sender] = block.timestamp;
         _transferNative(msg.sender, FAUCET_DRIP);
         emit FaucetDispensed(msg.sender, FAUCET_DRIP);
@@ -548,6 +586,7 @@ contract DiptosEscrow {
         uint256 expiry,
         bytes calldata signature
     ) external nonReentrant {
+        if (deliverableHash == bytes32(0)) revert InvalidParameters();
         if (block.timestamp > expiry) revert SignatureExpired();
         Escrow storage e = escrows[escrowId];
         if (e.payer == address(0)) revert EscrowNotFunded();
@@ -580,6 +619,7 @@ contract DiptosEscrow {
         }
         if (!verified) revert InvalidOracleSignature(address(0), oracleSigner);
 
+        _enforceOracleVelocityCap(m.amount);
         _settleMilestoneInternal(escrowId, milestoneIndex, deliverableHash, expectedNonce, verifierUsed);
     }
 
@@ -611,6 +651,8 @@ contract DiptosEscrow {
         uint256 expectedNonce,
         bytes calldata grokSignature
     ) internal {
+        if (deliverableHash == bytes32(0)) revert InvalidParameters();
+        if (oracleSigner == address(0)) revert InvalidOracleSignature(address(0), address(0));
         Escrow storage e = escrows[escrowId];
         if (e.payer == address(0)) revert EscrowNotFunded();
 
@@ -644,6 +686,7 @@ contract DiptosEscrow {
             }
         }
 
+        _enforceOracleVelocityCap(m.amount);
         _settleMilestoneInternal(escrowId, milestoneIndex, deliverableHash, expectedNonce, oracleSigner);
     }
 
@@ -683,6 +726,7 @@ contract DiptosEscrow {
             previewMilestoneTECD(escrowId, milestoneIndex, block.timestamp);
 
         if (payeePayout == 0 && payerRebate == 0) revert ZeroPayout();
+        if (payeePayout + payerRebate + protocolFee != m.amount) revert SolvencyInvariantViolated();
 
         e.nonce = expectedNonce + 1;
         m.deliverableHash = deliverableHash;
@@ -698,9 +742,13 @@ contract DiptosEscrow {
         uint256 accruedYieldBps = (lockDuration * ANNUAL_FLOAT_YIELD_BPS) / 365 days;
         uint256 notionalYieldWei = (m.amount * lockDuration * ANNUAL_FLOAT_YIELD_BPS) / (365 days * BPS_DENOMINATOR);
 
-        if (protocolFee > 0) _transferNative(treasury, protocolFee);
-        if (payerRebate > 0) _transferNative(e.payer, payerRebate);
-        if (payeePayout > 0) _transferNative(e.payee, payeePayout);
+        if (protocolFee > 0) _transferOrCredit(treasury, protocolFee);
+        if (payerRebate > 0) _transferOrCredit(e.payer, payerRebate);
+        if (payeePayout > 0) _transferOrCredit(e.payee, payeePayout);
+
+        if (address(this).balance < totalLockedPrincipal + totalPendingWithdrawals) {
+            revert SolvencyInvariantViolated();
+        }
 
         if (!onTime) {
             emit TECDPenaltyApplied(escrowId, milestoneIndex, delaySeconds, decayBps, payerRebate, payeePayout);
@@ -916,6 +964,7 @@ contract DiptosEscrow {
     }
 
     function _isValidOracleSignature(bytes32 digest, bytes calldata sig) internal view returns (bool) {
+        if (oracleSigner == address(0)) return false;
         if (oracleSigner.code.length > 0) {
             try IERC1271(oracleSigner).isValidSignature(digest, sig) returns (bytes4 magic) {
                 return magic == ERC1271_MAGICVALUE;
@@ -942,6 +991,27 @@ contract DiptosEscrow {
         address recovered = ecrecover(digest, v, r, s);
         if (recovered == address(0)) revert InvalidOracleSignature(address(0), oracleSigner);
         return recovered;
+    }
+
+    function _enforceOracleVelocityCap(uint256 amount) internal {
+        if (maxHourlyOracleOutflow == 0) return;
+        if (block.timestamp >= currentHourWindowStart + 1 hours) {
+            currentHourWindowStart = block.timestamp;
+            currentHourOracleOutflow = 0;
+        }
+        if (currentHourOracleOutflow + amount > maxHourlyOracleOutflow) {
+            revert VelocityCapExceeded();
+        }
+        currentHourOracleOutflow += amount;
+    }
+
+    function _transferOrCredit(address to, uint256 amount) internal {
+        (bool ok, ) = payable(to).call{value: amount}("");
+        if (!ok) {
+            pendingWithdrawals[to] += amount;
+            totalPendingWithdrawals += amount;
+            emit WithdrawalCredited(to, amount);
+        }
     }
 
     function _transferNative(address to, uint256 amount) internal {

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   appendBaseBuilderCode,
+  buildExactUsdcApproveCalldata,
   calculateTecdSettlement,
   createDiptosX402Client,
   lintDeliverableScope,
@@ -239,6 +240,22 @@ test('Dual-Rail USDC units and Base Builder Code attribution suffix work cleanly
   assert.ok(baseCall.startsWith('0xdeadbeef6263'))
   const arcCall = appendBaseBuilderCode('0xdeadbeef', 'arc-testnet', 'diptos-v1')
   assert.equal(arcCall, '0xdeadbeef')
+
+  // Socket Protocol defense: exact-amount approvals on Base only, null on Arc native USDC, rejects infinite/zero
+  assert.equal(
+    buildExactUsdcApproveCalldata('0x601bD8caDf9ba2274E645412C1Fca2dF13a318F5', 25, 'arc-testnet'),
+    null,
+  )
+  const exactBaseApprove = buildExactUsdcApproveCalldata(
+    '0x601bD8caDf9ba2274E645412C1Fca2dF13a318F5',
+    25,
+    'base-mainnet',
+  )
+  assert.ok(exactBaseApprove?.startsWith('0x095ea7b3'))
+  assert.throws(
+    () => buildExactUsdcApproveCalldata('0x601bD8caDf9ba2274E645412C1Fca2dF13a318F5', Number.MAX_SAFE_INTEGER, 'base-mainnet'),
+    /infinite approvals forbidden/,
+  )
 })
 
 test('Local AI pre-submission scopeLinter skips gracefully when LOCAL_AI_ENDPOINT is unset', async () => {

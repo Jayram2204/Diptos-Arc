@@ -11,6 +11,7 @@ interface Vm {
     function prank(address) external;
     function warp(uint256) external;
     function expectRevert(bytes4) external;
+    function expectRevert(bytes calldata) external;
     function expectEmit(bool, bool, bool, bool) external;
 }
 
@@ -52,6 +53,23 @@ contract MockERC1271Signer is IERC1271 {
 
     function isValidSignature(bytes32 hash, bytes calldata) external view returns (bytes4) {
         return hash == approvedDigest ? bytes4(0x1626ba7e) : bytes4(0xffffffff);
+    }
+}
+
+/// @notice Reverting payee contract used to verify pull-payment fallback prevents settlement DoS.
+contract RevertingPayee {
+    bool public rejectTransfers = true;
+
+    function setReject(bool r) external {
+        rejectTransfers = r;
+    }
+
+    function claimFrom(DiptosEscrow target) external {
+        target.withdrawPending();
+    }
+
+    receive() external payable {
+        if (rejectTransfers) revert("NO_NATIVE_PUSH");
     }
 }
 
@@ -382,5 +400,85 @@ contract DiptosSecurityTest {
         require(distributed == amount, "on-chain conservation violated (wei dust leaked)");
         require(escrow.totalLockedPrincipal() == 0, "locked principal not zeroed");
         require(address(escrow).balance >= escrow.totalLockedPrincipal(), "solvency broken after settle");
+    }
+
+    /// @notice Nomad Defense: zero deliverableHash (bytes32(0)) is strictly rejected.
+    function testZeroDeliverableHashReverts() public {
+        bytes32 id = keccak256("nomad-zero-root");
+        vm.prank(payer);
+        escrow.createEscrowLink{value: 1 ether}(id, payee, block.timestamp + 1 days, 3000, false, "Nomad", "ZeroRoot");
+
+        bytes memory sig = _signExpiry(id, 0, bytes32(0), 0, block.timestamp + 1 hours);
+        vm.expectRevert(DiptosEscrow.InvalidParameters.selector);
+        escrow.releaseWithExpiry(id, 0, bytes32(0), 0, block.timestamp + 1 hours, sig);
+    }
+
+    /// @notice The DAO / DoS Defense: reverting payee credits pull-payment fallback instead of blocking settlement.
+    function testRevertingPayeeCreditsPullPaymentWithoutDoS() public {
+        RevertingPayee badPayee = new RevertingPayee();
+        bytes32 id = keccak256("pull-payment-fallback");
+        vm.prank(payer);
+        escrow.createEscrowLink{value: 2 ether}(id, address(badPayee), block.timestamp + 1 days, 3000, false, "Pull", "Fallback");
+
+        vm.prank(payer);
+        escrow.releaseByPayer(id);
+
+        uint256 credited = escrow.pendingWithdrawals(address(badPayee));
+        require(credited == 1.99 ether, "expected 99.5% credited to pull-withdrawal");
+        require(escrow.totalPendingWithdrawals() == credited, "totalPendingWithdrawals mismatch");
+        require(address(escrow).balance >= escrow.totalLockedPrincipal() + escrow.totalPendingWithdrawals(), "solvency broken");
+
+        badPayee.setReject(false);
+        badPayee.claimFrom(escrow);
+        require(address(badPayee).balance == 1.99 ether, "pull withdrawal failed");
+        require(escrow.totalPendingWithdrawals() == 0, "pending withdrawals not cleared");
+    }
+
+    /// @notice Ronin Defense: revoking leaked oracle key kills oracle releases while timeout refunds remain permissionless.
+    function testRevokeOracleSignerKillsLeakedKeyButPreservesTimeoutRefund() public {
+        bytes32 id = keccak256("ronin-kill-switch");
+        uint256 deadline = block.timestamp + 1 days;
+        vm.prank(payer);
+        escrow.createEscrowLink{value: 1 ether}(id, payee, deadline, 3000, false, "Ronin", "KillSwitch");
+
+        bytes32 delHash = keccak256("fake-release");
+        uint256 expiry = block.timestamp + 1 hours;
+        bytes memory sig = _signExpiry(id, 0, delHash, 0, expiry);
+
+        escrow.revokeOracleSigner();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(DiptosEscrow.InvalidOracleSignature.selector, address(0), address(0))
+        );
+        escrow.releaseWithExpiry(id, 0, delHash, 0, expiry, sig);
+
+        // Buyer still recovers 100% permissionlessly past deadline + gracePeriod
+        uint256 beforeBal = payer.balance;
+        vm.warp(deadline + 24 hours + 1);
+        vm.prank(payer);
+        escrow.claimTimeout(id);
+        require(payer.balance - beforeBal == 1 ether, "permissionless refund must still work");
+    }
+
+    /// @notice Ronin Defense: hourly outflow velocity circuit breaker stops rapid oracle drain.
+    function testHourlyOracleVelocityCapBlocksDrain() public {
+        escrow.setMaxHourlyOracleOutflow(2 ether);
+
+        bytes32 id1 = keccak256("vel-1");
+        bytes32 id2 = keccak256("vel-2");
+        vm.prank(payer);
+        escrow.createEscrowLink{value: 1.5 ether}(id1, payee, block.timestamp + 1 days, 2000, false, "V1", "Cap");
+        vm.prank(payer);
+        escrow.createEscrowLink{value: 1.5 ether}(id2, payee, block.timestamp + 1 days, 2000, false, "V2", "Cap");
+
+        uint256 expiry = block.timestamp + 1 hours;
+        bytes32 h1 = keccak256("d1");
+        bytes32 h2 = keccak256("d2");
+        escrow.releaseWithExpiry(id1, 0, h1, 0, expiry, _signExpiry(id1, 0, h1, 0, expiry));
+
+        // Second 1.5 ether release exceeds 2 ether hourly cap -> reverts VelocityCapExceeded
+        bytes memory sig2 = _signExpiry(id2, 0, h2, 0, expiry);
+        vm.expectRevert(DiptosEscrow.VelocityCapExceeded.selector);
+        escrow.releaseWithExpiry(id2, 0, h2, 0, expiry, sig2);
     }
 }
