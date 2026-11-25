@@ -5,7 +5,7 @@ import { getAppUrl, getSdkUrl } from '@/lib/route'
 
 export function Footer() {
   return (
-    <footer className="border-t border-paper/10 bg-black py-16">
+    <footer className="border-t border-paper/10 bg-black pb-24 pt-16">
       <div className="mx-auto flex max-w-[1380px] flex-col justify-between gap-10 px-6 lg:flex-row lg:items-end lg:px-10">
         <div>
           <span className="rwa-display inline-flex items-baseline text-[22px] tracking-[-0.04em] text-paper">

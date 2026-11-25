@@ -609,7 +609,7 @@ function EscrowEngineInner() {
         </div>
 
         {/* Workspace Content */}
-        <main className="mx-auto w-full max-w-[1220px] flex-1 px-4 py-6 sm:px-8">
+        <main className="mx-auto w-full max-w-[1220px] flex-1 px-4 pb-24 pt-6 sm:px-8">
           {/* Dismissible First-Time Onboarding Banner */}
           {showOnboarding && view === 'ledger' && (
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#C8FF00]/30 bg-[#C8FF00]/[0.06] px-4 py-3.5">
@@ -897,30 +897,37 @@ function EscrowEngineInner() {
                             return (
                               <Fragment key={esc.id}>
                                 <tr className="transition-colors hover:bg-white/[0.025]">
-                                  <td className="px-5 py-3.5">
-                                    <div className="flex items-center gap-2">
+                                  <td className="min-w-[240px] max-w-[340px] px-5 py-3.5">
+                                    <div className="flex items-start gap-2">
                                       <button
                                         type="button"
                                         onClick={() => setExpandedId(isExpanded ? null : esc.id)}
                                         aria-label={`Toggle details for ${esc.title || esc.id}`}
-                                        className="grid size-5 shrink-0 place-items-center rounded border border-white/15 text-[#E5E7EB] hover:border-lime hover:text-lime"
+                                        className="mt-0.5 grid size-5 shrink-0 place-items-center rounded border border-white/15 text-[#E5E7EB] hover:border-lime hover:text-lime"
                                       >
                                         {isExpanded ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
                                       </button>
-                                      <span className="font-medium text-white">
-                                        {esc.title || `Escrow ${shortHex(esc.id, 6, 4)}`}
-                                      </span>
-                                      {isSettled && <DiptosVerifiedBadge size="xs" />}
-                                      {esc.mode === 'agent' && (
-                                        <span className="inline-flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5 font-mono text-[9.5px] text-[#E5E7EB]">
-                                          <Bot className="size-2.5" /> Agent
-                                        </span>
-                                      )}
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                          <span
+                                            title={esc.title || `Escrow ${shortHex(esc.id, 6, 4)}`}
+                                            className="line-clamp-2 font-medium leading-snug text-white"
+                                          >
+                                            {esc.title || `Escrow ${shortHex(esc.id, 6, 4)}`}
+                                          </span>
+                                          {isSettled && <DiptosVerifiedBadge size="xs" />}
+                                          {esc.mode === 'agent' && (
+                                            <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded bg-white/10 px-1.5 py-0.5 font-mono text-[9.5px] text-[#E5E7EB]">
+                                              <Bot className="size-2.5" /> Agent
+                                            </span>
+                                          )}
+                                        </div>
+                                        <p className="mt-0.5 truncate font-mono text-[11px] text-[#E5E7EB]/75">
+                                          {esc.payer ? shortHex(esc.payer, 6, 4) : 'Open Payer'} → {shortHex(esc.payee, 6, 4)} •{' '}
+                                          {shortHex(esc.id, 6, 4)}
+                                        </p>
+                                      </div>
                                     </div>
-                                    <p className="mt-0.5 pl-7 font-mono text-[11px] text-[#E5E7EB]/75">
-                                      {esc.payer ? shortHex(esc.payer, 6, 4) : 'Open Payer'} → {shortHex(esc.payee, 6, 4)} •{' '}
-                                      {shortHex(esc.id, 6, 4)}
-                                    </p>
                                   </td>
                                   <td className="px-4 py-3.5 font-mono font-semibold tabular-nums text-white">
                                     {fmtAmount(esc.amountUsdc)}{' '}
@@ -942,13 +949,13 @@ function EscrowEngineInner() {
                                   <td className="px-4 py-3.5">
                                     <StatusBadge status={esc.status} />
                                   </td>
-                                  <td className="px-5 py-3.5 text-right">
-                                    <div className="inline-flex items-center gap-1.5">
+                                  <td className="whitespace-nowrap px-5 py-3.5 text-right">
+                                    <div className="inline-flex shrink-0 items-center gap-1.5">
                                       <button
                                         type="button"
                                         onClick={() => handleCopyPayLink(esc.id)}
                                         title="Copy guarantee link"
-                                        className="inline-flex h-7 items-center gap-1 rounded border border-white/15 bg-white/[0.03] px-2 font-mono text-[10.5px] text-[#E5E7EB] hover:text-white"
+                                        className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded border border-white/15 bg-white/[0.03] px-2 font-mono text-[10.5px] text-[#E5E7EB] hover:text-white"
                                       >
                                         {copiedId === esc.id ? (
                                           <Check className="size-3 text-[#10B981]" />
@@ -960,7 +967,7 @@ function EscrowEngineInner() {
                                       <button
                                         type="button"
                                         onClick={() => navigate(`/pay/${esc.id}`)}
-                                        className="inline-flex h-7 items-center gap-1 rounded border border-white/20 bg-white/[0.06] px-2.5 font-mono text-[10.5px] font-medium text-white hover:border-[#C8FF00] hover:text-[#C8FF00]"
+                                        className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded border border-white/20 bg-white/[0.06] px-2.5 font-mono text-[10.5px] font-medium text-white hover:border-[#C8FF00] hover:text-[#C8FF00]"
                                       >
                                         Open <ArrowRight className="size-3" />
                                       </button>
@@ -1148,8 +1155,7 @@ function EscrowEngineInner() {
                     <div>
                       <label className="mb-1.5 flex items-center font-mono text-[11px] uppercase tracking-[0.06em] text-[#E5E7EB]">
                         SLA Protection Preset (TECD λ)
-                        <InfoTip term="TECD" text={GLOSSARY_TIPS.TECD} />
-                        <InfoTip term="λ" text={GLOSSARY_TIPS.lambda} />
+                        <InfoTip term="TECD λ" text={`${GLOSSARY_TIPS.TECD} ${GLOSSARY_TIPS.lambda}`} />
                       </label>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                         {PROTECTION_PRESETS.map((p) => (

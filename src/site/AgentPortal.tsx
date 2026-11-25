@@ -183,30 +183,34 @@ export function AgentPortal() {
           <div className="flex items-center gap-3">
             <a
               href={getApexUrl()}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-paper/15 bg-surface px-3 font-mono text-[11px] uppercase tracking-[0.12em] text-secondary transition-colors hover:border-lime hover:text-lime"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-paper/15 bg-surface px-3 font-mono text-[11px] uppercase tracking-[0.12em] text-secondary transition-colors hover:border-lime hover:text-lime"
             >
               <ArrowLeft className="size-3.5" />
               diptos.xyz
             </a>
-            <span className="rwa-display text-[19px] tracking-[-0.04em] text-white">
-              DIPTO<span className="ml-0.5 inline-block size-2 rounded-full bg-lime" />
-            </span>
-            <span className="hidden items-center gap-1.5 rounded-full border border-lime/35 bg-lime/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-lime sm:inline-flex">
+            <div className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap">
+              <span className="rwa-display text-[19px] tracking-[-0.04em] text-white">
+                DIPTOS<span className="ml-0.5 inline-block size-2 rounded-full bg-lime" />
+              </span>
+              <span className="text-white/25">/</span>
+              <span className="font-mono text-[12px] font-medium text-[#E5E7EB]">Dipto</span>
+            </div>
+            <span className="hidden items-center gap-1.5 whitespace-nowrap rounded-full border border-lime/35 bg-lime/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-lime sm:inline-flex">
               <PulseDot color="bg-lime" />
               agent.diptos.xyz {pulse.blockNumber ? `· Arc #${pulse.blockNumber.toString()}` : ''}
             </span>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex shrink-0 items-center gap-2.5">
             <a
               href={getSdkUrl()}
-              className="hidden h-9 items-center gap-1 rounded-full border border-paper/20 px-3.5 font-mono text-[11px] uppercase tracking-[0.1em] text-paper transition-colors hover:border-lime hover:text-lime sm:inline-flex"
+              className="hidden h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-paper/20 px-3.5 font-mono text-[11px] uppercase tracking-[0.1em] text-paper transition-colors hover:border-lime hover:text-lime sm:inline-flex"
             >
               SDK <ArrowUpRight className="size-3" />
             </a>
             <a
               href={getAppUrl()}
-              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-lime px-4 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-ink transition-colors hover:bg-[#d8ff4d]"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-lime px-4 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-ink transition-colors hover:bg-[#d8ff4d]"
             >
               Launch App <ArrowRight className="size-3.5" />
             </a>

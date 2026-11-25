@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowUpRight, ChevronDown, LogOut, Menu, Plus, X } from 'lucide-react'
+import { ArrowUpRight, LogOut, Menu, Plus, Wallet, X } from 'lucide-react'
 import { WalletModal } from '@diptos/app/WalletModal'
 import { useWallet } from '@/app/wallet'
 import { InteractiveFlywheelEmblem } from '@/components/KineticFlywheel'
@@ -71,12 +71,12 @@ export function Header() {
             <button
               type="button"
               onClick={() => setWalletOpen(true)}
-              aria-label="Open multi-chain wallet and network switcher"
-              className="hidden cursor-pointer items-center gap-2 rounded-full border border-paper/20 bg-surface px-3 py-1 font-mono text-[11px] uppercase tracking-[0.1em] text-[#E5E7EB] transition-colors hover:border-lime hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime sm:inline-flex"
+              aria-label="Open 1-Click Settlement Wallet and network status"
+              className="hidden shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full border border-paper/20 bg-surface px-3 py-1 font-mono text-[11px] uppercase tracking-[0.1em] text-[#E5E7EB] transition-colors hover:border-lime hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime sm:inline-flex"
             >
               <PulseDot color="bg-lime" />
               <span>{isConnected && address ? `${shortHex(address, 4, 4)} · ${chainLabel}` : chainLabel}</span>
-              <ChevronDown className="size-3 text-[#E5E7EB]" />
+              <Wallet className="size-3 text-lime" />
             </button>
             {isConnected && address && (
               <button
@@ -106,13 +106,13 @@ export function Header() {
           </nav>
 
           {/* Right: AI Agents + SDK Docs + Start in 1 Click */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex shrink-0 items-center gap-2.5">
             <a
               href={getAgentUrl()}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setMobileOpen(false)}
-              className="hidden h-10 items-center gap-1.5 rounded-full border border-lime/35 bg-lime/[0.06] px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-lime transition-colors hover:border-lime hover:bg-lime/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime md:inline-flex"
+              className="hidden h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-lime/35 bg-lime/[0.06] px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-lime transition-colors hover:border-lime hover:bg-lime/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime md:inline-flex"
             >
               AI Agents <ArrowUpRight className="size-3.5" />
             </a>
@@ -121,7 +121,7 @@ export function Header() {
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setMobileOpen(false)}
-              className="hidden h-10 items-center gap-1.5 rounded-full border border-paper/25 px-4 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-white transition-colors hover:border-lime focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime sm:inline-flex"
+              className="hidden h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-paper/25 px-4 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-white transition-colors hover:border-lime focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime sm:inline-flex"
             >
               SDK Docs <ArrowUpRight className="size-3.5" />
             </a>
@@ -133,7 +133,7 @@ export function Header() {
                 setMobileOpen(false)
                 trackFunnelEvent('landing_cta_click', { location: 'header' })
               }}
-              className="inline-flex h-10 items-center gap-1.5 rounded-full bg-lime px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-ink transition-all duration-200 hover:scale-[1.02] hover:bg-[#d8ff4d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-lime px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-ink transition-all duration-200 hover:scale-[1.02] hover:bg-[#d8ff4d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >
               Start in 1 Click <Plus className="size-3.5" />
             </a>

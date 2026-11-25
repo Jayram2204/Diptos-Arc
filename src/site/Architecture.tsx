@@ -167,7 +167,7 @@ export function Architecture() {
         <div
           role="tablist"
           aria-label="Protocol Stack Modules"
-          className="inline-flex flex-wrap gap-1.5 rounded-full border border-paper/15 bg-surface p-1"
+          className="inline-flex max-w-full shrink-0 flex-nowrap items-center gap-1 overflow-x-auto whitespace-nowrap rounded-full border border-paper/15 bg-surface p-1"
         >
           {tabs.map((tab) => (
             <button
@@ -176,7 +176,7 @@ export function Architecture() {
               role="tab"
               aria-selected={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`rounded-full px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.08em] transition-colors ${
+              className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.06em] transition-colors ${
                 activeTab === tab.id
                   ? 'bg-lime font-semibold text-ink'
                   : 'text-[#E5E7EB] hover:text-white'

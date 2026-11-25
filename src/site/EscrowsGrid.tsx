@@ -47,12 +47,12 @@ export function EscrowsGrid() {
             PLAIN-ENGLISH PROTECTION. LIVE ON-CHAIN.
           </h2>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex shrink-0 items-center gap-2.5">
           <button
             type="button"
             onClick={() => void refresh()}
             aria-label="Sync live escrows"
-            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-paper/15 px-3.5 font-mono text-[11px] uppercase tracking-[0.12em] text-[#E5E7EB] transition-colors hover:border-lime hover:text-lime"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-paper/15 px-3.5 font-mono text-[11px] uppercase tracking-[0.12em] text-[#E5E7EB] transition-colors hover:border-lime hover:text-lime"
           >
             <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
             SYNC
@@ -61,7 +61,7 @@ export function EscrowsGrid() {
             href={getAppUrl()}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-lime px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-ink transition-colors hover:bg-[#d8ff4d]"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-lime px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-ink transition-colors hover:bg-[#d8ff4d]"
           >
             CREATE LINK <ArrowRight className="size-3.5" />
           </a>

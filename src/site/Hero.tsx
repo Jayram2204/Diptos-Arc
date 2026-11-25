@@ -31,7 +31,7 @@ export function Hero() {
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => trackFunnelEvent('landing_cta_click', { location: 'hero_primary' })}
-            className="inline-flex h-12 items-center gap-2 rounded-full bg-lime px-7 font-mono text-[12px] font-semibold uppercase tracking-[0.14em] text-ink transition-all duration-200 hover:scale-[1.02] hover:bg-[#d8ff4d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="inline-flex h-12 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-lime px-7 font-mono text-[12px] font-semibold uppercase tracking-[0.14em] text-ink transition-all duration-200 hover:scale-[1.02] hover:bg-[#d8ff4d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
             <span>CREATE LINK IN 1 CLICK</span>
             <ArrowRight className="size-4" />
@@ -41,7 +41,7 @@ export function Hero() {
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => trackFunnelEvent('landing_cta_click', { location: 'hero_sdk' })}
-            className="inline-flex h-12 items-center gap-2 rounded-full border border-paper/30 px-7 font-mono text-[12px] font-medium uppercase tracking-[0.14em] text-white transition-colors hover:border-lime focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
+            className="inline-flex h-12 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-paper/30 px-7 font-mono text-[12px] font-medium uppercase tracking-[0.14em] text-white transition-colors hover:border-lime focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
           >
             <span>EXPLORE @DIPTOS/SDK</span>
             <ArrowUpRight className="size-4" />

@@ -200,6 +200,9 @@ export function KineticFlywheel() {
   useEffect(() => {
     if (!visible) return
 
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
     writeCookie('diptos_splash_seen', '1', null)
 
     const tLock = window.setTimeout(() => setLocked(true), 1350)
@@ -209,6 +212,7 @@ export function KineticFlywheel() {
     const tFailsafe = window.setTimeout(() => setVisible(false), 2650)
 
     return () => {
+      document.body.style.overflow = prevOverflow
       window.clearTimeout(tLock)
       window.clearTimeout(tExit)
       window.clearTimeout(tDone)
@@ -254,11 +258,11 @@ export function KineticFlywheel() {
         <span>ARC 5042002 // SETTLEMENT ENGINE READY</span>
       </div>
 
-      {/* Subtle Skip Pill */}
+      {/* High-Contrast Skip Pill */}
       <button
         type="button"
         onClick={dismissNow}
-        className="fixed bottom-6 right-6 rounded-full border border-[#F4F2EC]/25 bg-[#000000] px-4 py-1.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.14em] text-[#F4F2EC]/75 transition-colors hover:border-[#FFFFFF] hover:text-[#FFFFFF]"
+        className="fixed bottom-6 right-6 whitespace-nowrap rounded-full border border-[#E5E7EB]/40 bg-[#000000] px-4 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-[#E5E7EB] transition-colors hover:border-[#FFFFFF] hover:text-[#FFFFFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFFFFF]"
       >
         SKIP →
       </button>

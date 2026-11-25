@@ -40,8 +40,8 @@ function ContractRow({ contract }: { contract: ContractMeta }) {
         <p className="font-mono text-[13px] font-semibold text-paper">{contract.file}</p>
         <p className="mt-1 text-[12px] text-secondary">{contract.role}</p>
       </td>
-      <td className="px-4 py-5 font-mono text-[11px] uppercase text-secondary">{contract.standard}</td>
-      <td className="px-4 py-5">
+      <td className="px-4 py-5 whitespace-nowrap font-mono text-[11px] uppercase text-secondary">{contract.standard}</td>
+      <td className="px-4 py-5 whitespace-nowrap">
         <div className="flex items-center gap-2">
           <span className="font-mono text-[12px] text-paper">
             {contract.address.slice(0, 10)}…{contract.address.slice(-8)}
@@ -49,13 +49,13 @@ function ContractRow({ contract }: { contract: ContractMeta }) {
           <CopyButton value={contract.address} label={`Copy ${contract.file} address`} />
         </div>
       </td>
-      <td className="px-4 py-5">{badge}</td>
-      <td className="py-5 pl-4 text-right">
+      <td className="px-4 py-5 whitespace-nowrap">{badge}</td>
+      <td className="py-5 pl-4 text-right whitespace-nowrap">
         <a
           href={explorerUrl('address', contract.address)}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex h-8 items-center gap-1 rounded-full border border-paper/20 px-3.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-paper transition-colors hover:border-lime hover:text-lime"
+          className="inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-paper/20 px-3.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-paper transition-colors hover:border-lime hover:text-lime"
         >
           ARCSCAN <ArrowUpRight className="size-3" />
         </a>

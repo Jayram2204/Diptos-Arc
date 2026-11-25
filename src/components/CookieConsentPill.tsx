@@ -44,23 +44,23 @@ export function CookieConsentPill() {
         <div
           role="region"
           aria-label="Cookie preferences"
-          className="fixed bottom-4 right-4 z-50 flex max-w-[380px] flex-wrap items-center gap-2 rounded-full border border-paper/20 bg-[#0A0C12]/95 px-4 py-2 text-[11px] text-white shadow-2xl backdrop-blur-md"
+          className="fixed bottom-4 right-4 z-40 flex max-w-[calc(100vw-2rem)] flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap rounded-full border border-paper/20 bg-[#0A0C12]/95 px-3.5 py-2 text-[11px] text-white shadow-2xl backdrop-blur-md"
         >
-          <span className="inline-flex items-center gap-1.5 font-mono text-[10.5px] text-[#E5E7EB]">
+          <span className="inline-flex shrink-0 items-center gap-1.5 font-mono text-[10.5px] text-[#E5E7EB]">
             <Shield className="size-3 text-lime" />
             Cookies
           </span>
           <button
             type="button"
             onClick={() => setConsent('essential')}
-            className="rounded-full border border-paper/20 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#E5E7EB] transition-colors hover:border-paper/40 hover:text-white"
+            className="shrink-0 whitespace-nowrap rounded-full border border-paper/20 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#E5E7EB] transition-colors hover:border-paper/40 hover:text-white"
           >
             Essential Only
           </button>
           <button
             type="button"
             onClick={() => setConsent('accepted')}
-            className="rounded-full bg-lime px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-ink transition-colors hover:bg-[#d8ff4d]"
+            className="shrink-0 whitespace-nowrap rounded-full bg-lime px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-ink transition-colors hover:bg-[#d8ff4d]"
           >
             Accept Preferences
           </button>
@@ -68,7 +68,7 @@ export function CookieConsentPill() {
             type="button"
             onClick={() => setDrawerOpen(true)}
             aria-label="Open Cookie and Session Controls"
-            className="grid size-6 place-items-center rounded-full text-[#E5E7EB] hover:bg-white/10 hover:text-white"
+            className="grid size-6 shrink-0 place-items-center rounded-full text-[#E5E7EB] hover:bg-white/10 hover:text-white"
           >
             <SlidersHorizontal className="size-3" />
           </button>
