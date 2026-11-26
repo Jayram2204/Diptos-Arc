@@ -154,11 +154,11 @@ export function Architecture() {
   ]
 
   return (
-    <section id="architecture" className="mx-auto max-w-[1280px] border-t border-paper/12 px-5 py-16 sm:px-6 lg:px-8">
+    <section id="architecture" className="mx-auto max-w-[1280px] px-5 py-24 sm:px-6 lg:px-8">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
           <p className="rwa-hud text-lime">PROTOCOL STACK</p>
-          <h2 className="rwa-display mt-2.5 text-[26px] text-paper sm:text-[34px]">
+          <h2 className="rwa-display mt-2.5 text-[28px] text-white sm:text-[36px]">
             EXECUTABLE ON ARC IN ONE CLICK.
           </h2>
         </div>
@@ -167,7 +167,7 @@ export function Architecture() {
         <div
           role="tablist"
           aria-label="Protocol Stack Modules"
-          className="inline-flex max-w-full shrink-0 flex-nowrap items-center gap-1 overflow-x-auto whitespace-nowrap rounded-full border border-paper/15 bg-surface p-1"
+          className="inline-flex max-w-full shrink-0 flex-nowrap items-center gap-1 overflow-x-auto whitespace-nowrap rounded-full border border-white/15 bg-[#111111] p-1"
         >
           {tabs.map((tab) => (
             <button
@@ -176,10 +176,10 @@ export function Architecture() {
               role="tab"
               aria-selected={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.06em] transition-colors ${
+              className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 font-mono text-[12px] tracking-[0.02em] transition-colors ${
                 activeTab === tab.id
                   ? 'bg-lime font-semibold text-ink'
-                  : 'text-[#E5E7EB] hover:text-white'
+                  : 'text-[#A3A3A3] hover:text-white'
               }`}
             >
               {tab.label}
@@ -189,41 +189,41 @@ export function Architecture() {
       </div>
 
       {/* Single Compact Active Panel */}
-      <div className="mt-6 rounded-2xl border border-paper/12 bg-surface p-6">
+      <div className="mt-7 rounded-[12px] border border-white/10 bg-[#111111] p-6">
         {activeTab === 'registry' && (
           <div>
             <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
               <div>
-                <p className="font-mono text-[11px] text-lime">DiptosRegistry.sol</p>
-                <h3 className="mt-1 text-[17px] font-semibold text-white">
+                <p className="font-mono text-[12.5px] text-lime">DiptosRegistry.sol</p>
+                <h3 className="mt-1 text-[18px] font-semibold text-white">
                   Canonical Anti-Double-Spend Commitment Ledger
                 </h3>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <label className="inline-flex items-center gap-2 rounded-full border border-paper/15 bg-black/50 px-3.5 py-1.5 font-mono text-[11px] text-[#E5E7EB]">
+                <label className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black px-3.5 py-1.5 font-mono text-[12.5px] text-[#A3A3A3]">
                   <span>USDC</span>
                   <input
                     value={amount1}
                     onChange={(e) => setAmount1(e.target.value.replace(/[^\d.]/g, ''))}
                     inputMode="decimal"
-                    className="w-16 bg-transparent text-right font-mono text-[12px] text-white outline-none"
+                    className="w-16 bg-transparent text-right font-mono text-[13px] text-white outline-none"
                   />
                 </label>
                 <button
                   type="button"
                   onClick={() => void runLayer1()}
                   disabled={t1.running}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-lime px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-ink hover:bg-[#d8ff4d] disabled:opacity-60"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-lime px-4 font-mono text-[12px] font-semibold tracking-[0.03em] text-ink hover:bg-[#d8ff4d] disabled:opacity-60"
                 >
-                  {t1.running ? <LoaderCircle className="size-3.5 animate-spin" /> : <Play className="size-3" />}
-                  SIMULATE
+                  {t1.running ? <LoaderCircle className="size-3.5 animate-spin" strokeWidth={1.5} /> : <Play className="size-3" strokeWidth={1.75} />}
+                  Simulate
                 </button>
               </div>
             </div>
             {t1.lines.length > 0 && (
-              <div className="mt-4 border-l-2 border-lime/70 bg-black/50 px-4 py-3 font-mono text-[11.5px] leading-relaxed">
+              <div className="mt-4 border-l-2 border-lime bg-black px-4 py-3 font-mono text-[12.5px] leading-relaxed">
                 {t1.lines.map((line, i) => (
-                  <p key={i} className={line.startsWith('✓') ? 'text-emerald' : 'text-[#E5E7EB]'}>
+                  <p key={i} className={line.startsWith('✓') ? 'text-lime' : 'text-[#A3A3A3]'}>
                     {line}
                   </p>
                 ))}
@@ -236,36 +236,36 @@ export function Architecture() {
           <div>
             <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
               <div>
-                <p className="font-mono text-[11px] text-lime">DiptosEscrow.sol</p>
-                <h3 className="mt-1 text-[17px] font-semibold text-white">
+                <p className="font-mono text-[12.5px] text-lime">DiptosEscrow.sol</p>
+                <h3 className="mt-1 text-[18px] font-semibold text-white">
                   Atomic Delivery-vs-Payment &amp; Non-Custodial Settlement
                 </h3>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <label className="inline-flex items-center gap-2 rounded-full border border-paper/15 bg-black/50 px-3.5 py-1.5 font-mono text-[11px] text-[#E5E7EB]">
+                <label className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black px-3.5 py-1.5 font-mono text-[12.5px] text-[#A3A3A3]">
                   <span>USDC</span>
                   <input
                     value={amount2}
                     onChange={(e) => setAmount2(e.target.value.replace(/[^\d.]/g, ''))}
                     inputMode="decimal"
-                    className="w-16 bg-transparent text-right font-mono text-[12px] text-white outline-none"
+                    className="w-16 bg-transparent text-right font-mono text-[13px] text-white outline-none"
                   />
                 </label>
                 <button
                   type="button"
                   onClick={() => void runLayer2()}
                   disabled={t2.running}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-lime px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-ink hover:bg-[#d8ff4d] disabled:opacity-60"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-lime px-4 font-mono text-[12px] font-semibold tracking-[0.03em] text-ink hover:bg-[#d8ff4d] disabled:opacity-60"
                 >
-                  {t2.running ? <LoaderCircle className="size-3.5 animate-spin" /> : <Play className="size-3" />}
-                  ESTIMATE GAS
+                  {t2.running ? <LoaderCircle className="size-3.5 animate-spin" strokeWidth={1.5} /> : <Play className="size-3" strokeWidth={1.75} />}
+                  Estimate Gas
                 </button>
               </div>
             </div>
             {t2.lines.length > 0 && (
-              <div className="mt-4 border-l-2 border-lime/70 bg-black/50 px-4 py-3 font-mono text-[11.5px] leading-relaxed">
+              <div className="mt-4 border-l-2 border-lime bg-black px-4 py-3 font-mono text-[12.5px] leading-relaxed">
                 {t2.lines.map((line, i) => (
-                  <p key={i} className={line.startsWith('✓') ? 'text-emerald' : 'text-[#E5E7EB]'}>
+                  <p key={i} className={line.startsWith('✓') ? 'text-lime' : 'text-[#A3A3A3]'}>
                     {line}
                   </p>
                 ))}
@@ -278,36 +278,36 @@ export function Architecture() {
           <div>
             <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
               <div>
-                <p className="font-mono text-[11px] text-lime">previewTECDPayout()</p>
-                <h3 className="mt-1 text-[17px] font-semibold text-white">
+                <p className="font-mono text-[12.5px] text-lime">previewTECDPayout()</p>
+                <h3 className="mt-1 text-[18px] font-semibold text-white">
                   Fixed-Point WAD Exponential Late-Delivery Rebate
                 </h3>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <label className="inline-flex items-center gap-2 rounded-full border border-paper/15 bg-black/50 px-3.5 py-1.5 font-mono text-[11px] text-[#E5E7EB]">
+                <label className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black px-3.5 py-1.5 font-mono text-[12.5px] text-[#A3A3A3]">
                   <span>DELAY (H)</span>
                   <input
                     value={delayHrs}
                     onChange={(e) => setDelayHrs(e.target.value.replace(/[^\d.]/g, ''))}
                     inputMode="decimal"
-                    className="w-14 bg-transparent text-right font-mono text-[12px] text-white outline-none"
+                    className="w-14 bg-transparent text-right font-mono text-[13px] text-white outline-none"
                   />
                 </label>
                 <button
                   type="button"
                   onClick={() => void runLayer3()}
                   disabled={t3.running}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-lime px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-ink hover:bg-[#d8ff4d] disabled:opacity-60"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-lime px-4 font-mono text-[12px] font-semibold tracking-[0.03em] text-ink hover:bg-[#d8ff4d] disabled:opacity-60"
                 >
-                  {t3.running ? <LoaderCircle className="size-3.5 animate-spin" /> : <Play className="size-3" />}
-                  CALL ON ARC
+                  {t3.running ? <LoaderCircle className="size-3.5 animate-spin" strokeWidth={1.5} /> : <Play className="size-3" strokeWidth={1.75} />}
+                  Call on Arc
                 </button>
               </div>
             </div>
             {t3.lines.length > 0 && (
-              <div className="mt-4 border-l-2 border-lime/70 bg-black/50 px-4 py-3 font-mono text-[11.5px] leading-relaxed">
+              <div className="mt-4 border-l-2 border-lime bg-black px-4 py-3 font-mono text-[12.5px] leading-relaxed">
                 {t3.lines.map((line, i) => (
-                  <p key={i} className={line.startsWith('✓') ? 'text-emerald' : 'text-[#E5E7EB]'}>
+                  <p key={i} className={line.startsWith('✓') ? 'text-lime' : 'text-[#A3A3A3]'}>
                     {line}
                   </p>
                 ))}
@@ -317,46 +317,46 @@ export function Architecture() {
         )}
 
         {activeTab === 'rpc' && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 border-b border-paper/10 pb-4 font-mono sm:grid-cols-4">
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-4 border-b border-white/10 pb-5 font-mono sm:grid-cols-4">
               <div>
-                <p className="text-[10px] uppercase text-[#E5E7EB]/70">LATEST BLOCK</p>
-                <p className="mt-1 text-[16px] font-semibold text-white">
+                <p className="text-[11.5px] uppercase text-[#A3A3A3]">Latest Block</p>
+                <p className="mt-1 text-[17px] font-semibold text-white">
                   {pulse.blockNumber !== undefined ? `#${pulse.blockNumber.toString()}` : 'Syncing…'}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase text-[#E5E7EB]/70">RPC LATENCY</p>
-                <p className="mt-1 text-[16px] font-semibold text-lime">
+                <p className="text-[11.5px] uppercase text-[#A3A3A3]">RPC Latency</p>
+                <p className="mt-1 text-[17px] font-semibold text-lime">
                   {pulse.latency !== undefined ? `${pulse.latency}ms` : 'Syncing…'}
                 </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase text-[#E5E7EB]/70">NATIVE USDC GAS</p>
-                <p className="mt-1 text-[13px] font-semibold text-white">{baseGasUsdc}</p>
+                <p className="text-[11.5px] uppercase text-[#A3A3A3]">Native USDC Gas</p>
+                <p className="mt-1 text-[14px] font-semibold text-white">{baseGasUsdc}</p>
               </div>
               <div>
-                <p className="text-[10px] uppercase text-[#E5E7EB]/70">ENDPOINT</p>
-                <p className="mt-1 truncate text-[12px] text-emerald">{ARC_RPC_URL}</p>
+                <p className="text-[11.5px] uppercase text-[#A3A3A3]">Endpoint</p>
+                <p className="mt-1 truncate text-[13px] text-white">{ARC_RPC_URL}</p>
               </div>
             </div>
 
             <div>
-              <div className="mb-2 flex items-center justify-between font-mono text-[10.5px] uppercase text-[#E5E7EB]">
-                <span className="inline-flex items-center gap-2">
-                  <Radio className={`size-3.5 ${connected ? 'text-lime' : 'text-secondary'}`} />
+              <div className="mb-2.5 flex items-center justify-between font-mono text-[12px] uppercase text-[#A3A3A3]">
+                <span className="inline-flex items-center gap-2 text-white">
+                  <Radio className={`size-3.5 ${connected ? 'text-lime' : 'text-[#A3A3A3]'}`} strokeWidth={1.5} />
                   Recent On-Chain Events (Arc 5042002)
                 </span>
                 <span>GET /api/events</span>
               </div>
               {events.length === 0 ? (
-                <p className="font-mono text-[11.5px] text-[#E5E7EB]/75">
+                <p className="font-mono text-[13px] text-[#A3A3A3]">
                   Syncing historical EscrowCreated &amp; MilestoneSettled logs…
                 </p>
               ) : (
-                <ul className="divide-y divide-paper/10 font-mono text-[11.5px]">
+                <ul className="divide-y divide-white/10 font-mono text-[13px]">
                   {events.slice(0, 4).map((evt) => (
-                    <li key={evt.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                    <li key={evt.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
                       <span className="text-white">
                         <span className="mr-2 text-lime">{evt.eventName}</span>
                         {evt.summary}
@@ -366,9 +366,9 @@ export function Architecture() {
                           href={explorerUrl('tx', evt.txHash)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[#E5E7EB] hover:text-lime"
+                          className="inline-flex items-center gap-1 text-[#A3A3A3] hover:text-lime"
                         >
-                          {shortHex(evt.txHash)} <ArrowUpRight className="size-3" />
+                          {shortHex(evt.txHash)} <ArrowUpRight className="size-3.5" strokeWidth={1.5} />
                         </a>
                       )}
                     </li>

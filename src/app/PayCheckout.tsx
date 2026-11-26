@@ -383,7 +383,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
           </div>
         ) : loadError || !escrow ? (
           <div className="rwa-depth-card mx-auto max-w-xl rounded-2xl p-8 text-center">
-            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-crimson">Escrow Not Found On-Chain</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-white">Escrow Not Found On-Chain</p>
             <h1 className="mt-2 text-2xl font-semibold text-paper">
               Escrow not found on Arc Testnet ({shortHex(escrowId, 10, 8)})
             </h1>
@@ -420,7 +420,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                         <span
                           className={`rounded-full border px-3 py-1 font-mono text-[10px] font-semibold uppercase ${
                             isRefunded
-                              ? 'border-crimson/35 bg-crimson/10 text-crimson'
+                              ? 'border-white/25 bg-white/10 text-white'
                               : 'border-lime/35 bg-lime/10 text-lime'
                           }`}
                         >
@@ -460,7 +460,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                       </p>
                       <p
                         className={`mt-1.5 font-mono text-[20px] font-semibold ${
-                          isSettled ? 'text-emerald' : countdown.overdue ? 'text-crimson' : 'text-emerald'
+                          isSettled ? 'text-lime' : countdown.overdue ? 'text-white' : 'text-lime'
                         }`}
                       >
                         {isSettled ? 'FINALIZED' : countdown.label}
@@ -472,7 +472,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
 
                     <div className="rounded-xl border border-paper/10 bg-black/45 p-4">
                       <p className="font-mono text-[10px] uppercase text-secondary">Projected Payout</p>
-                      <p className="mt-1.5 font-mono text-[20px] font-semibold text-emerald">
+                      <p className="mt-1.5 font-mono text-[20px] font-semibold text-lime">
                         {tecdPreview ? fmtAmount(tecdPreview.payeePayoutUsdc) : fmtAmount(escrow.amountUsdc * 0.995)}{' '}
                         <span className="text-[11px] text-secondary">USDC</span>
                       </p>
@@ -535,7 +535,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                     </Button>
                   </div>
                   {audioError && (
-                    <p className="mt-2 rounded-xl border border-crimson/35 bg-crimson/10 px-3.5 py-2 font-mono text-[11.5px] text-crimson">
+                    <p className="mt-2 rounded-xl border border-white/25 bg-white/10 px-3.5 py-2 font-mono text-[11.5px] text-white">
                       {audioError}
                     </p>
                   )}
@@ -553,13 +553,13 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                         }
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full border border-emerald/40 bg-emerald/15 px-5 font-mono text-[11.5px] font-semibold uppercase tracking-[0.12em] text-emerald transition-colors hover:bg-emerald/25"
+                        className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full border border-lime/40 bg-lime/15 px-5 font-mono text-[11.5px] font-semibold uppercase tracking-[0.12em] text-lime transition-colors hover:bg-lime/25"
                       >
                         <CheckCircle2 className="size-4" />
                         Settled On-Chain • View on ArcScan <ArrowUpRight className="size-3.5" />
                       </a>
                     ) : isRefunded ? (
-                      <span className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full border border-crimson/40 bg-crimson/15 px-5 font-mono text-[11.5px] font-semibold uppercase tracking-[0.12em] text-crimson">
+                      <span className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full border border-white/25 bg-white/10 px-5 font-mono text-[11.5px] font-semibold uppercase tracking-[0.12em] text-white">
                         Escrow Refunded On-Chain
                       </span>
                     ) : (
@@ -597,7 +597,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                           }
                           className="h-11"
                         >
-                          <CheckCircle2 className="size-4 text-emerald" />
+                          <CheckCircle2 className="size-4 text-lime" />
                           Payer Direct Release
                         </Button>
                       </>
@@ -630,13 +630,13 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                   )}
 
                   {walletError && (
-                    <p className="mt-3 rounded-xl border border-crimson/35 bg-crimson/10 px-3.5 py-2.5 font-mono text-[11.5px] text-crimson">
+                    <p className="mt-3 rounded-xl border border-white/25 bg-white/10 px-3.5 py-2.5 font-mono text-[11.5px] text-white">
                       {walletError}
                     </p>
                   )}
 
                   {txSuccess && (
-                    <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-emerald/35 bg-emerald/10 px-3.5 py-2.5 font-mono text-[12px] text-emerald">
+                    <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-lime/35 bg-lime/10 px-3.5 py-2.5 font-mono text-[12px] text-lime">
                       <span>{txSuccess.label}</span>
                       <a
                         href={explorerUrl('tx', txSuccess.hash)}
@@ -679,7 +679,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                       verifying
                         ? 'border-lime/60 bg-lime/15 text-lime'
                         : activeAudit?.approved && !isSettled
-                          ? 'border-emerald/45 bg-emerald/10 text-emerald'
+                          ? 'border-lime/45 bg-lime/10 text-lime'
                           : 'border-paper/10 bg-black/40 text-secondary'
                     }`}
                   >
@@ -780,7 +780,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                     <ul className="space-y-1.5 rounded-xl border border-paper/10 bg-black/45 p-3 font-mono text-[11px]">
                       {detResult.checks.map((ch) => (
                         <li key={ch.label} className="flex items-start justify-between gap-2">
-                          <span className={ch.passed ? 'text-emerald' : 'text-crimson'}>
+                          <span className={ch.passed ? 'text-lime' : 'text-white'}>
                             {ch.passed ? '✓' : '✕'} {ch.label}
                           </span>
                           <span className="text-right text-secondary">{ch.detail}</span>
@@ -790,7 +790,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                   )}
 
                   {verifyError && (
-                    <div className="rounded-xl border border-crimson/35 bg-crimson/10 px-3 py-2.5 font-mono text-[11.5px] text-crimson">
+                    <div className="rounded-xl border border-white/25 bg-white/10 px-3 py-2.5 font-mono text-[11.5px] text-white">
                       <p className="font-semibold">Verification Blocked</p>
                       <p className="mt-0.5 text-[11px] opacity-90">{verifyError}</p>
                     </div>
@@ -805,7 +805,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                   >
                     <ShieldCheck className="size-3.5" />
                     {isSettled
-                      ? 'DIPTOS VERIFIED ✓ · USDC Released'
+                      ? '✓ Verified · USDC Released'
                       : verifying
                         ? 'Deterministic Check Running…'
                         : 'Run Deterministic Verification'}
@@ -817,7 +817,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                     <div className="flex items-center justify-between gap-2">
                       <span
                         className={`inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold ${
-                          activeAudit.approved ? 'text-emerald' : 'text-crimson'
+                          activeAudit.approved ? 'text-lime' : 'text-white'
                         }`}
                       >
                         {activeAudit.approved ? (
@@ -837,7 +837,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
 
                     <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface">
                       <div
-                        className={activeAudit.approved ? 'h-full bg-emerald' : 'h-full bg-crimson'}
+                        className={activeAudit.approved ? 'h-full bg-lime' : 'h-full bg-white/10'}
                         style={{ width: `${Math.round(activeAudit.confidence * 100)}%` }}
                       />
                     </div>
@@ -860,7 +860,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                       {grokSig && (
                         <div className="flex items-center justify-between gap-2">
                           <dt className="text-secondary">EIP-712 Signature (Nonce #{activeAudit.nonce ?? 0})</dt>
-                          <dd className="flex items-center gap-1.5 text-emerald">
+                          <dd className="flex items-center gap-1.5 text-lime">
                             <span>{shortHex(grokSig, 10, 6)}</span>
                             <CopyButton value={grokSig} label="Copy EIP-712 release signature" />
                           </dd>
@@ -884,7 +884,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                     <h2 className="text-[14px] font-semibold text-paper">QuickNode &amp; Arc Audit Log</h2>
                   </div>
                   <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-secondary">
-                    <span className={`size-1.5 rounded-full ${feedConnected ? 'bg-emerald' : 'bg-lime'}`} />
+                    <span className={`size-1.5 rounded-full ${feedConnected ? 'bg-lime' : 'bg-lime'}`} />
                     {feedConnected ? 'LIVE' : 'POLLING'}
                   </span>
                 </div>
@@ -892,7 +892,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                 <div className="mt-3 divide-y divide-paper/10">
                   {relevantEvents.length === 0 ? (
                     <p className="flex items-center gap-2 py-3 font-mono text-[11px] text-secondary">
-                      <Activity className="size-3.5 text-emerald" />
+                      <Activity className="size-3.5 text-lime" />
                       Awaiting Arc Testnet (5042002) confirmations…
                     </p>
                   ) : (
@@ -910,7 +910,7 @@ function CheckoutRoomInner({ escrowId }: { escrowId: string }) {
                             href={explorerUrl('tx', evt.txHash)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-1 inline-flex items-center gap-1 text-[10px] text-emerald hover:underline"
+                            className="mt-1 inline-flex items-center gap-1 text-[10px] text-lime hover:underline"
                           >
                             {shortHex(evt.txHash, 10, 6)} <ArrowUpRight className="size-3" />
                           </a>

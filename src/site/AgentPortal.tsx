@@ -6,24 +6,19 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUpRight,
-  Bot,
-  CheckCircle2,
-  Cpu,
   FileCheck2,
-  Fingerprint,
   Gauge,
-  Layers,
-  Lock,
+  KeyRound,
   Play,
   Scale,
   ShieldAlert,
   ShieldCheck,
-  Terminal,
+  Zap,
 } from 'lucide-react'
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { formatEther, parseUnits } from 'viem'
+import { DiptosCard } from '@/components/DiptosCard'
 import { DiptosVerifiedBadge } from '@/components/DiptosVerifiedBadge'
-import { PulseDot } from '@/components/ui'
 import { ESCROW_CONTRACT_ADDRESS, REGISTRY_CONTRACT_ADDRESS } from '@/config/protocol'
 import { canonicalEscrowHash, explorerUrl, fmtAmount, publicClient, shortHex } from '@/lib/chain'
 import { useArcPulse, useEscrows } from '@/lib/hooks'
@@ -46,54 +41,6 @@ const DEFAULT_POLICY_JSON = JSON.stringify(
   2,
 )
 
-const JSON_TOKEN_REGEX =
-  /("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g
-
-function renderHighlightedJson(source: string): ReactNode[] {
-  const nodes: ReactNode[] = []
-  let lastIndex = 0
-  let key = 0
-
-  for (const match of source.matchAll(JSON_TOKEN_REGEX)) {
-    const idx = match.index ?? 0
-    if (idx > lastIndex) {
-      nodes.push(
-        <span key={key++} className="text-[#8A8A90]">
-          {source.slice(lastIndex, idx)}
-        </span>,
-      )
-    }
-
-    const token = match[0]
-    const isKey = Boolean(match[2])
-    let cls = 'text-[#FBBF24]' // numbers
-    if (isKey) {
-      cls = 'text-[#E5E7EB]'
-    } else if (token.startsWith('"')) {
-      cls = 'text-emerald'
-    } else if (token === 'true' || token === 'false' || token === 'null') {
-      cls = 'text-[#60A5FA]'
-    }
-
-    nodes.push(
-      <span key={key++} className={cls}>
-        {token}
-      </span>,
-    )
-    lastIndex = idx + token.length
-  }
-
-  if (lastIndex < source.length) {
-    nodes.push(
-      <span key={key++} className="text-[#8A8A90]">
-        {source.slice(lastIndex)}
-      </span>,
-    )
-  }
-
-  return nodes
-}
-
 interface DryRunOutcome {
   policy: QuoteEvaluationResult
   onChainTecd: {
@@ -107,6 +54,45 @@ interface DryRunOutcome {
   canonicalHash: string
 }
 
+const AGENT_CAPABILITIES = [
+  {
+    variant: 'graphite' as const,
+    icon: Gauge,
+    title: 'Spend Caps',
+    subtitle: 'Set per-task & daily USDC limits on-chain.',
+  },
+  {
+    variant: 'white' as const,
+    icon: ShieldCheck,
+    title: 'x402 Proof Gate',
+    subtitle: 'Pay only after deterministic output passes.',
+  },
+  {
+    variant: 'lime' as const,
+    icon: KeyRound,
+    title: 'Zero Key Exposure',
+    subtitle: 'Agents never touch wallet private keys.',
+  },
+  {
+    variant: 'white' as const,
+    icon: Scale,
+    title: 'Auto Late Rebates',
+    subtitle: 'Missed SLAs refund the buyer automatically.',
+  },
+  {
+    variant: 'lime' as const,
+    icon: Zap,
+    title: '1-Second USDC',
+    subtitle: 'Native Arc & Base settlement without ETH gas friction.',
+  },
+  {
+    variant: 'graphite' as const,
+    icon: FileCheck2,
+    title: 'Clear Off-Chain Scope',
+    subtitle: 'Clean criteria + instant kill-switch control.',
+  },
+]
+
 export function AgentPortal() {
   const { escrows, loading } = useEscrows(5000)
   const pulse = useArcPulse(6000)
@@ -118,7 +104,6 @@ export function AgentPortal() {
   const [running, setRunning] = useState(false)
   const [dryRunError, setDryRunError] = useState<string | null>(null)
   const [dryRun, setDryRun] = useState<DryRunOutcome | null>(null)
-  const [pillarFilter, setPillarFilter] = useState<'all' | 'live' | 'roadmap'>('all')
 
   const agentEscrows = useMemo(
     () =>
@@ -127,8 +112,6 @@ export function AgentPortal() {
         .sort((a, b) => Date.parse(b.createdAt || '0') - Date.parse(a.createdAt || '0')),
     [escrows],
   )
-
-  const highlightedJson = useMemo(() => renderHighlightedJson(policyText), [policyText])
 
   const runLiveDryRun = useCallback(async () => {
     setDryRunError(null)
@@ -179,7 +162,15 @@ export function AgentPortal() {
       try {
         registryExists = (await publicClient().readContract({
           address: REGISTRY_CONTRACT_ADDRESS,
-          abi: [{ name: 'canonicalHashes', type: 'function', stateMutability: 'view', inputs: [{ type: 'bytes32' }], outputs: [{ type: 'bool' }] }] as const,
+          abi: [
+            {
+              name: 'canonicalHashes',
+              type: 'function',
+              stateMutability: 'view',
+              inputs: [{ type: 'bytes32' }],
+              outputs: [{ type: 'bool' }],
+            },
+          ] as const,
           functionName: 'canonicalHashes',
           args: [commitment],
         })) as boolean
@@ -232,136 +223,139 @@ export function AgentPortal() {
     }
   }, [policyText, quoteAmount, quoteProvider, simulatedDelayHours])
 
-  // Auto-run initial dry-run on mount so the Verdict Card is immediately populated with live checks
   useEffect(() => {
     void runLiveDryRun()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (
-    <div className="min-h-screen bg-black text-paper">
+    <div className="min-h-screen bg-black text-white">
       {/* Header */}
-      <header className="sticky top-0 z-50 h-[72px] border-b border-paper/10 bg-black/90 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 h-[72px] border-b border-white/10 bg-black/92 backdrop-blur-xl">
         <div className="mx-auto flex h-full max-w-[1280px] items-center justify-between gap-4 px-5 lg:px-8">
           <div className="flex items-center gap-3">
             <a
               href={getApexUrl()}
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-paper/15 bg-surface px-3 font-mono text-[11px] uppercase tracking-[0.12em] text-secondary transition-colors hover:border-lime hover:text-lime"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/15 bg-[#111111] px-3 font-mono text-[12px] text-[#A3A3A3] transition-colors hover:border-lime hover:text-lime"
             >
-              <ArrowLeft className="size-3.5" />
+              <ArrowLeft className="size-3.5" strokeWidth={1.5} />
               diptos.xyz
             </a>
             <div className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap">
-              <span className="rwa-display text-[19px] tracking-[-0.04em] text-white">
+              <span className="rwa-display text-[20px] tracking-[-0.03em] text-white">
                 DIPTOS<span className="ml-0.5 inline-block size-2 rounded-full bg-lime" />
               </span>
               <span className="text-white/25">/</span>
-              <span className="font-mono text-[12px] font-medium text-[#E5E7EB]">Dipto</span>
+              <span className="font-mono text-[13px] font-medium text-[#A3A3A3]">Agents</span>
             </div>
-            <span className="hidden items-center gap-1.5 whitespace-nowrap rounded-full border border-lime/35 bg-lime/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase text-lime sm:inline-flex">
-              <PulseDot color="bg-lime" />
-              agent.diptos.xyz {pulse.blockNumber ? `· Arc #${pulse.blockNumber.toString()}` : ''}
-            </span>
+            {pulse.blockNumber && (
+              <span className="hidden whitespace-nowrap font-mono text-[12px] text-[#A3A3A3] sm:inline">
+                Arc #{pulse.blockNumber.toString()}
+              </span>
+            )}
           </div>
 
           <div className="flex shrink-0 items-center gap-2.5">
             <a
               href={getSdkUrl()}
-              className="hidden h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-paper/20 px-3.5 font-mono text-[11px] uppercase tracking-[0.1em] text-paper transition-colors hover:border-lime hover:text-lime sm:inline-flex"
+              className="hidden h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-white/20 px-4 font-mono text-[12px] text-white transition-colors hover:border-lime hover:text-lime sm:inline-flex"
             >
-              SDK <ArrowUpRight className="size-3" />
+              SDK <ArrowUpRight className="size-3.5" strokeWidth={1.5} />
             </a>
             <a
               href={getAppUrl()}
-              className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-lime px-4 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-ink transition-colors hover:bg-[#d8ff4d]"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-lime px-4.5 font-mono text-[12px] font-semibold text-ink transition-colors hover:bg-[#d8ff4d]"
             >
-              Launch App <ArrowRight className="size-3.5" />
+              Launch App <ArrowRight className="size-3.5" strokeWidth={1.75} />
             </a>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1280px] px-5 pt-14 pb-24 lg:px-8">
+      <main className="mx-auto max-w-[1280px] px-5 pt-16 pb-24 lg:px-8">
         {/* Hero */}
         <section className="max-w-3xl">
-          <p className="rwa-hud text-[#A1A1AA]">@DIPTOS/AGENT-GUARD // CIRCLE AGENT STACK + X402</p>
-          <h1 className="rwa-display mt-4 text-[clamp(2.1rem,4.6vw,3.8rem)] leading-[1.05] text-white">
+          <p className="rwa-hud text-lime">@DIPTOS/AGENT-GUARD // X402</p>
+          <h1 className="rwa-display mt-4 text-[clamp(2.2rem,4.6vw,3.9rem)] leading-[1.04] text-white">
             GIVE AI AGENTS A USDC BUDGET THAT ONLY UNLOCKS ON VERIFIED OUTPUT.
           </h1>
-          <p className="mt-5 text-[16px] leading-relaxed text-[#E5E7EB]">
-            Dipto upgrades blind HTTP 402 (<code className="font-mono text-emerald">x402</code>) agent payments into a
-            4-step non-custodial pipeline on Arc &amp; Base: <strong>Quote → Lock USDC → Verify Schema/Proof → Release
-            in &lt;1s or Auto-Rebate via TECD</strong>. Agents never see private keys.
+          <p className="mt-5 text-[16px] leading-relaxed text-[#A3A3A3]">
+            Upgrade blind HTTP 402 (<code className="font-mono text-white">x402</code>) agent payments into a 4-step
+            non-custodial pipeline on Arc &amp; Base: <strong className="text-white">Quote → Lock USDC → Verify
+            Proof → Release in &lt;1s or Auto-Rebate</strong>. Agents never touch private keys.
           </p>
         </section>
 
-        {/* Interactive Policy & x402 Sandbox */}
-        <section className="mt-12 grid gap-6 lg:grid-cols-12">
-          <div className="rwa-depth-card rounded-2xl p-6 lg:col-span-7">
-            <div className="flex items-center justify-between gap-2 border-b border-paper/10 pb-3.5">
-              <div className="flex items-center gap-2">
-                <Terminal className="size-4 text-[#E5E7EB]" />
-                <h2 className="font-mono text-[12px] font-semibold uppercase tracking-[0.12em] text-white">
-                  Interactive Policy &amp; x402 Dry-Run Sandbox
-                </h2>
-              </div>
-              <span className="font-mono text-[10px] text-[#A1A1AA]">DiptosEscrow.previewTECDPayout()</span>
-            </div>
-
-            {/* Lightweight syntax-highlighted JSON editor (zero external bundle) */}
-            <div className="relative mt-4 overflow-hidden rounded-xl border border-paper/15 bg-black/80 focus-within:border-lime">
-              <pre
-                aria-hidden="true"
-                className="pointer-events-none min-h-[250px] whitespace-pre-wrap break-words p-3.5 font-mono text-[12px] leading-relaxed"
-              >
-                {highlightedJson}
-                {'\n'}
-              </pre>
-              <textarea
-                value={policyText}
-                onChange={(e) => setPolicyText(e.target.value)}
-                spellCheck={false}
-                aria-label="Agent policy JSON"
-                className="absolute inset-0 h-full w-full resize-none bg-transparent p-3.5 font-mono text-[12px] leading-relaxed text-transparent caret-lime outline-none selection:bg-lime/20"
+        {/* Top 6 Compact Morpho-Style Cards (Alternating Graphite / White / Lime) */}
+        <section className="mt-12" aria-label="How agent.diptos.xyz works">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {AGENT_CAPABILITIES.map((card) => (
+              <DiptosCard
+                key={card.title}
+                variant={card.variant}
+                icon={card.icon}
+                title={card.title}
+                subtitle={card.subtitle}
               />
+            ))}
+          </div>
+        </section>
+
+        {/* Interactive Policy & x402 Sandbox (Strict Black / White / Lime) */}
+        <section className="mt-20 grid gap-6 lg:grid-cols-12">
+          <div className="rounded-[12px] border border-white/10 bg-[#111111] p-6 lg:col-span-7">
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-3.5">
+              <h2 className="font-mono text-[13px] font-semibold uppercase tracking-[0.04em] text-white">
+                Policy &amp; x402 Dry-Run Sandbox
+              </h2>
+              <span className="font-mono text-[12px] text-[#A3A3A3]">previewTECDPayout()</span>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <label className="block font-mono text-[10.5px]">
-                <span className="uppercase text-[#A1A1AA]">Quote Amount (USDC)</span>
+            <textarea
+              rows={11}
+              value={policyText}
+              onChange={(e) => setPolicyText(e.target.value)}
+              spellCheck={false}
+              aria-label="Agent policy JSON"
+              className="mt-4 w-full rounded-[10px] border border-white/15 bg-black p-4 font-mono text-[13px] leading-relaxed text-white outline-none focus:border-lime"
+            />
+
+            <div className="mt-4 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+              <label className="block font-mono text-[12px]">
+                <span className="uppercase text-[#A3A3A3]">Quote (USDC)</span>
                 <input
                   type="number"
                   min={0.01}
                   step="1"
                   value={quoteAmount}
                   onChange={(e) => setQuoteAmount(Math.max(0.01, Number(e.target.value) || 0))}
-                  className="mt-1 h-9 w-full rounded-lg border border-paper/15 bg-elevated px-3 text-paper outline-none focus:border-lime"
+                  className="mt-1.5 h-10 w-full rounded-lg border border-white/15 bg-black px-3 text-[13.5px] text-white outline-none focus:border-lime"
                 />
               </label>
-              <label className="block font-mono text-[10.5px]">
-                <span className="uppercase text-[#A1A1AA]">Provider Host</span>
+              <label className="block font-mono text-[12px]">
+                <span className="uppercase text-[#A3A3A3]">Provider Host</span>
                 <input
                   type="text"
                   value={quoteProvider}
                   onChange={(e) => setQuoteProvider(e.target.value)}
-                  className="mt-1 h-9 w-full rounded-lg border border-paper/15 bg-elevated px-3 text-paper outline-none focus:border-lime"
+                  className="mt-1.5 h-10 w-full rounded-lg border border-white/15 bg-black px-3 text-[13.5px] text-white outline-none focus:border-lime"
                 />
               </label>
-              <label className="block font-mono text-[10.5px]">
-                <span className="uppercase text-[#A1A1AA]">Simulated Delay (H)</span>
+              <label className="block font-mono text-[12px]">
+                <span className="uppercase text-[#A3A3A3]">Delay (Hours)</span>
                 <input
                   type="number"
                   min={0}
                   max={72}
                   value={simulatedDelayHours}
                   onChange={(e) => setSimulatedDelayHours(Math.max(0, Number(e.target.value) || 0))}
-                  className="mt-1 h-9 w-full rounded-lg border border-paper/15 bg-elevated px-3 text-paper outline-none focus:border-lime"
+                  className="mt-1.5 h-10 w-full rounded-lg border border-white/15 bg-black px-3 text-[13.5px] text-white outline-none focus:border-lime"
                 />
               </label>
             </div>
 
             {dryRunError && (
-              <p className="mt-3 rounded-xl border border-crimson/35 bg-crimson/10 px-3.5 py-2 font-mono text-[11.5px] text-crimson">
+              <p className="mt-3 rounded-lg border border-white/25 bg-black px-3.5 py-2.5 font-mono text-[12.5px] text-white">
                 {dryRunError}
               </p>
             )}
@@ -370,99 +364,99 @@ export function AgentPortal() {
               type="button"
               onClick={() => void runLiveDryRun()}
               disabled={running}
-              className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-full bg-lime font-mono text-[11.5px] font-bold uppercase tracking-[0.12em] text-ink transition-colors hover:bg-[#d8ff4d] disabled:opacity-60"
+              className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-full bg-lime font-mono text-[13px] font-bold tracking-[0.03em] text-ink transition-colors hover:bg-[#d8ff4d] disabled:opacity-60"
             >
-              <Play className="size-4" />
-              {running ? 'Running Live Arc Read-Only Dry-Run…' : 'Run Live Policy + Arc TECD Dry-Run'}
+              <Play className="size-4" strokeWidth={1.75} />
+              {running ? 'Running Dry-Run…' : 'Run Dry-Run'}
             </button>
           </div>
 
-          {/* Right: Dry-Run Output */}
-          <div className="rwa-depth-card flex flex-col justify-between rounded-2xl p-6 lg:col-span-5">
+          {/* Right: Dry-Run Verdict Card */}
+          <div className="flex flex-col justify-between rounded-[12px] border border-white/10 bg-[#111111] p-6 lg:col-span-5">
             <div>
-              <div className="flex items-center justify-between gap-2 border-b border-paper/10 pb-3.5">
-                <div className="flex items-center gap-2">
-                  <Cpu className="size-4 text-[#E5E7EB]" />
-                  <h2 className="font-mono text-[12px] font-semibold uppercase tracking-[0.12em] text-white">
-                    Dry-Run Verdict &amp; On-Chain Math
-                  </h2>
-                </div>
-                <span className="font-mono text-[10px] text-emerald">READ-ONLY ARC RPC</span>
+              <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-3.5">
+                <h2 className="font-mono text-[13px] font-semibold uppercase tracking-[0.04em] text-white">
+                  Dry-Run Verdict
+                </h2>
+                <span className="font-mono text-[11.5px] text-[#A3A3A3]">READ-ONLY ARC RPC</span>
               </div>
 
               {!dryRun ? (
-                <div className="mt-6 rounded-xl border border-paper/10 bg-black/50 p-5 font-mono text-[12px] text-[#A1A1AA]">
-                  Evaluating default policy against live{' '}
-                  <code className="text-paper">DiptosEscrow.previewTECDPayout()</code> and{' '}
-                  <code className="text-paper">DiptosRegistry</code> on Arc Testnet…
+                <div className="mt-6 rounded-[10px] border border-white/10 bg-black p-5 font-mono text-[13px] text-[#A3A3A3]">
+                  Evaluating policy against <code className="text-white">DiptosEscrow.previewTECDPayout()</code> and{' '}
+                  <code className="text-white">DiptosRegistry</code>…
                 </div>
               ) : (
-                <div className="mt-5 space-y-4 font-mono text-[11.5px]">
+                <div className="mt-5 space-y-4 font-mono text-[13px]">
                   <div
-                    className={`rounded-xl border p-4 ${
+                    className={`rounded-[10px] border p-4 ${
                       dryRun.policy.allowed
-                        ? 'border-emerald/45 bg-emerald/10 text-emerald'
-                        : dryRun.policy.decision === 'require_human_approval'
-                          ? 'border-[#FBBF24]/45 bg-[#FBBF24]/10 text-[#FBBF24]'
-                          : 'border-crimson/45 bg-crimson/10 text-crimson'
+                        ? 'border-lime bg-lime text-ink'
+                        : 'border-white/25 bg-black text-white'
                     }`}
                   >
-                    <div className="flex items-center gap-2 font-bold uppercase">
+                    <div className="flex items-center gap-2 font-bold uppercase tracking-[0.03em]">
                       {dryRun.policy.allowed ? (
-                        <ShieldCheck className="size-4" />
+                        <ShieldCheck className="size-4" strokeWidth={2} />
                       ) : (
-                        <ShieldAlert className="size-4" />
+                        <ShieldAlert className="size-4" strokeWidth={1.75} />
                       )}
-                      <span>POLICY VERDICT: {dryRun.policy.decision.replace(/_/g, ' ')}</span>
+                      <span>Verdict: {dryRun.policy.decision.replace(/_/g, ' ')}</span>
                     </div>
-                    <p className="mt-1.5 text-[11px] opacity-90">{dryRun.policy.reason}</p>
+                    <p
+                      className={`mt-1.5 text-[12.5px] ${
+                        dryRun.policy.allowed ? 'text-black/80' : 'text-[#A3A3A3]'
+                      }`}
+                    >
+                      {dryRun.policy.reason}
+                    </p>
                   </div>
 
-                  <dl className="space-y-2 rounded-xl border border-paper/10 bg-black/50 p-4">
+                  <dl className="space-y-2.5 rounded-[10px] border border-white/10 bg-black p-4 tabular-nums">
                     <div className="flex justify-between">
-                      <dt className="text-[#A1A1AA]">Payee Payout</dt>
-                      <dd className="font-bold text-emerald">{fmtAmount(dryRun.onChainTecd.payeePayoutUsdc)} USDC</dd>
+                      <dt className="text-[#A3A3A3]">Payee Payout</dt>
+                      <dd className="font-semibold text-white">{fmtAmount(dryRun.onChainTecd.payeePayoutUsdc)} USDC</dd>
                     </div>
                     <div className="flex justify-between">
-                      <dt className="text-[#A1A1AA]">Auto Buyer Rebate</dt>
+                      <dt className="text-[#A3A3A3]">Auto Buyer Rebate</dt>
                       <dd
-                        className={`font-bold ${
-                          dryRun.onChainTecd.buyerRebateUsdc > 0 ? 'text-[#FBBF24]' : 'text-paper'
+                        className={`font-semibold ${
+                          dryRun.onChainTecd.buyerRebateUsdc > 0 ? 'text-lime' : 'text-white'
                         }`}
                       >
                         {fmtAmount(dryRun.onChainTecd.buyerRebateUsdc)} USDC
                       </dd>
                     </div>
                     <div className="flex justify-between">
-                      <dt className="text-[#A1A1AA]">Protocol Fee (0.5%)</dt>
-                      <dd className="text-paper">{fmtAmount(dryRun.onChainTecd.protocolFeeUsdc)} USDC</dd>
+                      <dt className="text-[#A3A3A3]">Protocol Fee (0.5%)</dt>
+                      <dd className="text-white">{fmtAmount(dryRun.onChainTecd.protocolFeeUsdc)} USDC</dd>
                     </div>
-                    <div className="flex justify-between border-t border-paper/10 pt-2">
-                      <dt className="text-[#A1A1AA]">TECD Source</dt>
-                      <dd className="uppercase text-emerald">{dryRun.onChainTecd.source}</dd>
+                    <div className="flex justify-between border-t border-white/10 pt-2.5">
+                      <dt className="text-[#A3A3A3]">TECD Source</dt>
+                      <dd className="uppercase text-white">{dryRun.onChainTecd.source}</dd>
                     </div>
                     <div className="flex justify-between">
-                      <dt className="text-[#A1A1AA]">Registry Commitment</dt>
-                      <dd className="text-emerald">
-                        {dryRun.registryCommitmentUnique ? 'Unique (No Double-Spend)' : 'Already Exists'}
+                      <dt className="text-[#A3A3A3]">Registry Commitment</dt>
+                      <dd className="text-lime">
+                        {dryRun.registryCommitmentUnique ? 'Unique' : 'Already Exists'}
                       </dd>
                     </div>
                     <div className="flex justify-between">
-                      <dt className="text-[#A1A1AA]">Canonical Hash</dt>
-                      <dd className="text-paper">{shortHex(dryRun.canonicalHash, 10, 6)}</dd>
+                      <dt className="text-[#A3A3A3]">Canonical Hash</dt>
+                      <dd className="text-white">{shortHex(dryRun.canonicalHash, 10, 6)}</dd>
                     </div>
                   </dl>
                 </div>
               )}
             </div>
 
-            <div className="mt-5 border-t border-paper/10 pt-4 font-mono text-[10.5px] text-[#A1A1AA]">
+            <div className="mt-5 border-t border-white/10 pt-4 font-mono text-[12px] text-[#A3A3A3]">
               Contract:{' '}
               <a
                 href={explorerUrl('address', ESCROW_CONTRACT_ADDRESS)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-paper hover:text-lime hover:underline"
+                className="text-white hover:text-lime hover:underline"
               >
                 {shortHex(ESCROW_CONTRACT_ADDRESS, 10, 8)} ↗
               </a>
@@ -470,233 +464,71 @@ export function AgentPortal() {
           </div>
         </section>
 
-        {/* AstraOS-Style Live 6-Pillar Architecture Section */}
-        <section className="mt-16 border-t border-paper/12 pt-12">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div className="max-w-2xl">
-              <p className="rwa-hud text-[#A1A1AA]">LIVE PROTOCOL ARCHITECTURE // ZERO OVER-CLAIMING</p>
-              <h2 className="rwa-display mt-2 text-[26px] text-white sm:text-[32px]">
-                HOW DIPTOS LOCKS AGENT SPEND SAFELY.
-              </h2>
-              <p className="mt-2.5 text-[14px] leading-relaxed text-[#A1A1AA]">
-                Every safeguard below clearly distinguishes what executes on-chain today on Arc Testnet (
-                <code className="font-mono text-[#E5E7EB]">5042002</code>) versus standards we are aligned to on the
-                roadmap.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-1.5 rounded-full border border-paper/15 bg-surface p-1 font-mono text-[10.5px]">
-              {(
-                [
-                  ['all', 'All (6)'],
-                  ['live', 'Live Today'],
-                  ['roadmap', 'Standard-Aligned'],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setPillarFilter(id)}
-                  className={`whitespace-nowrap rounded-full px-3 py-1 transition-colors ${
-                    pillarFilter === id
-                      ? 'bg-lime font-bold text-ink'
-                      : 'text-[#A1A1AA] hover:text-paper'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-7 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {[
-              {
-                id: '01',
-                icon: Lock,
-                title: 'Non-Custodial On-Chain Rules',
-                badge: 'LIVE TODAY',
-                badgeKind: 'live' as const,
-                summary:
-                  'Funds sit in DiptosEscrow.sol—never in a Diptos wallet. Buyers and agents retain full self-custody with a permissionless claimTimeoutRefund() exit.',
-                before: 'Before: Blind prepaid API keys or custodial escrow accounts.',
-                after: `After: Deterministic escrow at ${shortHex(ESCROW_CONTRACT_ADDRESS, 6, 4)} (block ${
-                  pulse.blockNumber ? `#${pulse.blockNumber.toString()}` : 'syncing'
-                }).`,
-              },
-              {
-                id: '02',
-                icon: Gauge,
-                title: 'Sub-Second Stablecoin Finality',
-                badge: 'USDC LIVE · EURC ALIGNED',
-                badgeKind: 'roadmap' as const,
-                summary:
-                  'Native 18-decimal USDC settles in <1s on Arc Testnet with Base USDC + x402 support. EURC multi-currency rail is standard-aligned for Circle expansion.',
-                before: 'Before: T+2 card settlement and chargeback holds.',
-                after: 'After: Atomic USDC finality in 1 block (~1.0s on Arc).',
-              },
-              {
-                id: '03',
-                icon: Layers,
-                title: 'Low-Cost EVM & Programmatic Triggers',
-                badge: 'LIVE TODAY',
-                badgeKind: 'live' as const,
-                summary:
-                  'Predictable USDC-denominated gas on Arc removes ETH gas friction. @diptos/sdk and @diptos/agent-guard hook directly into HTTP 402 agent workflows.',
-                before: 'Before: Agents stall on volatile gas tokens or manual invoicing.',
-                after: 'After: Single-currency USDC gas + programmatic PolicyGuard.',
-              },
-              {
-                id: '04',
-                icon: Scale,
-                title: 'Continuous & Milestone Decay (TECD)',
-                badge: 'LIVE TODAY',
-                badgeKind: 'live' as const,
-                summary:
-                  'Late delivery triggers exact on-chain WAD math (e^(-λ·(t/T)^1.5)), splitting principal into Payee Payout + Auto Buyer Rebate with zero-dust rounding.',
-                before: 'Before: Binary disputes or manual Slack negotiations over delays.',
-                after: `After: ${
-                  dryRun
-                    ? `Live preview → ${fmtAmount(dryRun.onChainTecd.payeePayoutUsdc)} payee / ${fmtAmount(
-                        dryRun.onChainTecd.buyerRebateUsdc,
-                      )} rebate.`
-                    : 'Automatic cent-exact rebate on every late proof.'
-                }`,
-              },
-              {
-                id: '05',
-                icon: Fingerprint,
-                title: 'Verifiable Credentials & Agent Identity',
-                badge: 'PROOF GATE LIVE · ERC-8004/8183 ROADMAP',
-                badgeKind: 'roadmap' as const,
-                summary:
-                  'Hardware-pinned EIP-712 proof verification and DiptosRegistry anti-double-spend commitments run live today; ERC-8004 agent identity & ERC-8183 commerce interfaces are roadmap-aligned.',
-                before: 'Before: Unverified agent calls with no replay protection.',
-                after: `After: Canonical hash uniqueness verified on ${shortHex(REGISTRY_CONTRACT_ADDRESS, 6, 4)}.`,
-              },
-              {
-                id: '06',
-                icon: FileCheck2,
-                title: 'Honest Real-World Enforceability',
-                badge: 'LIVE TODAY · TRANSPARENT',
-                badgeKind: 'live' as const,
-                summary:
-                  'On-chain scope commitments pair with plain-English acceptance terms. Unaudited testnet status, revokeOracleSigner(), and 1-hour velocity circuit breaker are disclosed openly.',
-                before: 'Before: Black-box AI settlement claims hiding admin keys.',
-                after: 'After: 34/34 Foundry tests passing + public risk disclosures.',
-              },
-            ]
-              .filter((p) => (pillarFilter === 'all' ? true : p.badgeKind === pillarFilter))
-              .map((pillar) => {
-                const Icon = pillar.icon
-                return (
-                  <article
-                    key={pillar.id}
-                    className="rwa-depth-card flex flex-col justify-between rounded-2xl p-5"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5">
-                          <span className="inline-flex size-8 items-center justify-center rounded-lg border border-paper/15 bg-black text-[#E5E7EB]">
-                            <Icon className="size-4" />
-                          </span>
-                          <span className="font-mono text-[10.5px] text-[#8A8A90]">{pillar.id}</span>
-                        </div>
-                        <span
-                          className={`rounded-full border px-2 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.06em] ${
-                            pillar.badgeKind === 'live'
-                              ? 'border-emerald/40 bg-emerald/10 text-emerald'
-                              : 'border-[#FBBF24]/40 bg-[#FBBF24]/10 text-[#FBBF24]'
-                          }`}
-                        >
-                          {pillar.badge}
-                        </span>
-                      </div>
-
-                      <h3 className="mt-4 text-[16px] font-semibold tracking-tight text-white">{pillar.title}</h3>
-                      <p className="mt-2 text-[13px] leading-relaxed text-[#A1A1AA]">{pillar.summary}</p>
-                    </div>
-
-                    <div className="mt-4 space-y-1.5 border-t border-paper/10 pt-3 font-mono text-[10.5px]">
-                      <p className="text-[#8A8A90]">{pillar.before}</p>
-                      <p className="text-emerald">{pillar.after}</p>
-                    </div>
-                  </article>
-                )
-              })}
-          </div>
-        </section>
-
         {/* Live Agent Settlement Feed */}
-        <section className="mt-16 border-t border-paper/12 pt-10">
+        <section className="mt-20">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <p className="rwa-hud text-[#A1A1AA]">LIVE ON-CHAIN AGENT FEED // ARC TESTNET (5042002)</p>
+              <p className="rwa-hud text-lime">LIVE ON-CHAIN AGENT FEED</p>
               <h2 className="rwa-display mt-2 text-[26px] text-white sm:text-[32px]">
                 AUTONOMOUS AI AGENT ESCROWS.
               </h2>
             </div>
-            <span className="font-mono text-[11px] text-[#A1A1AA]">
-              {agentEscrows.length} on-chain AI agent escrow{agentEscrows.length === 1 ? '' : 's'}
+            <span className="font-mono text-[13px] text-[#A3A3A3]">
+              {agentEscrows.length} on-chain escrow{agentEscrows.length === 1 ? '' : 's'}
             </span>
           </div>
 
-          <div className="mt-6 space-y-3">
+          <div className="mt-6">
             {loading && agentEscrows.length === 0 ? (
-              <div className="rounded-xl border border-paper/10 bg-surface px-4 py-4 font-mono text-[12px] text-[#A1A1AA]">
+              <div className="rounded-[12px] border border-white/10 bg-[#111111] px-5 py-4 font-mono text-[13px] text-[#A3A3A3]">
                 Syncing live AI agent escrows from DiptosEscrow.sol…
               </div>
             ) : agentEscrows.length === 0 ? (
-              <div className="rounded-xl border border-paper/10 bg-surface px-5 py-4 font-mono text-[12px] text-[#A1A1AA]">
+              <div className="rounded-[12px] border border-white/10 bg-[#111111] px-5 py-4 font-mono text-[13px] text-[#A3A3A3]">
                 No AI agent escrows indexed yet on Arc Testnet.
               </div>
             ) : (
-              agentEscrows.map((esc) => {
-                const isSettled = esc.status.toLowerCase() === 'settled'
-                return (
-                  <div
-                    key={esc.id}
-                    className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-paper/12 bg-surface px-5 py-4"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center gap-1 rounded border border-paper/15 bg-black px-2 py-0.5 font-mono text-[10px] font-semibold text-[#E5E7EB]">
-                          <Bot className="size-3" /> AI AGENT
-                        </span>
-                        <p className="font-semibold text-white">{esc.title || shortHex(esc.id, 10, 6)}</p>
-                        {isSettled && <DiptosVerifiedBadge size="xs" />}
+              <div className="divide-y divide-white/10 overflow-hidden rounded-[12px] border border-white/10 bg-[#0E0E0E]">
+                {agentEscrows.map((esc) => {
+                  const isSettled = esc.status.toLowerCase() === 'settled'
+                  return (
+                    <div
+                      key={esc.id}
+                      className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-[#141414]"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2.5">
+                          {isSettled && <DiptosVerifiedBadge size="xs" />}
+                          <p className="truncate text-[15px] font-semibold text-white">
+                            {esc.title || shortHex(esc.id, 10, 6)}
+                          </p>
+                        </div>
+                        <p className="mt-1 font-mono text-[12.5px] text-[#A3A3A3]">
+                          {fmtAmount(esc.amountUsdc)} USDC · <span className="normal-case">λ</span> ={' '}
+                          {esc.tecdLambda.toFixed(2)} · {shortHex(esc.escrowIdBytes32, 10, 6)}
+                        </p>
                       </div>
-                      <p className="mt-1 font-mono text-[11px] text-[#A1A1AA]">
-                        {fmtAmount(esc.amountUsdc)} USDC · <span className="normal-case">λ</span> ={' '}
-                        {esc.tecdLambda.toFixed(2)} · {shortHex(esc.escrowIdBytes32, 10, 6)}
-                      </p>
-                    </div>
 
-                    <div className="flex items-center gap-2.5 font-mono text-[11px]">
-                      <a
-                        href={explorerUrl('address', ESCROW_CONTRACT_ADDRESS)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-paper/20 px-3 text-paper hover:border-lime hover:text-lime"
-                      >
-                        ArcScan <ArrowUpRight className="size-3" />
-                      </a>
-                      <a
-                        href={getPayUrl(esc.id)}
-                        className="inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-lime px-3.5 font-bold text-ink hover:bg-[#d8ff4d]"
-                      >
-                        {isSettled ? (
-                          <>
-                            <CheckCircle2 className="size-3.5" /> Receipt
-                          </>
-                        ) : (
-                          'Open →'
-                        )}
-                      </a>
+                      <div className="flex items-center gap-2.5 font-mono text-[12px]">
+                        <a
+                          href={explorerUrl('address', ESCROW_CONTRACT_ADDRESS)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-white/20 px-3.5 text-white transition-colors hover:border-lime hover:text-lime"
+                        >
+                          ArcScan <ArrowUpRight className="size-3.5" strokeWidth={1.5} />
+                        </a>
+                        <a
+                          href={getPayUrl(esc.id)}
+                          className="inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-lime px-4 font-semibold text-ink transition-colors hover:bg-[#d8ff4d]"
+                        >
+                          {isSettled ? 'Receipt' : 'Open'}
+                        </a>
+                      </div>
                     </div>
-                  </div>
-                )
-              })
+                  )
+                })}
+              </div>
             )}
           </div>
         </section>

@@ -254,7 +254,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
         <div className="flex items-center justify-between border-b border-paper/10 px-5 py-4">
           <div className="flex items-center gap-2.5">
             <div className="grid size-8 place-items-center rounded-lg border border-lime/40 bg-lime/10">
-              <Wallet className="size-4 text-[#C8FF00]" />
+              <Wallet className="size-4 text-[#CCFF00]" />
             </div>
             <div>
               <h2 className="text-[14.5px] font-semibold text-white">
@@ -281,7 +281,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
           {(error || siweError) && (
             <div
               role="alert"
-              className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3.5 py-2.5 text-[12px] leading-relaxed text-red-100"
+              className="mb-4 rounded-lg border border-white/25 bg-white/10 px-3.5 py-2.5 text-[12px] leading-relaxed text-red-100"
             >
               {error || siweError}
             </div>
@@ -292,12 +292,12 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
               {/* Account Header */}
               <div className="rounded-xl border border-paper/15 bg-white/[0.02] p-4">
                 <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-[#10B981]">
-                    <span className="size-1.5 rounded-full bg-[#10B981]" />
+                  <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-[#CCFF00]">
+                    <span className="size-1.5 rounded-full bg-[#CCFF00]" />
                     CONNECTED
                   </span>
                   <span className="inline-flex items-center gap-1 font-mono text-[11px] text-[#E5E7EB]">
-                    <Fuel className="size-3 text-[#C8FF00]" />
+                    <Fuel className="size-3 text-[#CCFF00]" />
                     Arc Gas: {liveGasLabel}
                   </span>
                 </div>
@@ -310,7 +310,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                       onClick={handleCopy}
                       className="inline-flex items-center gap-1 rounded border border-white/15 bg-white/[0.04] px-2 py-1 font-mono text-[11px] text-[#E5E7EB] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
                     >
-                      {copied ? <Check className="size-3 text-[#10B981]" /> : <Copy className="size-3" />}
+                      {copied ? <Check className="size-3 text-[#CCFF00]" /> : <Copy className="size-3" />}
                       {copied ? 'Copied' : 'Copy'}
                     </button>
                     <a
@@ -328,7 +328,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
               {/* Side-by-Side Arc + Base Multi-Chain Settlement Rails */}
               <div>
                 <p className="mb-2 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-[#E5E7EB]">
-                  <Globe className="size-3.5 text-[#C8FF00]" />
+                  <Globe className="size-3.5 text-[#CCFF00]" />
                   Active Settlement Rails (Arc + Base)
                 </p>
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -339,14 +339,14 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                     onClick={() => handleSwitchChain(5042002)}
                     className={`flex flex-col justify-between rounded-xl border p-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime ${
                       walletChainId === 5042002
-                        ? 'border-[#C8FF00]/60 bg-[#C8FF00]/[0.07]'
+                        ? 'border-[#CCFF00]/60 bg-[#CCFF00]/[0.07]'
                         : 'border-white/15 bg-white/[0.02] hover:border-white/30'
                     }`}
                   >
                     <div>
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-[13px] font-semibold text-white">Arc Testnet</span>
-                        <span className="rounded bg-[#10B981]/20 px-1.5 py-0.5 font-mono text-[9.5px] font-semibold uppercase text-[#10B981]">
+                        <span className="rounded bg-[#CCFF00]/20 px-1.5 py-0.5 font-mono text-[9.5px] font-semibold uppercase text-[#CCFF00]">
                           Live
                         </span>
                       </div>
@@ -358,7 +358,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                       <p className="font-mono text-[14px] font-semibold tabular-nums text-white">
                         {balanceUsdc ?? '—'} <span className="text-[10.5px] text-[#E5E7EB]">USDC</span>
                       </p>
-                      <p className="mt-0.5 font-mono text-[10px] text-[#C8FF00]">
+                      <p className="mt-0.5 font-mono text-[10px] text-[#CCFF00]">
                         {switchingChain === 5042002
                           ? 'Switching…'
                           : walletChainId === 5042002
@@ -375,7 +375,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                     onClick={() => handleSwitchChain(8453)}
                     className={`flex flex-col justify-between rounded-xl border p-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime ${
                       walletChainId === 8453
-                        ? 'border-[#C8FF00]/60 bg-[#C8FF00]/[0.07]'
+                        ? 'border-[#CCFF00]/60 bg-[#CCFF00]/[0.07]'
                         : 'border-white/15 bg-white/[0.02] hover:border-white/30'
                     }`}
                   >
@@ -409,7 +409,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
               {/* 1-Click SIWE HttpOnly Session */}
               <div className="flex items-center justify-between rounded-xl border border-paper/15 bg-white/[0.02] px-4 py-3">
                 <div className="flex items-center gap-2.5">
-                  <KeyRound className="size-4 text-[#C8FF00]" />
+                  <KeyRound className="size-4 text-[#CCFF00]" />
                   <div>
                     <p className="text-[12.5px] font-medium text-white">SIWE Session Cookie</p>
                     <p className="font-mono text-[10.5px] text-[#E5E7EB]/75">
@@ -418,7 +418,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                   </div>
                 </div>
                 {siweState === 'verified' || siweSession?.authenticated ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-[#10B981]/20 px-2.5 py-1 font-mono text-[10px] font-semibold text-[#10B981]">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[#CCFF00]/20 px-2.5 py-1 font-mono text-[10px] font-semibold text-[#CCFF00]">
                     <Check className="size-3" /> ACTIVE
                   </span>
                 ) : (
@@ -426,7 +426,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                     type="button"
                     disabled={siweState === 'signing'}
                     onClick={handleSiweSignIn}
-                    className="rounded-full bg-[#C8FF00] px-3 py-1 font-mono text-[10.5px] font-semibold text-[#07080C] hover:bg-[#d8ff4d] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    className="rounded-full bg-[#CCFF00] px-3 py-1 font-mono text-[10.5px] font-semibold text-[#000000] hover:bg-[#d8ff4d] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                   >
                     {siweState === 'signing' ? 'Signing…' : 'Sign In'}
                   </button>
@@ -436,7 +436,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
               <button
                 type="button"
                 onClick={handleDisconnect}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.02] py-2.5 font-mono text-[11.5px] text-[#E5E7EB] transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.02] py-2.5 font-mono text-[11.5px] text-[#E5E7EB] transition-colors hover:border-white/25 hover:bg-white/10 hover:text-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
               >
                 <LogOut className="size-3.5" />
                 Disconnect &amp; Clear Session
@@ -445,8 +445,8 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
           ) : (
             <div className="space-y-4">
               {/* Plain-English Security & Guarantee Receipt */}
-              <div className="rounded-xl border border-[#C8FF00]/30 bg-[#C8FF00]/[0.06] px-3.5 py-3">
-                <div className="flex items-center gap-1.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[#C8FF00]">
+              <div className="rounded-xl border border-[#CCFF00]/30 bg-[#CCFF00]/[0.06] px-3.5 py-3">
+                <div className="flex items-center gap-1.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[#CCFF00]">
                   <ShieldCheck className="size-3.5" />
                   Security &amp; Guarantee Receipt
                 </div>
@@ -466,7 +466,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                       type="button"
                       disabled={Boolean(connecting)}
                       onClick={() => handleConnect(w.rdns)}
-                      className="flex w-full items-center justify-between rounded-xl border border-white/15 bg-white/[0.03] px-3.5 py-3 text-left transition-colors hover:border-[#C8FF00]/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
+                      className="flex w-full items-center justify-between rounded-xl border border-white/15 bg-white/[0.03] px-3.5 py-3 text-left transition-colors hover:border-[#CCFF00]/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
                     >
                       <div className="flex items-center gap-3">
                         {w.icon ? (
@@ -478,7 +478,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                         )}
                         <span className="text-[13.5px] font-medium text-white">{w.name}</span>
                       </div>
-                      <span className="rounded-full bg-[#C8FF00] px-2.5 py-1 font-mono text-[10px] font-semibold text-[#07080C]">
+                      <span className="rounded-full bg-[#CCFF00] px-2.5 py-1 font-mono text-[10px] font-semibold text-[#000000]">
                         1-Click Connect
                       </span>
                     </button>
@@ -530,7 +530,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                           type="button"
                           disabled={Boolean(connecting)}
                           onClick={() => handleConnect(detected.rdns)}
-                          className="rounded-full bg-[#C8FF00] px-3 py-1 font-mono text-[10.5px] font-semibold text-[#07080C] hover:bg-[#d8ff4d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                          className="rounded-full bg-[#CCFF00] px-3 py-1 font-mono text-[10.5px] font-semibold text-[#000000] hover:bg-[#d8ff4d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                         >
                           {connecting ? <LoaderCircle className="size-3.5 animate-spin" /> : '1-Click Sign In'}
                         </button>

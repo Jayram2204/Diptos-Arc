@@ -202,56 +202,56 @@ export function Waterfall() {
   }
 
   return (
-    <section id="tecd-risk" className="mx-auto max-w-[1280px] border-t border-paper/12 px-6 py-20 lg:px-8">
+    <section id="tecd-risk" className="mx-auto max-w-[1280px] px-5 py-24 sm:px-6 lg:px-8">
       <div className="max-w-2xl">
         <p className="rwa-hud text-lime">03 // LATE-DELIVERY MATH</p>
-        <h2 className="rwa-display mt-3 text-[28px] text-paper sm:text-[38px]">
+        <h2 className="rwa-display mt-3 text-[28px] text-white sm:text-[38px]">
           AUTOMATIC BUYER REBATE. NO MANUAL DISPUTES OVER LATENESS.
         </h2>
       </div>
 
-      {/* Symmetrical 12-Column Equal-Height 2-Card Grid */}
+      {/* Symmetrical 12-Column Equal-Height 2-Card Grid (Strict Black / White / Lime) */}
       <div className="mt-10 grid grid-cols-1 items-stretch gap-6 lg:grid-cols-12">
         {/* Left Card (7 cols): Live On-Chain previewTECDPayout() Decay Curve */}
-        <div className="rwa-depth-card flex flex-col justify-between rounded-2xl p-7 lg:col-span-7">
+        <div className="flex flex-col justify-between rounded-[12px] border border-white/10 bg-[#111111] p-7 lg:col-span-7">
           <div>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="font-mono text-[11.5px] normal-case tracking-[0.04em] text-[#E5E7EB]">
+              <p className="font-mono text-[13px] normal-case tracking-[0.01em] text-white">
                 V(t) = V₀ · e^(−{effectiveLambda.toFixed(2)} · ({delayHours}/{slaWindowHours})^1.5)
               </p>
               <span
-                className={`font-mono text-[11px] uppercase tracking-[0.12em] ${
-                  delayHours === 0 ? 'text-emerald' : 'text-amber-300'
+                className={`font-mono text-[12px] font-semibold uppercase tracking-[0.04em] ${
+                  delayHours === 0 ? 'text-white' : 'text-lime'
                 }`}
               >
                 {delayHours === 0 ? 'ON-TIME // 0% REBATE' : `LATE +${delayHours}H // -${result.decayPercent.toFixed(1)}%`}
               </span>
             </div>
 
-            <div className="relative mt-5 border-y border-paper/10 py-3">
+            <div className="relative mt-5 border-y border-white/10 py-3.5">
               {hoveredHour !== null && (
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-paper/15 bg-black/70 px-3 py-1.5 font-mono text-[11px] text-[#E5E7EB]">
-                  <span>Hover: +{curve.activeHr}h late</span>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/15 bg-black px-3 py-1.5 font-mono text-[12px] text-[#A3A3A3]">
+                  <span className="text-white">Hover: +{curve.activeHr}h late</span>
                   <span>
-                    Payee <strong className="text-emerald">{fmtAmount(curve.activeCalc.payeePayoutUsdc)}</strong> · Rebate{' '}
-                    <strong className="text-amber-300">{fmtAmount(curve.activeCalc.buyerRebateUsdc)}</strong> USDC
+                    Payee <strong className="text-white">{fmtAmount(curve.activeCalc.payeePayoutUsdc)}</strong> · Rebate{' '}
+                    <strong className="text-lime">{fmtAmount(curve.activeCalc.buyerRebateUsdc)}</strong> USDC
                   </span>
                 </div>
               )}
               <svg
                 viewBox={`0 0 ${curve.w} ${curve.h}`}
-                className="h-[166px] w-full cursor-crosshair"
+                className="h-[170px] w-full cursor-crosshair"
                 aria-label="TECD Decay Curve"
                 onMouseMove={handleSvgMove}
                 onMouseLeave={() => setHoveredHour(null)}
               >
                 {/* Y-Axis grid & labels */}
-                <line x1={curve.padLeft} y1={curve.padTop} x2={curve.w - curve.padRight} y2={curve.padTop} stroke="rgba(244,242,236,0.08)" strokeDasharray="3 4" />
-                <line x1={curve.padLeft} y1={curve.padTop + curve.plotH / 2} x2={curve.w - curve.padRight} y2={curve.padTop + curve.plotH / 2} stroke="rgba(244,242,236,0.08)" strokeDasharray="3 4" />
-                <line x1={curve.padLeft} y1={curve.padTop + curve.plotH} x2={curve.w - curve.padRight} y2={curve.padTop + curve.plotH} stroke="rgba(244,242,236,0.18)" />
-                <text x="4" y={curve.padTop + 4} fill="#9CA3AF" fontSize="10" fontFamily="monospace">100%</text>
-                <text x="10" y={curve.padTop + curve.plotH / 2 + 4} fill="#9CA3AF" fontSize="10" fontFamily="monospace">50%</text>
-                <text x="16" y={curve.padTop + curve.plotH + 3} fill="#9CA3AF" fontSize="10" fontFamily="monospace">0%</text>
+                <line x1={curve.padLeft} y1={curve.padTop} x2={curve.w - curve.padRight} y2={curve.padTop} stroke="rgba(255,255,255,0.08)" strokeDasharray="3 4" />
+                <line x1={curve.padLeft} y1={curve.padTop + curve.plotH / 2} x2={curve.w - curve.padRight} y2={curve.padTop + curve.plotH / 2} stroke="rgba(255,255,255,0.08)" strokeDasharray="3 4" />
+                <line x1={curve.padLeft} y1={curve.padTop + curve.plotH} x2={curve.w - curve.padRight} y2={curve.padTop + curve.plotH} stroke="rgba(255,255,255,0.2)" />
+                <text x="4" y={curve.padTop + 4} fill="#A3A3A3" fontSize="11" fontFamily="monospace">100%</text>
+                <text x="10" y={curve.padTop + curve.plotH / 2 + 4} fill="#A3A3A3" fontSize="11" fontFamily="monospace">50%</text>
+                <text x="16" y={curve.padTop + curve.plotH + 3} fill="#A3A3A3" fontSize="11" fontFamily="monospace">0%</text>
 
                 {/* X-Axis ticks (0h, +25%, +50%, +100%) */}
                 {curve.xTicks.map((t) => (
@@ -261,14 +261,14 @@ export function Waterfall() {
                       y1={curve.padTop + curve.plotH}
                       x2={t.x}
                       y2={curve.padTop + curve.plotH + 4}
-                      stroke="rgba(244,242,236,0.28)"
+                      stroke="rgba(255,255,255,0.3)"
                     />
                     <text
                       x={t.x}
-                      y={curve.h - 6}
+                      y={curve.h - 5}
                       textAnchor="middle"
-                      fill="#9CA3AF"
-                      fontSize="10"
+                      fill="#A3A3A3"
+                      fontSize="11"
                       fontFamily="monospace"
                     >
                       {t.label}
@@ -277,32 +277,32 @@ export function Waterfall() {
                 ))}
 
                 {/* Decay Curve */}
-                <path d={curve.path} fill="none" stroke="#C8FF00" strokeWidth="2.2" />
+                <path d={curve.path} fill="none" stroke="#CCFF00" strokeWidth="2.2" />
                 <line
                   x1={curve.dotX}
                   y1={curve.dotY}
                   x2={curve.dotX}
                   y2={curve.padTop + curve.plotH}
-                  stroke="rgba(200,255,0,0.35)"
+                  stroke="rgba(204,255,0,0.4)"
                   strokeDasharray="2 3"
                 />
-                <circle cx={curve.dotX} cy={curve.dotY} r="5" fill="#C8FF00" />
+                <circle cx={curve.dotX} cy={curve.dotY} r="5" fill="#CCFF00" />
               </svg>
             </div>
 
             <div className="mt-6 grid grid-cols-3 gap-4">
               <label className="block">
-                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#9CA3AF]">PRINCIPAL (USDC)</span>
+                <span className="font-mono text-[12px] uppercase tracking-[0.04em] text-[#A3A3A3]">Principal (USDC)</span>
                 <input
                   type="number"
                   min={1}
                   value={amountUsdc}
                   onChange={(e) => setAmountUsdc(Math.max(1, Number(e.target.value) || 0))}
-                  className="mt-1.5 h-9 w-full border-b border-paper/20 bg-transparent font-mono text-[14px] text-paper outline-none focus:border-lime"
+                  className="mt-1.5 h-10 w-full border-b border-white/20 bg-transparent font-mono text-[15px] text-white outline-none focus:border-lime"
                 />
               </label>
               <label className="block">
-                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#9CA3AF]">SLA WINDOW (H)</span>
+                <span className="font-mono text-[12px] uppercase tracking-[0.04em] text-[#A3A3A3]">SLA Window (H)</span>
                 <input
                   type="number"
                   min={1}
@@ -312,12 +312,12 @@ export function Waterfall() {
                     setActivePreset('custom')
                     setSlaWindowHours(Math.max(1, Number(e.target.value) || 1))
                   }}
-                  className="mt-1.5 h-9 w-full border-b border-paper/20 bg-transparent font-mono text-[14px] text-paper outline-none focus:border-lime"
+                  className="mt-1.5 h-10 w-full border-b border-white/20 bg-transparent font-mono text-[15px] text-white outline-none focus:border-lime"
                 />
               </label>
               <label className="block">
-                <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#9CA3AF]">
-                  CUSTOM <span className="normal-case">λ</span>
+                <span className="font-mono text-[12px] uppercase tracking-[0.04em] text-[#A3A3A3]">
+                  Custom <span className="normal-case">λ</span>
                 </span>
                 <input
                   type="number"
@@ -329,15 +329,15 @@ export function Waterfall() {
                     setActivePreset('custom')
                     setEffectiveLambda(Math.max(0.05, Math.min(2, Number(e.target.value) || 0.05)))
                   }}
-                  className="mt-1.5 h-9 w-full border-b border-paper/20 bg-transparent font-mono text-[14px] text-white outline-none focus:border-lime"
+                  className="mt-1.5 h-10 w-full border-b border-white/20 bg-transparent font-mono text-[15px] text-white outline-none focus:border-lime"
                 />
               </label>
             </div>
 
             <div className="mt-6">
-              <div className="flex items-baseline justify-between font-mono text-[11px] uppercase tracking-[0.1em]">
-                <span className="text-[#9CA3AF]">DELIVERY DELAY (0h → {maxDelayHours}h)</span>
-                <span className={delayHours === 0 ? 'text-emerald' : 'text-amber-300'}>{delayHours} HOURS LATE</span>
+              <div className="flex items-baseline justify-between font-mono text-[12.5px] uppercase tracking-[0.04em]">
+                <span className="text-[#A3A3A3]">Delivery Delay (0h → {maxDelayHours}h)</span>
+                <span className={delayHours === 0 ? 'text-white' : 'text-lime'}>{delayHours} HOURS LATE</span>
               </div>
               <input
                 type="range"
@@ -365,18 +365,21 @@ export function Waterfall() {
                 : displayPayee
 
             return (
-              <div className="mt-6 grid grid-cols-3 gap-4 border-t border-paper/10 pt-5 font-mono">
-                <div>
-                  <p className="text-[10px] uppercase text-[#9CA3AF]">PAYEE PAYOUT</p>
-                  <p className="mt-1 text-[18px] font-semibold text-emerald">{fmtAmount(exactPayee)} USDC</p>
+              <div className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-3 font-mono tabular-nums">
+                {/* White surface: Payee Payout */}
+                <div className="rounded-[10px] bg-white p-4 text-black">
+                  <p className="text-[11.5px] font-medium uppercase tracking-[0.04em] text-black/60">Payee Payout</p>
+                  <p className="mt-1.5 text-[19px] font-bold text-black">{fmtAmount(exactPayee)} USDC</p>
                 </div>
-                <div>
-                  <p className="text-[10px] uppercase text-[#9CA3AF]">AUTO BUYER REBATE</p>
-                  <p className="mt-1 text-[18px] font-semibold text-amber-300">{fmtAmount(displayRebate)} USDC</p>
+                {/* Lime surface: Auto Buyer Rebate */}
+                <div className="rounded-[10px] bg-lime p-4 text-black">
+                  <p className="text-[11.5px] font-medium uppercase tracking-[0.04em] text-black/65">Auto Buyer Rebate</p>
+                  <p className="mt-1.5 text-[19px] font-bold text-black">{fmtAmount(displayRebate)} USDC</p>
                 </div>
-                <div>
-                  <p className="text-[10px] uppercase text-[#9CA3AF]">FEE (0.5%)</p>
-                  <p className="mt-1 text-[18px] font-semibold text-paper">{fmtAmount(displayFee)} USDC</p>
+                {/* Graphite surface: Protocol Fee */}
+                <div className="rounded-[10px] border border-white/15 bg-black p-4 text-white">
+                  <p className="text-[11.5px] font-medium uppercase tracking-[0.04em] text-[#A3A3A3]">Fee (0.5%)</p>
+                  <p className="mt-1.5 text-[19px] font-bold text-white">{fmtAmount(displayFee)} USDC</p>
                 </div>
               </div>
             )
@@ -384,19 +387,19 @@ export function Waterfall() {
         </div>
 
         {/* Right Card (5 cols): Interactive SLA Protection Presets */}
-        <div className="rwa-depth-card flex flex-col justify-between rounded-2xl p-7 lg:col-span-5">
+        <div className="flex flex-col justify-between rounded-[12px] border border-white/10 bg-[#111111] p-7 lg:col-span-5">
           <div>
-            <div className="flex items-center justify-between gap-3 border-b border-paper/10 pb-4">
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-4">
               <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-white">
-                  SLA PROTECTION PRESETS
+                <p className="font-mono text-[13px] font-semibold uppercase tracking-[0.04em] text-white">
+                  SLA Protection Presets
                 </p>
-                <p className="mt-0.5 font-mono text-[11px] text-[#9CA3AF]">
+                <p className="mt-0.5 font-mono text-[12px] text-[#A3A3A3]">
                   DiptosEscrow.previewTECDPayout()
                 </p>
               </div>
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald/35 bg-emerald/10 px-2.5 py-0.5 font-mono text-[10px] text-emerald">
-                <ShieldCheck className="size-3" />
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black px-3 py-1 font-mono text-[11px] text-lime">
+                <ShieldCheck className="size-3.5" strokeWidth={1.5} />
                 {result.source === 'arc-eth-call' ? 'ARC ETH_CALL' : 'WAD PARITY'}
               </span>
             </div>
@@ -409,31 +412,37 @@ export function Waterfall() {
                     key={preset.id}
                     type="button"
                     onClick={() => applyPreset(preset)}
-                    className={`w-full rounded-xl border p-4 text-left transition-colors ${
+                    className={`w-full rounded-[10px] border p-4 text-left transition-colors ${
                       selected
-                        ? 'border-lime/60 bg-lime/[0.07]'
-                        : 'border-paper/10 bg-black/40 hover:border-paper/25'
+                        ? 'border-white bg-white text-black'
+                        : 'border-white/10 bg-[#0E0E0E] text-white hover:border-white/30'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-[12.5px] font-semibold uppercase tracking-[0.06em] text-paper">
+                      <span className="font-mono text-[13.5px] font-semibold tracking-[0.01em]">
                         {preset.name}
                       </span>
-                      <span className="inline-flex items-center gap-1.5 font-mono text-[11.5px] font-semibold normal-case text-lime">
+                      <span
+                        className={`inline-flex items-center gap-1.5 font-mono text-[12.5px] font-semibold normal-case ${
+                          selected ? 'text-black' : 'text-lime'
+                        }`}
+                      >
                         λ = {preset.lambda.toFixed(2)}
-                        {selected && <Check className="size-3.5" />}
+                        {selected && <Check className="size-3.5" strokeWidth={2} />}
                       </span>
                     </div>
-                    <p className="mt-1.5 text-[12.5px] leading-relaxed text-[#9CA3AF]">{preset.summary}</p>
+                    <p className={`mt-1.5 text-[14px] leading-relaxed ${selected ? 'text-black/75' : 'text-[#A3A3A3]'}`}>
+                      {preset.summary}
+                    </p>
                   </button>
                 )
               })}
             </div>
           </div>
 
-          <div className="mt-6 flex items-center justify-between border-t border-paper/10 pt-4 font-mono text-[10.5px] text-[#9CA3AF]">
-            <span>ACTIVE PRESET: {activePreset.toUpperCase()}</span>
-            <span className="text-paper">ON-CHAIN FIXED-POINT WAD</span>
+          <div className="mt-6 flex items-center justify-between border-t border-white/10 pt-4 font-mono text-[12px] text-[#A3A3A3]">
+            <span>ACTIVE: {activePreset.toUpperCase()}</span>
+            <span className="text-white">ON-CHAIN FIXED-POINT WAD</span>
           </div>
         </div>
       </div>

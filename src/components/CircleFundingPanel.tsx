@@ -198,7 +198,7 @@ export function CircleFundingPanel({
             className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-semibold ${
               gasState.sponsored
                 ? 'border-lime/45 bg-lime/10 text-lime'
-                : 'border-emerald/35 bg-emerald/10 text-emerald'
+                : 'border-lime/35 bg-lime/10 text-lime'
             }`}
           >
             <Fuel className="size-3" />
@@ -281,13 +281,13 @@ export function CircleFundingPanel({
           )}
 
           {onrampStatus.kind === 'error' && (
-            <div className="rounded-xl border border-crimson/35 bg-crimson/10 px-3.5 py-2.5 font-mono text-[11px] text-crimson">
+            <div className="rounded-xl border border-white/25 bg-white/10 px-3.5 py-2.5 font-mono text-[11px] text-white">
               {onrampStatus.message}
             </div>
           )}
 
           {onrampStatus.kind === 'settled' && (
-            <div className="flex items-center gap-2 rounded-xl border border-emerald/40 bg-emerald/10 px-3.5 py-2.5 font-mono text-[11.5px] text-emerald">
+            <div className="flex items-center gap-2 rounded-xl border border-lime/40 bg-lime/10 px-3.5 py-2.5 font-mono text-[11.5px] text-lime">
               <ShieldCheck className="size-4" />
               <span>{onrampStatus.detail}</span>
             </div>
@@ -389,7 +389,7 @@ export function CircleFundingPanel({
               <span className="font-semibold uppercase text-lime">
                 Route: {fundingPlan.route.replace(/-/g, ' ')}
               </span>
-              <span className="text-[10px] text-emerald">{fundingPlan.estimatedFinality}</span>
+              <span className="text-[10px] text-lime">{fundingPlan.estimatedFinality}</span>
             </div>
             <ol className="mt-2 list-decimal space-y-1 pl-4 text-[10.5px] text-paper/85">
               {fundingPlan.steps.map((step) => (

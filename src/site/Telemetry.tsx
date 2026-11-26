@@ -33,7 +33,7 @@ export function Telemetry() {
           </Reveal>
           <Reveal delayMs={80}>
             <span className="inline-flex items-center gap-2.5 rounded-full border border-paper/15 bg-surface px-4 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-paper/85">
-              <PulseDot color={pulse.error ? 'bg-crimson' : 'bg-lime'} />
+              <PulseDot color={pulse.error ? 'bg-white/10' : 'bg-lime'} />
               {ARC_RPC_URL}
             </span>
           </Reveal>
@@ -51,7 +51,7 @@ export function Telemetry() {
             </div>
             <div className="p-7">
               <dt className="rwa-hud text-secondary">BLOCK AGE / FINALITY</dt>
-              <dd className="mt-3 font-mono text-[26px] font-semibold tabular-nums text-emerald">
+              <dd className="mt-3 font-mono text-[26px] font-semibold tabular-nums text-lime">
                 {finalityAge !== null ? `${finalityAge}s` : 'Syncing…'}
               </dd>
               <dd className="mt-1 font-mono text-[10.5px] uppercase text-secondary">SUB-SECOND FINALITY</dd>

@@ -2,19 +2,17 @@
 
 :root {
   --bg-black: #000000;
-  --bg-navy-depth: #020664;
-  --bg-surface: #0a0c12;
-  --bg-paper-section: #f4f2ec;
+  --bg-surface: #0e0e0e;
+  --bg-elevated: #141414;
+  --bg-paper-section: #ffffff;
 
-  --text-paper: #f4f2ec;
-  --text-muted: rgba(244, 242, 236, 0.62);
-  --text-ink: #07080c;
+  --text-paper: #ffffff;
+  --text-muted: #a3a3a3;
+  --text-ink: #000000;
 
-  --accent-lime: #c8ff00;
-  --accent-emerald: #10b981;
-  --accent-crimson: #ef4444;
+  --accent-lime: #ccff00;
 
-  --border-paper: rgba(244, 242, 236, 0.1);
+  --border-paper: rgba(255, 255, 255, 0.1);
   --ease-rwa: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -22,21 +20,20 @@
   --font-sans: 'Archivo', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
 
-  /* Exact rwa.inc palette tokens + backward-compatible aliases */
+  /* Strict 3-color palette: Black/Graphite, White/Neutral Gray, Electric Lime */
   --color-canvas: #000000;
   --color-black: #000000;
-  --color-navy-depth: #020664;
-  --color-surface: #0a0c12;
-  --color-elevated: #0f121a;
-  --color-paper: #f4f2ec;
-  --color-ink: #07080c;
+  --color-surface: #0e0e0e;
+  --color-elevated: #141414;
+  --color-paper: #ffffff;
+  --color-ink: #000000;
 
-  --color-primary: #f4f2ec;
-  --color-secondary: rgba(244, 242, 236, 0.62);
-  --color-lime: #c8ff00;
-  --color-gold: #c8ff00;
-  --color-emerald: #10b981;
-  --color-crimson: #ef4444;
+  --color-primary: #ffffff;
+  --color-secondary: #a3a3a3;
+  --color-lime: #ccff00;
+  --color-gold: #ccff00;
+  --color-emerald: #ccff00;
+  --color-crimson: #ffffff;
 
   --animate-fade-up: fade-up 0.85s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-pulse-dot: pulse-dot 2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
@@ -77,18 +74,19 @@
     background: var(--bg-black);
     color-scheme: dark;
     scroll-behavior: smooth;
-    scroll-padding-top: 88px;
+    scroll-padding-top: 84px;
   }
   section[id],
   div[id] {
-    scroll-margin-top: 88px;
+    scroll-margin-top: 84px;
   }
   body {
     background: var(--bg-black);
     color: var(--text-paper);
     font-family: var(--font-sans);
     font-weight: 400;
-    line-height: 1.55;
+    font-size: 16px;
+    line-height: 1.6;
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -98,10 +96,10 @@
   h3,
   h4 {
     font-family: var(--font-sans);
-    font-variation-settings: 'wdth' 122;
+    font-variation-settings: 'wdth' 118;
     font-weight: 600;
-    letter-spacing: -0.03em;
-    line-height: 1.02;
+    letter-spacing: -0.025em;
+    line-height: 1.04;
   }
   ::selection {
     background: var(--accent-lime);
@@ -119,26 +117,26 @@
 
 .rwa-display {
   font-family: 'Archivo', sans-serif;
-  font-variation-settings: 'wdth' 122;
+  font-variation-settings: 'wdth' 118;
   font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.02;
+  letter-spacing: -0.025em;
+  line-height: 1.04;
 }
 
 .rwa-hud {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
+  font-size: 0.8125rem;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
 }
 
 .rwa-reveal {
   opacity: 0;
-  transform: translateY(24px);
+  transform: translateY(20px);
   transition:
-    opacity 0.9s var(--ease-rwa),
-    transform 0.95s var(--ease-rwa);
+    opacity 0.75s var(--ease-rwa),
+    transform 0.8s var(--ease-rwa);
   will-change: opacity, transform;
 }
 
@@ -148,10 +146,8 @@
 }
 
 .rwa-depth-card {
-  background:
-    radial-gradient(120% 90% at 85% 0%, rgba(2, 6, 100, 0.34), transparent 62%),
-    var(--bg-surface);
-  border: 1px solid rgba(244, 242, 236, 0.1);
+  background: #111111;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Kinetic Settlement Flywheel Keyframes (GPU transform & opacity only) */

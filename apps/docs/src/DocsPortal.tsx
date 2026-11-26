@@ -49,7 +49,7 @@ function CodeBlock({ block }: { block: DocCodeBlock }) {
   }
 
   return (
-    <div className="my-5 overflow-hidden rounded-xl border border-white/12 bg-[#0B0D12]">
+    <div className="my-5 overflow-hidden rounded-xl border border-white/12 bg-[#111111]">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-white/[0.025] px-3.5 py-2">
         <div className="flex items-center gap-1.5">
           {showPkgTabs ? (
@@ -59,7 +59,7 @@ function CodeBlock({ block }: { block: DocCodeBlock }) {
                 type="button"
                 onClick={() => setPm(tab)}
                 className={`rounded px-2 py-0.5 font-mono text-[11px] transition-colors ${
-                  pm === tab ? 'bg-[#C8FF00] font-semibold text-[#07080C]' : 'text-[#E5E7EB]/80 hover:text-white'
+                  pm === tab ? 'bg-[#CCFF00] font-semibold text-[#000000]' : 'text-[#E5E7EB]/80 hover:text-white'
                 }`}
               >
                 {tab}
@@ -72,7 +72,7 @@ function CodeBlock({ block }: { block: DocCodeBlock }) {
                 type="button"
                 onClick={() => setLang(tab)}
                 className={`rounded px-2.5 py-0.5 font-mono text-[11px] capitalize transition-colors ${
-                  lang === tab ? 'bg-[#C8FF00] font-semibold text-[#07080C]' : 'text-[#E5E7EB]/80 hover:text-white'
+                  lang === tab ? 'bg-[#CCFF00] font-semibold text-[#000000]' : 'text-[#E5E7EB]/80 hover:text-white'
                 }`}
               >
                 {tab === 'curl' ? 'cURL' : tab === 'typescript' ? 'TypeScript' : 'Solidity'}
@@ -80,7 +80,7 @@ function CodeBlock({ block }: { block: DocCodeBlock }) {
             ))
           ) : (
             <span className="inline-flex items-center gap-1.5 font-mono text-[11.5px] text-[#E5E7EB]">
-              <Terminal className="size-3 text-[#C8FF00]" />
+              <Terminal className="size-3 text-[#CCFF00]" />
               {block.filename ?? block.language}
             </span>
           )}
@@ -91,7 +91,7 @@ function CodeBlock({ block }: { block: DocCodeBlock }) {
           aria-label="Copy code snippet"
           className="inline-flex items-center gap-1.5 rounded px-2 py-1 font-mono text-[11px] text-[#E5E7EB] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-lime"
         >
-          {copied ? <Check className="size-3 text-[#10B981]" /> : <Copy className="size-3" />}
+          {copied ? <Check className="size-3 text-[#CCFF00]" /> : <Copy className="size-3" />}
           <span>{copied ? 'Copied' : 'Copy'}</span>
         </button>
       </div>
@@ -104,7 +104,7 @@ function CodeBlock({ block }: { block: DocCodeBlock }) {
 
 function TecdCurveDiagram() {
   return (
-    <figure className="my-5 rounded-xl border border-white/12 bg-[#0B0D12] p-5">
+    <figure className="my-5 rounded-xl border border-white/12 bg-[#111111] p-5">
       <svg viewBox="0 0 600 180" className="w-full" role="img" aria-label="TECD Decay Math Curve">
         <rect x="0" y="0" width="600" height="180" fill="transparent" />
         <line x1="56" y1="24" x2="564" y2="24" stroke="rgba(255,255,255,0.1)" strokeDasharray="3 4" />
@@ -112,21 +112,21 @@ function TecdCurveDiagram() {
         <line x1="56" y1="144" x2="564" y2="144" stroke="rgba(255,255,255,0.22)" />
         <line x1="56" y1="24" x2="56" y2="144" stroke="rgba(255,255,255,0.22)" />
         {/* On-time flat plateau */}
-        <line x1="56" y1="30" x2="190" y2="30" stroke="#10B981" strokeWidth="2.5" />
+        <line x1="56" y1="30" x2="190" y2="30" stroke="#CCFF00" strokeWidth="2.5" />
         {/* TECD exponential decay curve */}
         <path
           d="M 190 30 C 260 36, 330 78, 420 112 C 475 130, 520 138, 560 140"
           fill="none"
-          stroke="#C8FF00"
+          stroke="#CCFF00"
           strokeWidth="2.5"
         />
         <line x1="190" y1="24" x2="190" y2="144" stroke="rgba(200,255,0,0.4)" strokeDasharray="3 3" />
-        <circle cx="190" cy="30" r="4.5" fill="#10B981" />
-        <circle cx="330" cy="76" r="4.5" fill="#C8FF00" />
-        <text x="64" y="18" fill="#10B981" fontSize="11" fontFamily="monospace">
+        <circle cx="190" cy="30" r="4.5" fill="#CCFF00" />
+        <circle cx="330" cy="76" r="4.5" fill="#CCFF00" />
+        <text x="64" y="18" fill="#CCFF00" fontSize="11" fontFamily="monospace">
           ON-TIME: 99.5% PAYEE
         </text>
-        <text x="200" y="18" fill="#C8FF00" fontSize="11" fontFamily="monospace">
+        <text x="200" y="18" fill="#CCFF00" fontSize="11" fontFamily="monospace">
           DEADLINE T (Δt &gt; 0): V(t) = V₀ · e^(−λ·(Δt/T)^1.5)
         </text>
         <text x="342" y="72" fill="#E5E7EB" fontSize="10.5" fontFamily="monospace">
@@ -154,23 +154,23 @@ function TecdCurveDiagram() {
 
 function TrustBoundariesDiagram() {
   return (
-    <figure className="my-5 rounded-xl border border-white/12 bg-[#0B0D12] p-5">
+    <figure className="my-5 rounded-xl border border-white/12 bg-[#111111] p-5">
       <svg viewBox="0 0 600 150" className="w-full" role="img" aria-label="Zero-Key Trust Boundaries Diagram">
-        <rect x="16" y="32" width="160" height="84" rx="10" fill="#11151E" stroke="rgba(255,255,255,0.2)" />
+        <rect x="16" y="32" width="160" height="84" rx="10" fill="#141414" stroke="rgba(255,255,255,0.2)" />
         <text x="32" y="60" fill="#FFFFFF" fontSize="12" fontWeight="600" fontFamily="monospace">
           BUYER / AGENT
         </text>
         <text x="32" y="80" fill="#E5E7EB" fontSize="10" fontFamily="monospace">
           Holds Own Keys
         </text>
-        <text x="32" y="96" fill="#C8FF00" fontSize="10" fontFamily="monospace">
+        <text x="32" y="96" fill="#CCFF00" fontSize="10" fontFamily="monospace">
           100% Timeout Refund
         </text>
 
-        <line x1="176" y1="74" x2="218" y2="74" stroke="#C8FF00" strokeWidth="2" />
+        <line x1="176" y1="74" x2="218" y2="74" stroke="#CCFF00" strokeWidth="2" />
 
-        <rect x="218" y="24" width="168" height="100" rx="10" fill="#0B1410" stroke="#10B981" strokeWidth="1.5" />
-        <text x="234" y="54" fill="#10B981" fontSize="12" fontWeight="600" fontFamily="monospace">
+        <rect x="218" y="24" width="168" height="100" rx="10" fill="#111111" stroke="#CCFF00" strokeWidth="1.5" />
+        <text x="234" y="54" fill="#CCFF00" fontSize="12" fontWeight="600" fontFamily="monospace">
           DiptosEscrow.sol
         </text>
         <text x="234" y="74" fill="#FFFFFF" fontSize="10" fontFamily="monospace">
@@ -179,20 +179,20 @@ function TrustBoundariesDiagram() {
         <text x="234" y="92" fill="#E5E7EB" fontSize="10" fontFamily="monospace">
           Single-Use Nonce Gate
         </text>
-        <text x="234" y="108" fill="#C8FF00" fontSize="10" fontFamily="monospace">
+        <text x="234" y="108" fill="#CCFF00" fontSize="10" fontFamily="monospace">
           Atomic 99.5% / 0.5%
         </text>
 
-        <line x1="386" y1="74" x2="428" y2="74" stroke="#10B981" strokeWidth="2" />
+        <line x1="386" y1="74" x2="428" y2="74" stroke="#CCFF00" strokeWidth="2" />
 
-        <rect x="428" y="32" width="156" height="84" rx="10" fill="#11151E" stroke="rgba(255,255,255,0.2)" />
+        <rect x="428" y="32" width="156" height="84" rx="10" fill="#141414" stroke="rgba(255,255,255,0.2)" />
         <text x="444" y="60" fill="#FFFFFF" fontSize="12" fontWeight="600" fontFamily="monospace">
           PROOF VERIFIER
         </text>
         <text x="444" y="80" fill="#E5E7EB" fontSize="10" fontFamily="monospace">
           Zero Fund Custody
         </text>
-        <text x="444" y="96" fill="#10B981" fontSize="10" fontFamily="monospace">
+        <text x="444" y="96" fill="#CCFF00" fontSize="10" fontFamily="monospace">
           EIP-712 Attestation
         </text>
       </svg>
@@ -248,16 +248,16 @@ function LiveTecdPlayground() {
   }
 
   return (
-    <div className="my-5 rounded-xl border border-[#C8FF00]/30 bg-[#0B0D12] p-5">
+    <div className="my-5 rounded-xl border border-[#CCFF00]/30 bg-[#111111] p-5">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3.5">
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-[#C8FF00]">
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-[#CCFF00]">
           LIVE ETH_CALL PLAYGROUND // ARC TESTNET 5042002
         </span>
         <button
           type="button"
           onClick={runLiveCall}
           disabled={running}
-          className="inline-flex items-center gap-1.5 rounded-full bg-[#C8FF00] px-3.5 py-1.5 font-mono text-[11px] font-semibold text-[#07080C] hover:bg-[#d8ff4d] disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-full bg-[#CCFF00] px-3.5 py-1.5 font-mono text-[11px] font-semibold text-[#000000] hover:bg-[#d8ff4d] disabled:opacity-50"
         >
           <Play className="size-3" />
           {running ? 'Calling Arc RPC…' : 'Run previewTECDPayout()'}
@@ -272,7 +272,7 @@ function LiveTecdPlayground() {
             min={1}
             value={principal}
             onChange={(e) => setPrincipal(Math.max(1, Number(e.target.value) || 1))}
-            className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-[#07080B] px-3 font-mono text-[12.5px] text-white"
+            className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-[#000000] px-3 font-mono text-[12.5px] text-white"
           />
         </label>
         <label className="block">
@@ -283,7 +283,7 @@ function LiveTecdPlayground() {
             max={72}
             value={delayHours}
             onChange={(e) => setDelayHours(Math.max(0, Number(e.target.value) || 0))}
-            className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-[#07080B] px-3 font-mono text-[12.5px] text-white"
+            className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-[#000000] px-3 font-mono text-[12.5px] text-white"
           />
         </label>
         <label className="block">
@@ -297,25 +297,25 @@ function LiveTecdPlayground() {
             max={2}
             value={lambda}
             onChange={(e) => setLambda(Math.max(0.05, Number(e.target.value) || 0.35))}
-            className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-[#07080B] px-3 font-mono text-[12.5px] text-[#C8FF00]"
+            className="mt-1 h-9 w-full rounded-lg border border-white/15 bg-[#000000] px-3 font-mono text-[12.5px] text-[#CCFF00]"
           />
         </label>
       </div>
 
-      {err && <p className="mt-3 font-mono text-[11.5px] text-red-300">{err}</p>}
+      {err && <p className="mt-3 font-mono text-[11.5px] text-white">{err}</p>}
       {output && (
-        <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg border border-white/10 bg-[#07080B] p-3.5 font-mono text-[11.5px] sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg border border-white/10 bg-[#000000] p-3.5 font-mono text-[11.5px] sm:grid-cols-4">
           <div>
             <p className="text-[10px] text-[#E5E7EB]/70">ARC BLOCK</p>
             <p className="mt-0.5 text-white">{output.block}</p>
           </div>
           <div>
             <p className="text-[10px] text-[#E5E7EB]/70">PAYEE PAYOUT</p>
-            <p className="mt-0.5 text-[#10B981]">{output.payee}</p>
+            <p className="mt-0.5 text-[#CCFF00]">{output.payee}</p>
           </div>
           <div>
             <p className="text-[10px] text-[#E5E7EB]/70">AUTO REBATE</p>
-            <p className="mt-0.5 text-[#C8FF00]">{output.rebate}</p>
+            <p className="mt-0.5 text-[#CCFF00]">{output.rebate}</p>
           </div>
           <div>
             <p className="text-[10px] text-[#E5E7EB]/70">DECAY / FEE</p>
@@ -425,7 +425,7 @@ export function DocsPortal() {
               href={getApexUrl()}
               className="rwa-display inline-flex items-baseline text-[17px] tracking-[-0.04em] text-white"
             >
-              DIPTOS<span className="ml-0.5 inline-block size-1.5 rounded-full bg-[#C8FF00]" />
+              DIPTOS<span className="ml-0.5 inline-block size-1.5 rounded-full bg-[#CCFF00]" />
             </a>
             <span className="text-white/25">/</span>
             <span className="font-mono text-[12px] font-medium text-[#E5E7EB]">Docs</span>
@@ -453,7 +453,7 @@ export function DocsPortal() {
                 href={getAgentUrl()}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 font-medium text-[#C8FF00] hover:underline"
+                className="inline-flex items-center gap-1 font-medium text-[#CCFF00] hover:underline"
               >
                 Agents <ArrowUpRight className="size-3" />
               </a>
@@ -461,7 +461,7 @@ export function DocsPortal() {
                 href={getAppUrl()}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 hover:text-[#C8FF00]"
+                className="inline-flex items-center gap-1 hover:text-[#CCFF00]"
               >
                 App <ArrowUpRight className="size-3" />
               </a>
@@ -469,7 +469,7 @@ export function DocsPortal() {
                 href="https://github.com/Jayram2204/Diptos-Arc"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 hover:text-[#C8FF00]"
+                className="inline-flex items-center gap-1 hover:text-[#CCFF00]"
               >
                 GitHub <ArrowUpRight className="size-3" />
               </a>
@@ -477,7 +477,7 @@ export function DocsPortal() {
                 href="https://www.npmjs.com/package/@diptos/sdk"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 hover:text-[#C8FF00]"
+                className="inline-flex items-center gap-1 hover:text-[#CCFF00]"
               >
                 npm <ArrowUpRight className="size-3" />
               </a>
@@ -491,7 +491,7 @@ export function DocsPortal() {
         <aside
           className={`${
             mobileNavOpen ? 'fixed inset-y-14 left-0 z-30 block w-[264px]' : 'hidden'
-          } shrink-0 border-r border-white/10 bg-[#06070A] lg:sticky lg:top-14 lg:block lg:h-[calc(100vh-3.5rem)] lg:w-[258px] lg:overflow-y-auto`}
+          } shrink-0 border-r border-white/10 bg-[#000000] lg:sticky lg:top-14 lg:block lg:h-[calc(100vh-3.5rem)] lg:w-[258px] lg:overflow-y-auto`}
         >
           <nav className="space-y-6 px-4 py-6" aria-label="Documentation sections">
             {DOC_GROUPS.map((group) => {
@@ -517,7 +517,7 @@ export function DocsPortal() {
                             }`}
                           >
                             <span>{item.title}</span>
-                            {active && <span className="size-1.5 rounded-full bg-[#C8FF00]" />}
+                            {active && <span className="size-1.5 rounded-full bg-[#CCFF00]" />}
                           </button>
                         </li>
                       )
@@ -562,7 +562,7 @@ export function DocsPortal() {
                     <ul className="mt-4 space-y-2.5 text-[14.5px] leading-[1.7] text-[#E5E7EB]">
                       {section.bullets.map((bullet, idx) => (
                         <li key={idx} className="flex items-start gap-2.5">
-                          <span className="mt-2.5 size-1.5 shrink-0 rounded-full bg-[#C8FF00]" />
+                          <span className="mt-2.5 size-1.5 shrink-0 rounded-full bg-[#CCFF00]" />
                           <span>{bullet}</span>
                         </li>
                       ))}
@@ -614,7 +614,7 @@ export function DocsPortal() {
                       className={`my-5 rounded-lg border-l-2 bg-white/[0.03] px-4 py-3.5 text-[13.5px] leading-[1.65] ${
                         section.callout.tone === 'warning'
                           ? 'border-[#F59E0B] text-white'
-                          : 'border-[#C8FF00] text-[#E5E7EB]'
+                          : 'border-[#CCFF00] text-[#E5E7EB]'
                       }`}
                     >
                       <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-white">
@@ -633,12 +633,12 @@ export function DocsPortal() {
                 <button
                   type="button"
                   onClick={() => selectPage(prevPage.id)}
-                  className="group flex flex-col items-start rounded-xl border border-white/12 bg-white/[0.02] px-4 py-3.5 text-left transition-colors hover:border-[#C8FF00]/50"
+                  className="group flex flex-col items-start rounded-xl border border-white/12 bg-white/[0.02] px-4 py-3.5 text-left transition-colors hover:border-[#CCFF00]/50"
                 >
                   <span className="inline-flex items-center gap-1 font-mono text-[11px] text-[#E5E7EB]/75">
                     <ArrowLeft className="size-3" /> Previous
                   </span>
-                  <span className="mt-1 text-[14px] font-medium text-white group-hover:text-[#C8FF00]">
+                  <span className="mt-1 text-[14px] font-medium text-white group-hover:text-[#CCFF00]">
                     {prevPage.title}
                   </span>
                 </button>
@@ -650,12 +650,12 @@ export function DocsPortal() {
                 <button
                   type="button"
                   onClick={() => selectPage(nextPage.id)}
-                  className="group flex flex-col items-end rounded-xl border border-white/12 bg-white/[0.02] px-4 py-3.5 text-right transition-colors hover:border-[#C8FF00]/50"
+                  className="group flex flex-col items-end rounded-xl border border-white/12 bg-white/[0.02] px-4 py-3.5 text-right transition-colors hover:border-[#CCFF00]/50"
                 >
                   <span className="inline-flex items-center gap-1 font-mono text-[11px] text-[#E5E7EB]/75">
                     Next <ArrowRight className="size-3" />
                   </span>
-                  <span className="mt-1 text-[14px] font-medium text-white group-hover:text-[#C8FF00]">
+                  <span className="mt-1 text-[14px] font-medium text-white group-hover:text-[#CCFF00]">
                     {nextPage.title}
                   </span>
                 </button>
@@ -683,13 +683,13 @@ export function DocsPortal() {
               ))}
             </ul>
 
-            <div className="mt-8 rounded-xl border border-white/12 bg-[#0B0D12] p-3.5">
+            <div className="mt-8 rounded-xl border border-white/12 bg-[#111111] p-3.5">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#E5E7EB]">
                   Arc Testnet
                 </span>
-                <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-[#10B981]">
-                  <span className="size-1.5 rounded-full bg-[#10B981]" />
+                <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-[#CCFF00]">
+                  <span className="size-1.5 rounded-full bg-[#CCFF00]" />
                   5042002
                 </span>
               </div>
@@ -700,7 +700,7 @@ export function DocsPortal() {
                 type="button"
                 onClick={checkLiveRpc}
                 disabled={rpcStatus.loading}
-                className="mt-3 w-full rounded-lg border border-white/20 bg-white/[0.04] px-2.5 py-1.5 font-mono text-[11px] text-white transition-colors hover:border-[#C8FF00] hover:text-[#C8FF00] disabled:opacity-50"
+                className="mt-3 w-full rounded-lg border border-white/20 bg-white/[0.04] px-2.5 py-1.5 font-mono text-[11px] text-white transition-colors hover:border-[#CCFF00] hover:text-[#CCFF00] disabled:opacity-50"
               >
                 {rpcStatus.loading ? 'Querying RPC…' : 'Verify Live RPC'}
               </button>
@@ -712,12 +712,12 @@ export function DocsPortal() {
                   </div>
                   <div className="flex justify-between">
                     <span>Latency</span>
-                    <span className="text-[#C8FF00]">{rpcStatus.latency}</span>
+                    <span className="text-[#CCFF00]">{rpcStatus.latency}</span>
                   </div>
                 </div>
               )}
               {rpcStatus.error && (
-                <p className="mt-2 font-mono text-[10.5px] text-red-300">{rpcStatus.error}</p>
+                <p className="mt-2 font-mono text-[10.5px] text-white">{rpcStatus.error}</p>
               )}
             </div>
           </div>
@@ -731,7 +731,7 @@ export function DocsPortal() {
           onClick={() => setSearchOpen(false)}
         >
           <div
-            className="w-full max-w-[540px] overflow-hidden rounded-xl border border-white/15 bg-[#0B0D12] shadow-2xl"
+            className="w-full max-w-[540px] overflow-hidden rounded-xl border border-white/15 bg-[#111111] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-2.5 border-b border-white/10 px-4 py-3">
@@ -765,7 +765,7 @@ export function DocsPortal() {
                       onClick={() => selectPage(page.id)}
                       className="flex w-full flex-col items-start rounded-md px-3 py-2.5 text-left transition-colors hover:bg-white/[0.06]"
                     >
-                      <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#C8FF00]">
+                      <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#CCFF00]">
                         {page.group}
                       </span>
                       <span className="mt-0.5 text-[13.5px] font-medium text-white">{page.title}</span>

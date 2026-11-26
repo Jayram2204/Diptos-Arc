@@ -1,9 +1,12 @@
 import { useState } from 'react'
-import { ArrowUpRight, Check, Download, Share2, ShieldCheck, Zap } from 'lucide-react'
+import { ArrowUpRight, Check, Download, Share2, Zap } from 'lucide-react'
 import { ESCROW_CONTRACT_ADDRESS } from '@/config/protocol'
 import { explorerUrl, fmtAmount, shortHex } from '@/lib/chain'
 import { CopyButton } from './ui'
 
+/**
+ * Ultra-clean single verification mark (`✓`) — zero bulky text pills.
+ */
 export function DiptosVerifiedBadge({
   size = 'sm',
   className = '',
@@ -11,19 +14,18 @@ export function DiptosVerifiedBadge({
   size?: 'xs' | 'sm' | 'md'
   className?: string
 }) {
-  const sizeCls =
-    size === 'xs'
-      ? 'px-2 py-0.5 text-[9.5px] gap-1'
-      : size === 'md'
-        ? 'px-3.5 py-1.5 text-[11px] gap-1.5'
-        : 'px-2.5 py-1 text-[10px] gap-1.5'
+  const boxCls =
+    size === 'xs' ? 'size-4' : size === 'md' ? 'size-5' : 'size-[18px]'
+  const iconCls =
+    size === 'xs' ? 'size-2.5' : size === 'md' ? 'size-3.5' : 'size-3'
 
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded-full border border-lime/50 bg-[#0B0D12] font-mono font-bold uppercase tracking-[0.12em] text-lime shadow-[0_0_16px_rgba(200,255,0,0.14)] ${sizeCls} ${className}`}
+      title="Verified on-chain"
+      aria-label="Verified on-chain"
+      className={`inline-flex shrink-0 items-center justify-center rounded-full bg-lime text-ink ${boxCls} ${className}`}
     >
-      <ShieldCheck className={size === 'xs' ? 'size-3' : 'size-3.5'} />
-      <span>DIPTOS VERIFIED ✓</span>
+      <Check className={iconCls} strokeWidth={2.5} />
     </span>
   )
 }
@@ -49,55 +51,52 @@ function downloadVerifiedReceiptPng(props: VerifiedReceiptProps) {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
-  // Dark background
-  ctx.fillStyle = '#07080C'
+  // Pure black background
+  ctx.fillStyle = '#000000'
   ctx.fillRect(0, 0, w, h)
 
-  // Subtle card frame
-  ctx.fillStyle = '#0B0D12'
-  ctx.strokeStyle = 'rgba(200, 255, 0, 0.35)'
+  // Graphite card frame
+  ctx.fillStyle = '#111111'
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)'
   ctx.lineWidth = 2
   ctx.beginPath()
-  ctx.roundRect(36, 36, w - 72, h - 72, 24)
+  ctx.roundRect(36, 36, w - 72, h - 72, 20)
   ctx.fill()
   ctx.stroke()
 
-  // Top badge pill
-  ctx.fillStyle = 'rgba(200, 255, 0, 0.12)'
-  ctx.strokeStyle = '#C8FF00'
-  ctx.lineWidth = 1.5
+  // Top verified mark
+  ctx.fillStyle = '#CCFF00'
   ctx.beginPath()
-  ctx.roundRect(76, 76, 260, 42, 21)
+  ctx.roundRect(76, 76, 178, 38, 19)
   ctx.fill()
-  ctx.stroke()
 
-  ctx.fillStyle = '#C8FF00'
-  ctx.font = '700 16px ui-monospace, SFMono-Regular, Menlo, monospace'
-  ctx.fillText('DIPTOS VERIFIED ✓', 106, 103)
-
-  // Arc finality pill
-  ctx.fillStyle = 'rgba(16, 185, 129, 0.15)'
-  ctx.strokeStyle = 'rgba(16, 185, 129, 0.5)'
-  ctx.beginPath()
-  ctx.roundRect(w - 310, 76, 234, 42, 21)
-  ctx.fill()
-  ctx.stroke()
-  ctx.fillStyle = '#34D399'
+  ctx.fillStyle = '#000000'
   ctx.font = '700 15px ui-monospace, SFMono-Regular, Menlo, monospace'
-  ctx.fillText('<1S ARC FINALITY', w - 282, 103)
+  ctx.fillText('✓ VERIFIED', 112, 100)
+
+  // Arc finality pill (monochrome white border)
+  ctx.fillStyle = '#000000'
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)'
+  ctx.beginPath()
+  ctx.roundRect(w - 300, 76, 224, 38, 19)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = '#FFFFFF'
+  ctx.font = '600 14px ui-monospace, SFMono-Regular, Menlo, monospace'
+  ctx.fillText('<1S ARC FINALITY', w - 270, 100)
 
   // Title
-  ctx.fillStyle = '#F4F2EC'
+  ctx.fillStyle = '#FFFFFF'
   ctx.font = '700 34px -apple-system, BlinkMacSystemFont, Inter, sans-serif'
   const cleanTitle = (props.title || 'Verified Native USDC Settlement').slice(0, 46)
   ctx.fillText(cleanTitle, 76, 182)
 
   // Amount settled
-  ctx.fillStyle = '#C8FF00'
+  ctx.fillStyle = '#CCFF00'
   ctx.font = '700 54px ui-monospace, SFMono-Regular, Menlo, monospace'
   ctx.fillText(`${fmtAmount(props.amountUsdc)} USDC`, 76, 262)
 
-  ctx.fillStyle = '#9CA3AF'
+  ctx.fillStyle = '#A3A3A3'
   ctx.font = '500 16px ui-monospace, SFMono-Regular, Menlo, monospace'
   ctx.fillText('NON-CUSTODIAL NATIVE USDC SETTLEMENT · ARC TESTNET (5042002)', 76, 300)
 
@@ -110,26 +109,26 @@ function downloadVerifiedReceiptPng(props: VerifiedReceiptProps) {
 
   let y = 365
   for (const [label, val] of rows) {
-    ctx.fillStyle = '#9CA3AF'
+    ctx.fillStyle = '#A3A3A3'
     ctx.font = '600 13px ui-monospace, SFMono-Regular, Menlo, monospace'
     ctx.fillText(label, 76, y)
-    ctx.fillStyle = '#F4F2EC'
+    ctx.fillStyle = '#FFFFFF'
     ctx.font = '500 16px ui-monospace, SFMono-Regular, Menlo, monospace'
     ctx.fillText(val.length > 58 ? `${val.slice(0, 32)}…${val.slice(-22)}` : val, 270, y)
     y += 46
   }
 
   // Footer
-  ctx.strokeStyle = 'rgba(244, 242, 236, 0.12)'
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)'
   ctx.lineWidth = 1
   ctx.beginPath()
   ctx.moveTo(76, 520)
   ctx.lineTo(w - 76, 520)
   ctx.stroke()
 
-  ctx.fillStyle = '#9CA3AF'
+  ctx.fillStyle = '#A3A3A3'
   ctx.font = '500 15px ui-monospace, SFMono-Regular, Menlo, monospace'
-  ctx.fillText('diptos.xyz  •  app.diptos.xyz  •  Deterministic Proof-Gated Settlement', 76, 558)
+  ctx.fillText('diptos.xyz  ·  app.diptos.xyz  ·  Condition-Verified USDC Settlement', 76, 558)
 
   const link = document.createElement('a')
   link.download = `diptos-verified-${props.escrowId.slice(0, 12)}.png`
@@ -157,66 +156,69 @@ export function VerifiedSettlementReceiptCard(props: VerifiedReceiptProps) {
   const displayProof = props.proofHash && !/^0x0+$/.test(props.proofHash) ? props.proofHash : props.escrowIdBytes32
 
   return (
-    <div className="mt-5 rounded-2xl border border-lime/35 bg-[#090B10] p-5 shadow-[0_0_28px_rgba(200,255,0,0.06)]">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-paper/10 pb-3.5">
-        <DiptosVerifiedBadge size="md" />
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald/40 bg-emerald/10 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald">
-          <Zap className="size-3" />
+    <div className="mt-5 rounded-xl border border-white/15 bg-[#111111] p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3.5">
+        <div className="inline-flex items-center gap-2 font-mono text-[12px] font-semibold text-white">
+          <DiptosVerifiedBadge size="md" />
+          <span>Settled On-Chain</span>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black px-2.5 py-1 font-mono text-[11px] font-medium text-[#A3A3A3]">
+          <Zap className="size-3 text-lime" strokeWidth={1.5} />
           &lt;1s Arc Finality
         </span>
       </div>
 
-      <dl className="mt-4 space-y-2.5 font-mono text-[11.5px]">
+      <dl className="mt-4 space-y-2.5 font-mono text-[12.5px]">
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-secondary">USDC Settled</dt>
-          <dd className="text-[14px] font-bold text-lime">{fmtAmount(props.amountUsdc)} USDC</dd>
+          <dt className="text-[#A3A3A3]">USDC Settled</dt>
+          <dd className="text-[15px] font-bold text-lime">{fmtAmount(props.amountUsdc)} USDC</dd>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-secondary">Escrow ID</dt>
-          <dd className="flex items-center gap-1.5 text-paper">
+          <dt className="text-[#A3A3A3]">Escrow ID</dt>
+          <dd className="flex items-center gap-1.5 text-white">
             <span>{shortHex(props.escrowIdBytes32, 10, 8)}</span>
             <CopyButton value={props.escrowIdBytes32} label="Copy escrow ID" />
           </dd>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-secondary">Proof Hash</dt>
-          <dd className="flex items-center gap-1.5 text-paper">
+          <dt className="text-[#A3A3A3]">Proof Hash</dt>
+          <dd className="flex items-center gap-1.5 text-white">
             <span>{shortHex(displayProof, 10, 8)}</span>
             <CopyButton value={displayProof} label="Copy proof hash" />
           </dd>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-secondary">On-Chain Proof</dt>
+          <dt className="text-[#A3A3A3]">On-Chain Proof</dt>
           <dd>
             <a
               href={arcLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-emerald hover:underline"
+              className="inline-flex items-center gap-1 text-white hover:text-lime hover:underline"
             >
               {props.txHash ? shortHex(props.txHash, 10, 6) : 'View on ArcScan'}
-              <ArrowUpRight className="size-3.5" />
+              <ArrowUpRight className="size-3.5" strokeWidth={1.5} />
             </a>
           </dd>
         </div>
       </dl>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2.5 border-t border-paper/10 pt-4">
+      <div className="mt-4 flex flex-wrap items-center gap-2.5 border-t border-white/10 pt-4">
         <button
           type="button"
           onClick={() => void handleShareCopy()}
-          className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full bg-lime px-4 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-ink transition-colors hover:bg-[#d8ff4d]"
+          className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full bg-lime px-4 font-mono text-[12px] font-bold text-ink transition-colors hover:bg-[#d8ff4d]"
         >
-          {copied ? <Check className="size-3.5" /> : <Share2 className="size-3.5" />}
-          {copied ? 'Receipt Link Copied' : 'Share Verified Receipt'}
+          {copied ? <Check className="size-3.5" strokeWidth={1.5} /> : <Share2 className="size-3.5" strokeWidth={1.5} />}
+          {copied ? 'Link Copied' : 'Share Receipt'}
         </button>
         <button
           type="button"
           onClick={() => downloadVerifiedReceiptPng(props)}
-          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-paper/20 bg-surface px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-paper transition-colors hover:border-lime hover:text-lime"
+          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-white/20 bg-black px-4 font-mono text-[12px] font-medium text-white transition-colors hover:border-lime hover:text-lime"
         >
-          <Download className="size-3.5" />
-          PNG Card
+          <Download className="size-3.5" strokeWidth={1.5} />
+          PNG
         </button>
       </div>
     </div>

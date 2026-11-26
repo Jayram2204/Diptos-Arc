@@ -21,16 +21,16 @@ const variantClasses: Record<ButtonVariant, string> = {
   primary:
     'bg-lime text-ink font-semibold hover:bg-[#d8ff4d] hover:-translate-y-[1px] active:scale-[0.98]',
   secondary:
-    'bg-transparent hover:bg-paper/10 text-paper border border-paper/25 hover:border-lime hover:text-lime',
-  ghost: 'bg-transparent hover:bg-paper/8 text-secondary hover:text-paper',
-  danger: 'bg-crimson/15 text-crimson border border-crimson/35 hover:bg-crimson/25',
-  emerald: 'bg-emerald/15 text-emerald border border-emerald/40 hover:bg-emerald/25',
+    'bg-transparent hover:bg-white/10 text-white border border-white/25 hover:border-lime hover:text-lime',
+  ghost: 'bg-transparent hover:bg-white/8 text-[#A3A3A3] hover:text-white',
+  danger: 'bg-white/10 text-white border border-white/30 hover:bg-white/15',
+  emerald: 'bg-lime/15 text-lime border border-lime/40 hover:bg-lime/25',
 }
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'h-9 px-4 text-[11px] gap-1.5 rounded-full font-mono uppercase tracking-[0.12em]',
-  md: 'h-11 px-5 text-[11.5px] gap-2 rounded-full font-mono uppercase tracking-[0.12em]',
-  lg: 'h-12 px-7 text-[12px] gap-2.5 rounded-full font-mono uppercase tracking-[0.14em]',
+  sm: 'h-9 px-4 text-[12px] gap-1.5 rounded-full font-mono uppercase tracking-[0.04em]',
+  md: 'h-11 px-5 text-[12.5px] gap-2 rounded-full font-mono uppercase tracking-[0.04em]',
+  lg: 'h-12 px-7 text-[13px] gap-2.5 rounded-full font-mono uppercase tracking-[0.05em]',
 }
 
 export function Button({

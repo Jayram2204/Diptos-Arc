@@ -107,7 +107,7 @@ export function CookieConsentPill() {
             <dl className="mt-3.5 divide-y divide-paper/10 font-mono text-[11px]">
               <div className="flex justify-between py-2">
                 <dt className="text-[#E5E7EB]/80">SIWE Session (diptos_sid)</dt>
-                <dd className={serverSession?.authenticated ? 'text-emerald' : 'text-[#E5E7EB]'}>
+                <dd className={serverSession?.authenticated ? 'text-lime' : 'text-[#E5E7EB]'}>
                   {serverSession?.authenticated ? 'HttpOnly Active' : 'Signed Out'}
                 </dd>
               </div>
@@ -140,7 +140,7 @@ export function CookieConsentPill() {
               <button
                 type="button"
                 onClick={handleClearNonEssential}
-                className="inline-flex items-center gap-1 rounded-full border border-paper/20 px-3 py-2 font-mono text-[10.5px] uppercase text-[#E5E7EB] hover:border-crimson/60 hover:text-crimson"
+                className="inline-flex items-center gap-1 rounded-full border border-paper/20 px-3 py-2 font-mono text-[10.5px] uppercase text-[#E5E7EB] hover:border-white/25 hover:text-white"
               >
                 <Trash2 className="size-3" />
                 Clear
