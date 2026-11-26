@@ -1,0 +1,51 @@
+# Diptos — Condition-Verified USDC Settlement & AI Agent Guardrails
+
+> Non-custodial programmable USDC escrow links, continuous Time-Entropic Collateral Decay (TECD) late-delivery rebates, and proof-gated HTTP 402 (x402) AI agent budgets.
+
+## Surfaces
+- Apex Site: https://diptos.xyz
+- Escrow Engine: https://app.diptos.xyz
+- AI Agent Sandbox (Dipto): https://agent.diptos.xyz
+- Developer Documentation: https://sdk.diptos.xyz
+- GitHub Repository: https://github.com/Jayram2204/Diptos-Arc
+
+## Live Contracts — Arc Testnet (Chain ID: 5042002)
+- RPC: https://rpc.testnet.arc.network
+- Explorer: https://testnet.arcscan.app
+- DiptosEscrow.sol: 0x601bD8caDf9ba2274E645412C1Fca2dF13a318F5 (18-dec Native USDC, non-custodial, unaudited testnet · 34/34 Foundry tests)
+- DiptosRegistry.sol: 0xC831EBFA825d88853625C52d1BD55c456111B004 (canonical keccak256 commitment ledger)
+- ArcUSDC Precompile: 0x3600000000000000000000000000000000000000
+
+## Packages & Quickstart
+- Core SDK: `@diptos/sdk` (https://www.npmjs.com/package/@diptos/sdk)
+  Install: `pnpm add @diptos/sdk viem`
+- AI Agent Guardrails: `@diptos/agent-guard` (x402 conditional verification + per-agent USDC budget caps)
+
+### Minimal TypeScript Example (Arc Testnet 5042002)
+```ts
+import { DiptosClient } from '@diptos/sdk'
+import { keccak256, toHex } from 'viem'
+
+const diptos = new DiptosClient({
+  rpcUrl: 'https://rpc.testnet.arc.network',
+  apiBaseUrl: 'https://diptos.xyz',
+  escrowContract: '0x601bD8caDf9ba2274E645412C1Fca2dF13a318F5',
+  registryContract: '0xC831EBFA825d88853625C52d1BD55c456111B004',
+})
+
+const escrowId = keccak256(toHex('diptos:arc:5042002:task-001'))
+const tx = diptos.buildFundEscrowTx({
+  escrowId,
+  payee: '0x000000000000000000000000000000000000dEaD',
+  amountUsdc: 250,
+  deadlineUnix: Math.floor(Date.now() / 1000) + 86_400,
+  lambdaBps: 5000, // λ = 0.50
+  isAgentMode: false,
+})
+```
+
+## Security & Trust Model
+- Zero platform custody: Diptos never holds user private keys or sweep permissions over escrowed principal.
+- Permissionless recovery: Payers can always call `claimTimeoutRefund(escrowId)` after `deadline + gracePeriod`.
+- Admin safeguards: `revokeOracleSigner()` kill-switch and configurable 1-hour outflow velocity circuit breaker on oracle-triggered releases.
+- Zero-dust invariant: `payeePayout + buyerRebate + protocolFee == principal` across both 18-dec Arc Native USDC and 6-dec Base ERC-20 USDC.

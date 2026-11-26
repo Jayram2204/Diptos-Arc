@@ -19,17 +19,32 @@ export default function App() {
   const route = useAppRoute()
 
   useEffect(() => {
+    let title = 'Diptos — Condition-Verified USDC Settlement on Arc'
+    let description =
+      'Lock USDC against objective proof—merged code, passing tests, or valid AI agent output. 0.5% flat fee, <1s Arc finality, automatic late-delivery rebate.'
+
     if (route.view === 'pay' && route.escrowId) {
-      document.title = `Escrow ${route.escrowId.slice(0, 12)} — app.diptos.xyz`
+      title = `Escrow ${route.escrowId.slice(0, 12)} — app.diptos.xyz`
+      description = 'Inspect live non-custodial USDC settlement terms, objective proof status, and TECD late-delivery math.'
     } else if (route.view === 'app') {
-      document.title = 'Diptos App — Programmable Escrow Links on Arc'
+      title = 'Diptos App — Condition-Verified USDC Escrow Engine | app.diptos.xyz'
+      description = 'Create and manage non-custodial USDC settlement links on Arc Testnet (5042002) with automatic TECD late-delivery rebates.'
     } else if (route.view === 'sdk') {
-      document.title = '@diptos/sdk — Developer Portal & Live Console'
+      title = 'Diptos Docs — @diptos/sdk & Multi-Chain Settlement Reference | sdk.diptos.xyz'
+      description = 'Developer documentation for @diptos/sdk, @diptos/agent-guard, Arc Native USDC (18-dec), Base ERC-20 USDC (6-dec) + x402, and live TECD eth_call.'
     } else if (route.view === 'agent') {
-      document.title = 'Dipto — Proof-Gated AI Agent USDC Budgets | agent.diptos.xyz'
-    } else {
-      document.title = 'Diptos — Programmable Escrow & AI Settlement on Arc'
+      title = 'Diptos / Dipto — Proof-Gated AI Agent USDC Budgets | agent.diptos.xyz'
+      description = 'Give autonomous AI agents non-custodial USDC spend caps that only unlock on verified output over HTTP 402 (x402).'
     }
+
+    document.title = title
+    const setMeta = (selector: string, content: string) => {
+      const el = document.querySelector(selector)
+      if (el) el.setAttribute('content', content)
+    }
+    setMeta('meta[name="description"]', description)
+    setMeta('meta[property="og:title"]', title)
+    setMeta('meta[property="og:description"]', description)
     window.scrollTo({ top: 0 })
   }, [route.view, route.escrowId])
 

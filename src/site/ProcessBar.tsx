@@ -75,7 +75,7 @@ export function ProcessBar() {
           <div className="flex flex-col justify-between gap-8 border-b border-ink/15 pb-12 lg:flex-row lg:items-end">
             <Reveal className="max-w-2xl">
               <p className="font-mono text-[11.5px] font-medium uppercase tracking-[0.14em] text-ink/75">
-                01 // HOW IT WORKS · GUARANTEED OUTCOME PROTECTION
+                01 // HOW IT WORKS · CONDITION-VERIFIED USDC SETTLEMENT
               </p>
               <h2 className="rwa-display mt-4 text-[clamp(2rem,4.2vw,3.6rem)] uppercase text-ink">
                 FROM PAYMENT LINK TO 1-SECOND PAYOUT.

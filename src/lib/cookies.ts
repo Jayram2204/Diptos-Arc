@@ -38,8 +38,14 @@ export function writeCookie(
   if (maxAgeSec !== null) {
     attrs.push(`Max-Age=${maxAgeSec}`)
   }
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
-    attrs.push('Secure')
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname.toLowerCase()
+    if (host === 'diptos.xyz' || host.endsWith('.diptos.xyz')) {
+      attrs.push('Domain=.diptos.xyz')
+    }
+    if (window.location.protocol === 'https:') {
+      attrs.push('Secure')
+    }
   }
   document.cookie = attrs.join('; ')
   window.dispatchEvent(new Event(COOKIE_EVENT))

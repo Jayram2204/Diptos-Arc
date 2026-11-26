@@ -55,7 +55,7 @@ export const DOC_PAGES: DocPage[] = [
     group: 'Getting Started',
     title: 'Introduction',
     description:
-      'Diptos is a non-custodial USDC Guaranteed Outcome Protection protocol built for Arc Native USDC (18-dec) and Base ERC-20 USDC (6-dec) + x402 autonomous AI agents.',
+      'Diptos is a non-custodial Condition-Verified USDC Settlement protocol built for Arc Native USDC (18-dec) and Base ERC-20 USDC (6-dec) + x402 autonomous AI agents.',
     sections: [
       {
         id: 'what-is-diptos',

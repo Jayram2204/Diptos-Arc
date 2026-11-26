@@ -11,9 +11,9 @@ export function Footer() {
           <span className="rwa-display inline-flex items-baseline text-[22px] tracking-[-0.04em] text-paper">
             DIPTOS<span className="ml-0.5 inline-block size-2 rounded-full bg-lime" />
           </span>
-          <p className="mt-3 max-w-md text-[14px] text-secondary">
-            Guaranteed Outcome Protection for human work and autonomous AI agents. Non-custodial native USDC settlement,
-            deterministic proof, and automatic late-delivery rebates on {ARC_NETWORK.short}.
+          <p className="mt-3 max-w-md text-[14px] text-[#9CA3AF]">
+            Condition-Verified USDC Settlement for human work and autonomous AI agents. Non-custodial native USDC
+            vaults, deterministic proof, and automatic late-delivery rebates on {ARC_NETWORK.short}.
           </p>
         </div>
 

@@ -287,7 +287,9 @@ function LiveTecdPlayground() {
           />
         </label>
         <label className="block">
-          <span className="font-mono text-[10.5px] uppercase text-[#E5E7EB]">SLA λ</span>
+          <span className="font-mono text-[10.5px] uppercase text-[#E5E7EB]">
+            SLA <span className="normal-case">λ</span>
+          </span>
           <input
             type="number"
             step="0.05"

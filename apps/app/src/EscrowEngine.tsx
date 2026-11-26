@@ -161,7 +161,7 @@ function LifecycleStepper({ status }: { status: string }) {
 
 function downloadEscrowReceipt(esc: EscrowRecord) {
   const payload = {
-    protocol: 'Diptos Guaranteed Outcome Protection',
+    protocol: 'Diptos Condition-Verified USDC Settlement',
     chainId: 5042002,
     contract: ESCROW_CONTRACT_ADDRESS,
     escrowId: esc.id,
@@ -233,19 +233,35 @@ function EscrowEngineInner() {
   const tecdSchedule = useMemo(() => {
     const totalSec = Math.max(120, Math.round(deadlineHours * 3600))
     return [
-      { label: 'On-Time (Δt = 0)', delaySec: 0 },
+      { label: 'On-Time (0h)', delaySec: 0 },
       { label: '+25% Overdue', delaySec: Math.round(totalSec * 0.25) },
       { label: '+50% Overdue', delaySec: Math.round(totalSec * 0.5) },
-    ].map((pt) => ({
-      label: pt.label,
-      ...diptos.calculateTECD({
+      { label: '+100% Overdue', delaySec: totalSec },
+      { label: '+200% Overdue', delaySec: totalSec * 2 },
+    ].map((pt) => {
+      const calc = diptos.calculateTECD({
         principalUsdc: parsedAmount,
         lambda: selectedLambda,
         delaySeconds: pt.delaySec,
         totalDurationSeconds: totalSec,
         gamma: 1.5,
-      }),
-    }))
+      })
+      const fee = Math.round(calc.protocolFeeUsdc * 100) / 100
+      const payee =
+        pt.delaySec === 0
+          ? Math.max(0, Math.round((parsedAmount - fee) * 100) / 100)
+          : Math.round(calc.payeePayoutUsdc * 100) / 100
+      const rebate =
+        pt.delaySec === 0
+          ? 0
+          : Math.max(0, Math.round((parsedAmount - payee - fee) * 100) / 100)
+      return {
+        label: pt.label,
+        payeePayoutUsdc: payee,
+        buyerRebateUsdc: rebate,
+        protocolFeeUsdc: fee,
+      }
+    })
   }, [parsedAmount, selectedLambda, deadlineHours])
 
   const metrics = useMemo(() => {
@@ -527,7 +543,7 @@ function EscrowEngineInner() {
               DIPTOS<span className="ml-0.5 inline-block size-1.5 rounded-full bg-[#C8FF00]" />
             </a>
             <div className="hidden items-center gap-2 text-[13px] lg:flex">
-              <span className="text-[#E5E7EB]/75">Guaranteed Outcome Protection</span>
+              <span className="text-[#9CA3AF]">Condition-Verified USDC Settlement</span>
               <span className="text-white/25">/</span>
               <span className="font-medium text-white">
                 {view === 'ledger'
@@ -537,6 +553,10 @@ function EscrowEngineInner() {
                     : 'Testnet Faucet'}
               </span>
             </div>
+            <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-400/35 bg-amber-400/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-amber-300">
+              <span className="size-1.5 rounded-full bg-amber-300" />
+              Testnet · No Real Funds
+            </span>
           </div>
 
           <div className="flex items-center gap-2.5">
@@ -1150,11 +1170,14 @@ function EscrowEngineInner() {
                         placeholder="Define verifiable proof requirements (merged PR, passing CI tests, or valid AI output)"
                         className="w-full rounded-lg border border-white/15 bg-[#07080B] p-3.5 text-[13px] text-white placeholder:text-[#E5E7EB]/45 focus:border-[#C8FF00] focus:outline-none"
                       />
+                      <p className="mt-1.5 font-mono text-[11px] text-amber-300/90">
+                        Stored publicly on-chain—do not paste credentials, secrets, or confidential client terms.
+                      </p>
                     </div>
 
                     <div>
                       <label className="mb-1.5 flex items-center font-mono text-[11px] uppercase tracking-[0.06em] text-[#E5E7EB]">
-                        SLA Protection Preset (TECD λ)
+                        SLA Protection Preset (TECD <span className="ml-1 normal-case">λ</span>)
                         <InfoTip term="TECD λ" text={`${GLOSSARY_TIPS.TECD} ${GLOSSARY_TIPS.lambda}`} />
                       </label>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -1251,20 +1274,38 @@ function EscrowEngineInner() {
                   </dl>
 
                   <div className="mt-4 rounded-lg border border-white/10 bg-[#07080B] p-3.5">
-                    <p className="font-mono text-[10.5px] uppercase tracking-[0.08em] text-[#E5E7EB]/80">
-                      Automatic Late-Delivery Rebate Schedule
-                    </p>
-                    <div className="mt-2.5 space-y-2 font-mono text-[11px]">
-                      {tecdSchedule.map((row) => (
-                        <div key={row.label} className="flex items-center justify-between">
-                          <span className="text-[#E5E7EB]/80">{row.label}</span>
-                          <span className="text-white">
-                            Payee {fmtAmount(row.payeePayoutUsdc)} · Rebate{' '}
-                            <span className="text-[#C8FF00]">{fmtAmount(row.buyerRebateUsdc)}</span>
-                          </span>
-                        </div>
-                      ))}
+                    <div className="flex items-center justify-between">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-[#9CA3AF]">
+                        Late-Delivery &amp; Worst-Case Schedule
+                      </p>
+                      <span className="font-mono text-[9.5px] text-[#9CA3AF]">Sum = {fmtAmount(parsedAmount)}</span>
                     </div>
+                    <table className="mt-2.5 w-full font-mono text-[10.5px]">
+                      <thead>
+                        <tr className="border-b border-white/10 text-left text-[9.5px] uppercase text-[#9CA3AF]">
+                          <th className="pb-1.5 font-medium">Timing</th>
+                          <th className="pb-1.5 text-right font-medium">Payee</th>
+                          <th className="pb-1.5 text-right font-medium">Rebate</th>
+                          <th className="pb-1.5 text-right font-medium">Fee</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.06]">
+                        {tecdSchedule.map((row) => (
+                          <tr key={row.label}>
+                            <td className="py-1.5 text-[#E5E7EB]/85">{row.label}</td>
+                            <td className="py-1.5 text-right tabular-nums text-emerald">
+                              {fmtAmount(row.payeePayoutUsdc)}
+                            </td>
+                            <td className="py-1.5 text-right tabular-nums text-amber-300">
+                              {fmtAmount(row.buyerRebateUsdc)}
+                            </td>
+                            <td className="py-1.5 text-right tabular-nums text-[#E5E7EB]">
+                              {fmtAmount(row.protocolFeeUsdc)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
 
                   {/* Plain-English Security & Guarantee Receipt directly above Sign/Lock CTA */}

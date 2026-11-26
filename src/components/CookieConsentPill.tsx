@@ -55,14 +55,14 @@ export function CookieConsentPill() {
             onClick={() => setConsent('essential')}
             className="shrink-0 whitespace-nowrap rounded-full border border-paper/20 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#E5E7EB] transition-colors hover:border-paper/40 hover:text-white"
           >
-            Essential Only
+            Essential only
           </button>
           <button
             type="button"
             onClick={() => setConsent('accepted')}
             className="shrink-0 whitespace-nowrap rounded-full bg-lime px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-ink transition-colors hover:bg-[#d8ff4d]"
           >
-            Accept Preferences
+            Accept all
           </button>
           <button
             type="button"
